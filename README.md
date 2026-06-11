@@ -1,28 +1,33 @@
-# ProjectXML Planner
+# Chris's Discount Project Maker
 
 A lightweight Microsoft Project XML-compatible web app. It runs fully in the browser and can be hosted on GitHub Pages, Netlify, Vercel, S3, or any static web host.
 
 ## What it does
 
 - Create and edit task schedules
-- Show a polished Gantt preview
+- Show an interactive Gantt preview
+- Drag Gantt task bars left/right to change dates
+- Resize Gantt task bars from either edge to change duration
+- Adjust chart width, day-cell size, and row height from the toolbar
 - Track start, finish, duration, percent complete, WBS, outline level, and finish-to-start predecessors
 - Import Microsoft Project XML / MSPDI files
 - Export Microsoft Project XML / MSPDI files that can be opened by Microsoft Project Desktop
 - Export CSV for quick review
 - Save automatically in browser localStorage
 
-## UX direction
+## UX upgrades in this version
 
-This version uses a research-informed productivity-app UI:
-
-- Light neutral canvas for readability in dense schedule data
-- Microsoft Project-inspired green for export/status context
-- Blue reserved for the main creation action and timeline bars
-- Semantic colors used only for status, warnings, and destructive actions
-- Card grouping, spacing, and proximity to show relationships without visual clutter
-- Sentence-case labels and a clearer type ramp for scannability
-- Stronger focus states and contrast-aware foreground/background pairs
+- Renamed to **Chris's Discount Project Maker**
+- Added a branded portrait image
+- Added direct-manipulation scheduling in the Gantt chart
+- Added range controls for chart width, day cell width, and row height
+- Cleaner app header with project context
+- Project summary cards for task count, duration, completion, and XML readiness
+- Grouped toolbar actions so planning, scheduling, and import/export are easier to scan
+- Card-based task grid and Gantt layout
+- Better table row density, progress indicators, and delete affordance
+- Cleaner validation messaging
+- Polished Gantt timeline with weekday labels, weekend shading, and better task labels
 
 ## Compatibility target
 
@@ -54,10 +59,11 @@ http://localhost:5173
 
 1. Open this app.
 2. Click **Load sample**.
-3. Click **Export XML**.
-4. Open the downloaded `.xml` file in Microsoft Project Desktop.
-5. Save it from Microsoft Project as `.mpp` if needed.
-6. Optionally export back to XML from Microsoft Project and import it into this app.
+3. Drag or resize tasks in the Gantt chart.
+4. Click **Export XML**.
+5. Open the downloaded `.xml` file in Microsoft Project Desktop.
+6. Save it from Microsoft Project as `.mpp` if needed.
+7. Optionally export back to XML from Microsoft Project and import it into this app.
 
 ## Known limitations
 

@@ -3,17 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ProjectXML Planner</title>
+  <title>Chris's Discount Project Maker</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">P</div>
+        <div class="brand-photo" aria-hidden="true">
+          <img src="chris-avatar.png" alt="" />
+        </div>
         <div>
           <p class="eyebrow">MS Project XML compatible</p>
-          <h1>ProjectXML Planner</h1>
+          <h1>Chris's Discount Project Maker</h1>
         </div>
       </div>
 
@@ -33,8 +35,8 @@
       <section class="hero-board" aria-label="Project overview">
         <div class="hero-copy">
           <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
-          <h2>Plan the work. Check the timeline. Export clean Project XML.</h2>
-          <p>Built for a simple Microsoft Project round trip: task grid on the left, Gantt sanity check on the right, and MSPDI XML export when the schedule is clean.</p>
+          <h2>Make a real schedule without paying enterprise money.</h2>
+          <p>Drag tasks directly on the Gantt chart, resize the edges to change duration, tune the timeline density, then export clean MSPDI XML for Microsoft Project Desktop.</p>
         </div>
 
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
@@ -78,6 +80,21 @@
           <span class="group-label">Schedule</span>
           <button id="autoScheduleBtn" type="button">Auto schedule</button>
         </div>
+        <div class="command-group layout-tools" aria-label="View controls">
+          <span class="group-label">View</span>
+          <label class="range-control">
+            Chart width <strong id="chartWidthValue">48%</strong>
+            <input id="chartWidthControl" type="range" min="35" max="70" step="1" />
+          </label>
+          <label class="range-control">
+            Day cells <strong id="dayWidthValue">58px</strong>
+            <input id="dayWidthControl" type="range" min="36" max="104" step="2" />
+          </label>
+          <label class="range-control">
+            Row height <strong id="rowHeightValue">56px</strong>
+            <input id="rowHeightControl" type="range" min="44" max="88" step="2" />
+          </label>
+        </div>
         <div class="command-group push-right">
           <span class="group-label">Exchange</span>
           <button id="exportXmlBtn" type="button" class="success">Export XML</button>
@@ -91,12 +108,12 @@
 
       <section id="validationPanel" class="validation-panel" aria-live="polite"></section>
 
-      <section class="workspace">
+      <section id="workspace" class="workspace">
         <article class="work-card table-card" aria-label="Task grid">
           <div class="card-header">
             <div>
               <h2>Task grid</h2>
-              <p>Edit the schedule details Microsoft Project cares about.</p>
+              <p>Edit exact schedule details Microsoft Project cares about.</p>
             </div>
             <span class="card-badge">Live save</span>
           </div>
@@ -125,9 +142,9 @@
           <div class="card-header">
             <div>
               <h2>Gantt preview</h2>
-              <p>Visual check before exporting to Microsoft Project.</p>
+              <p>Drag bars to move dates. Grab an edge to resize duration.</p>
             </div>
-            <span class="card-badge">Finish-to-start</span>
+            <span class="card-badge">Interactive bars</span>
           </div>
           <div class="gantt-wrap">
             <div id="timeline" class="timeline"></div>

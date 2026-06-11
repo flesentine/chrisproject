@@ -1,4 +1,5 @@
 const STORAGE_KEY = "projectxml-planner-v1";
+const UI_PREFS_KEY = "chris-discount-project-maker-ui-v1";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
 
@@ -24,6 +25,13 @@ const els = {
   exportStatus: document.getElementById("exportStatus"),
   compatChip: document.getElementById("compatChip"),
   readinessCard: document.getElementById("readinessCard"),
+  workspace: document.getElementById("workspace"),
+  chartWidthControl: document.getElementById("chartWidthControl"),
+  dayWidthControl: document.getElementById("dayWidthControl"),
+  rowHeightControl: document.getElementById("rowHeightControl"),
+  chartWidthValue: document.getElementById("chartWidthValue"),
+  dayWidthValue: document.getElementById("dayWidthValue"),
+  rowHeightValue: document.getElementById("rowHeightValue"),
 };
 
 const today = toDateInputValue(new Date());
@@ -34,6 +42,52 @@ let state = {
   nextUid: 2,
   tasks: [],
 };
+
+const DEFAULT_UI_PREFS = {
+  chartWidth: 48,
+  dayWidth: 58,
+  rowHeight: 56,
+};
+
+let uiPrefs = loadUiPrefs();
+let activeBarDrag = null;
+
+function clamp(value, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+function loadUiPrefs() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+    return {
+      chartWidth: clamp(parsed.chartWidth ?? DEFAULT_UI_PREFS.chartWidth, 35, 70),
+      dayWidth: clamp(parsed.dayWidth ?? DEFAULT_UI_PREFS.dayWidth, 36, 104),
+      rowHeight: clamp(parsed.rowHeight ?? DEFAULT_UI_PREFS.rowHeight, 44, 88),
+    };
+  } catch {
+    return { ...DEFAULT_UI_PREFS };
+  }
+}
+
+function saveUiPrefs() {
+  localStorage.setItem(UI_PREFS_KEY, JSON.stringify(uiPrefs));
+}
+
+function applyUiPrefs() {
+  if (els.chartWidthControl) els.chartWidthControl.value = uiPrefs.chartWidth;
+  if (els.dayWidthControl) els.dayWidthControl.value = uiPrefs.dayWidth;
+  if (els.rowHeightControl) els.rowHeightControl.value = uiPrefs.rowHeight;
+  if (els.chartWidthValue) els.chartWidthValue.textContent = `${uiPrefs.chartWidth}%`;
+  if (els.dayWidthValue) els.dayWidthValue.textContent = `${uiPrefs.dayWidth}px`;
+  if (els.rowHeightValue) els.rowHeightValue.textContent = `${uiPrefs.rowHeight}px`;
+  if (els.workspace && window.matchMedia("(min-width: 1281px)").matches) {
+    els.workspace.style.gridTemplateColumns = `minmax(520px, ${100 - uiPrefs.chartWidth}fr) minmax(460px, ${uiPrefs.chartWidth}fr)`;
+  } else if (els.workspace) {
+    els.workspace.style.gridTemplateColumns = "";
+  }
+}
 
 function dateOnly(value) {
   if (!value) return null;
@@ -171,6 +225,7 @@ function load() {
 
 function render() {
   ensureDecorations();
+  applyUiPrefs();
   els.projectName.value = state.projectName;
   els.projectStart.value = state.projectStart;
   renderTaskTable();
@@ -247,6 +302,10 @@ function renderTaskTable() {
 
 function renderGantt() {
   const tasks = state.tasks;
+  const rowHeight = uiPrefs.rowHeight;
+  const barHeight = Math.min(34, Math.max(24, rowHeight - 24));
+  const barTop = Math.max(8, Math.round((rowHeight - barHeight) / 2));
+
   if (!tasks.length) {
     els.timeline.innerHTML = "";
     els.gantt.innerHTML = `<div class="empty-state"><div><strong>No tasks yet</strong><span>Add a task to start building the schedule.</span></div></div>`;
@@ -260,13 +319,13 @@ function renderGantt() {
   min = addDays(min, -1);
   max = addDays(max, 2);
   const totalDays = Math.max(1, daysBetween(min, max));
-  const dayWidth = Math.max(42, Math.min(74, Math.floor(1040 / totalDays)));
-  const labelWidth = 190;
+  const dayWidth = uiPrefs.dayWidth;
+  const labelWidth = 210;
   const gridWidth = totalDays * dayWidth + labelWidth;
 
   els.timeline.style.gridTemplateColumns = `${labelWidth}px repeat(${totalDays}, ${dayWidth}px)`;
   els.timeline.style.width = `${gridWidth}px`;
-  const timelineCells = [`<div class="timeline-cell is-task-heading"><strong>Task</strong><span>timeline</span></div>`];
+  const timelineCells = [`<div class="timeline-cell is-task-heading"><strong>Task</strong><span>drag + resize</span></div>`];
   for (let i = 0; i < totalDays; i += 1) {
     const d = addDays(min, i);
     const classes = ["timeline-cell"];
@@ -281,20 +340,22 @@ function renderGantt() {
   els.timeline.innerHTML = timelineCells.join("");
 
   els.gantt.style.width = `${gridWidth}px`;
-  els.gantt.innerHTML = tasks.map((task) => {
+  els.gantt.innerHTML = tasks.map((task, index) => {
     const startOffset = Math.max(0, daysBetween(min, task.start) - 1);
     const duration = Math.max(1, daysBetween(task.start, task.finish));
     const left = labelWidth + startOffset * dayWidth;
-    const width = Math.max(30, duration * dayWidth - 8);
+    const width = Math.max(32, duration * dayWidth - 8);
     const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
     return `
-      <div class="gantt-row" style="background-size:${dayWidth}px 56px">
+      <div class="gantt-row" style="--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
         <div class="gantt-label" title="${escapeXml(task.name)}">
           <strong>${task.id}. ${escapeXml(task.name)}</strong>
-          <span>${duration}d · ${task.percent}% · WBS ${escapeXml(task.wbs)}</span>
+          <span>${duration}d · ${task.percent}% · ${formatShortDate(task.start)} → ${formatShortDate(task.finish)}</span>
         </div>
-        <div class="${barClass}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+        <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull the edges to resize. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
           <span>${escapeXml(task.name)}</span>
+          <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
+          <i class="resize-handle resize-right" data-resize-edge="finish" aria-hidden="true"></i>
         </div>
       </div>`;
   }).join("");
@@ -527,7 +588,7 @@ function buildProjectXml() {
   <SaveVersion>12</SaveVersion>
   <Name>${projectName}</Name>
   <Title>${projectName}</Title>
-  <Subject>Exported from ProjectXML Planner</Subject>
+  <Subject>Exported from Chris&apos;s Discount Project Maker</Subject>
   <CreationDate>${created}</CreationDate>
   <ScheduleFromStart>1</ScheduleFromStart>
   <StartDate>${projectStart}</StartDate>
@@ -693,7 +754,7 @@ function safeFileName(name) {
 function loadSample(shouldRender = true) {
   const start = state.projectStart || today;
   state = {
-    projectName: "App Store Launch Plan",
+    projectName: "Chris Discount Launch Plan",
     projectStart: start,
     nextUid: 8,
     tasks: [
@@ -708,6 +769,86 @@ function loadSample(shouldRender = true) {
   };
   if (shouldRender) render();
 }
+
+
+function beginGanttDrag(event) {
+  const bar = event.target.closest(".gantt-bar");
+  if (!bar || !(event.target instanceof Element)) return;
+  if (event.button !== undefined && event.button !== 0) return;
+
+  const index = Number(bar.dataset.index);
+  const task = state.tasks[index];
+  if (!task) return;
+
+  const edge = event.target.dataset.resizeEdge;
+  const mode = edge === "start" ? "resize-start" : edge === "finish" ? "resize-finish" : "move";
+  const startDate = dateOnly(task.start);
+  const finishDate = dateOnly(task.finish);
+  if (!startDate || !finishDate) return;
+
+  activeBarDrag = {
+    index,
+    mode,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    originalStart: startDate,
+    originalFinish: finishDate,
+  };
+
+  document.body.classList.add("is-gantt-dragging");
+  bar.classList.add("is-dragging");
+  bar.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+}
+
+function updateGanttDrag(event) {
+  if (!activeBarDrag) return;
+  const deltaDays = Math.round((event.clientX - activeBarDrag.startX) / uiPrefs.dayWidth);
+  const task = state.tasks[activeBarDrag.index];
+  if (!task) return;
+
+  if (activeBarDrag.mode === "move") {
+    task.start = toDateInputValue(addDays(activeBarDrag.originalStart, deltaDays));
+    task.finish = toDateInputValue(addDays(activeBarDrag.originalFinish, deltaDays));
+  } else if (activeBarDrag.mode === "resize-finish") {
+    const finish = addDays(activeBarDrag.originalFinish, deltaDays);
+    task.start = toDateInputValue(activeBarDrag.originalStart);
+    task.finish = toDateInputValue(dateOnly(finish) < activeBarDrag.originalStart ? activeBarDrag.originalStart : finish);
+  } else if (activeBarDrag.mode === "resize-start") {
+    const start = addDays(activeBarDrag.originalStart, deltaDays);
+    task.start = toDateInputValue(dateOnly(start) > activeBarDrag.originalFinish ? activeBarDrag.originalFinish : start);
+    task.finish = toDateInputValue(activeBarDrag.originalFinish);
+  }
+
+  task.durationDays = daysBetween(task.start, task.finish);
+  renderGantt();
+  renderSummary();
+  event.preventDefault();
+}
+
+function endGanttDrag() {
+  if (!activeBarDrag) return;
+  activeBarDrag = null;
+  document.body.classList.remove("is-gantt-dragging");
+  render();
+}
+
+function handleUiRangeChange(key, value) {
+  uiPrefs[key] = key === "chartWidth" ? clamp(value, 35, 70) : key === "dayWidth" ? clamp(value, 36, 104) : clamp(value, 44, 88);
+  saveUiPrefs();
+  applyUiPrefs();
+  renderGantt();
+}
+
+els.gantt.addEventListener("pointerdown", beginGanttDrag);
+window.addEventListener("pointermove", updateGanttDrag);
+window.addEventListener("pointerup", endGanttDrag);
+window.addEventListener("pointercancel", endGanttDrag);
+
+els.chartWidthControl?.addEventListener("input", (event) => handleUiRangeChange("chartWidth", event.target.value));
+els.dayWidthControl?.addEventListener("input", (event) => handleUiRangeChange("dayWidth", event.target.value));
+els.rowHeightControl?.addEventListener("input", (event) => handleUiRangeChange("rowHeight", event.target.value));
+window.addEventListener("resize", applyUiPrefs);
 
 els.taskBody.addEventListener("change", (event) => {
   const target = event.target;
