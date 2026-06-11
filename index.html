@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ProjectXML Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">MS Project XML compatible</p>
+      <h1>ProjectXML Planner</h1>
+    </div>
+    <div class="project-fields">
+      <label>
+        Project name
+        <input id="projectName" type="text" value="New Project" />
+      </label>
+      <label>
+        Project start
+        <input id="projectStart" type="date" />
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section class="toolbar" aria-label="Project actions">
+      <button id="newProjectBtn" type="button">New</button>
+      <button id="sampleBtn" type="button">Load Sample</button>
+      <button id="addTaskBtn" type="button" class="primary">Add Task</button>
+      <button id="autoScheduleBtn" type="button">Auto Schedule</button>
+      <button id="exportXmlBtn" type="button">Export Project XML</button>
+      <button id="exportCsvBtn" type="button">Export CSV</button>
+      <label class="file-button">
+        Import XML
+        <input id="importXmlInput" type="file" accept=".xml,text/xml,application/xml" />
+      </label>
+    </section>
+
+    <section id="validationPanel" class="validation-panel" aria-live="polite"></section>
+
+    <section class="workspace">
+      <div class="table-wrap" aria-label="Task grid">
+        <table class="task-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>WBS</th>
+              <th>Task Name</th>
+              <th>Start</th>
+              <th>Finish</th>
+              <th>Days</th>
+              <th>%</th>
+              <th>Pred IDs</th>
+              <th>Level</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="taskBody"></tbody>
+        </table>
+      </div>
+
+      <div class="gantt-wrap" aria-label="Gantt chart">
+        <div id="timeline" class="timeline"></div>
+        <div id="gantt" class="gantt"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span>Compatibility target: Microsoft Project XML / MSPDI. Native .mpp needs a backend converter such as MPXJ.</span>
+    <span id="saveStatus">Saved locally</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
