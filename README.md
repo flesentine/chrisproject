@@ -12,16 +12,17 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Export CSV for quick review
 - Save automatically in browser localStorage
 
-## UX upgrades in this version
+## UX direction
 
-- Cleaner app header with project context
-- Project summary cards for task count, duration, completion, and XML readiness
-- Grouped toolbar actions so planning, scheduling, and import/export are easier to scan
-- Card-based task grid and Gantt layout
-- Better table row density, progress indicators, and delete affordance
-- Cleaner validation messaging
-- Polished Gantt timeline with weekday labels, weekend shading, and better task labels
-- Custom dark scrollbars and improved responsive behavior
+This version uses a research-informed productivity-app UI:
+
+- Light neutral canvas for readability in dense schedule data
+- Microsoft Project-inspired green for export/status context
+- Blue reserved for the main creation action and timeline bars
+- Semantic colors used only for status, warnings, and destructive actions
+- Card grouping, spacing, and proximity to show relationships without visual clutter
+- Sentence-case labels and a clearer type ramp for scannability
+- Stronger focus states and contrast-aware foreground/background pairs
 
 ## Compatibility target
 
@@ -52,7 +53,7 @@ http://localhost:5173
 ## How to test with Microsoft Project
 
 1. Open this app.
-2. Click **Load Sample**.
+2. Click **Load sample**.
 3. Click **Export XML**.
 4. Open the downloaded `.xml` file in Microsoft Project Desktop.
 5. Save it from Microsoft Project as `.mpp` if needed.

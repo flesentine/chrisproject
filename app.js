@@ -22,6 +22,8 @@ const els = {
   completeCount: document.getElementById("completeCount"),
   dateRange: document.getElementById("dateRange"),
   exportStatus: document.getElementById("exportStatus"),
+  compatChip: document.getElementById("compatChip"),
+  readinessCard: document.getElementById("readinessCard"),
 };
 
 const today = toDateInputValue(new Date());
@@ -203,6 +205,13 @@ function renderSummary() {
     els.dateRange.textContent = min && max ? `${formatShortDate(min)} → ${formatShortDate(max)}` : "No date range";
   }
   if (els.exportStatus) els.exportStatus.textContent = issueCount ? `${issueCount} issue${issueCount === 1 ? "" : "s"}` : "Ready";
+  if (els.compatChip) {
+    els.compatChip.classList.toggle("has-issues", issueCount > 0);
+    els.compatChip.lastChild.textContent = issueCount ? ` ${issueCount} issue${issueCount === 1 ? "" : "s"} found` : " XML export ready";
+  }
+  if (els.readinessCard) {
+    els.readinessCard.classList.toggle("has-issues", issueCount > 0);
+  }
 }
 
 function renderTaskTable() {

@@ -8,34 +8,47 @@
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header">
-      <div class="hero-copy">
-        <p class="eyebrow">MS Project XML compatible</p>
-        <h1>ProjectXML Planner</h1>
-        <p class="subtitle">Build a project schedule, review the Gantt, then export clean MSPDI XML for Microsoft Project Desktop.</p>
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div>
+          <p class="eyebrow">MS Project XML compatible</p>
+          <h1>ProjectXML Planner</h1>
+        </div>
       </div>
 
-      <div class="hero-panel" aria-label="Project details">
-        <div class="compat-chip"><span></span> XML export ready</div>
-        <div class="project-fields">
-          <label>
-            Project name
-            <input id="projectName" type="text" value="New Project" />
-          </label>
-          <label>
-            Project start
-            <input id="projectStart" type="date" />
-          </label>
-        </div>
+      <div class="project-fields" aria-label="Project details">
+        <label>
+          Project name
+          <input id="projectName" type="text" value="New Project" />
+        </label>
+        <label>
+          Project start
+          <input id="projectStart" type="date" />
+        </label>
       </div>
     </header>
 
     <main>
+      <section class="hero-board" aria-label="Project overview">
+        <div class="hero-copy">
+          <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
+          <h2>Plan the work. Check the timeline. Export clean Project XML.</h2>
+          <p>Built for a simple Microsoft Project round trip: task grid on the left, Gantt sanity check on the right, and MSPDI XML export when the schedule is clean.</p>
+        </div>
+
+        <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
+          <span class="readiness-label">Export readiness</span>
+          <strong id="exportStatus">Ready</strong>
+          <p>Supported: tasks, dates, duration, percent complete, WBS, outline level, and finish-to-start predecessors.</p>
+        </aside>
+      </section>
+
       <section class="summary-grid" aria-label="Project summary">
         <article class="summary-card">
           <span class="summary-label">Tasks</span>
           <strong id="taskCount">0</strong>
-          <small>active rows</small>
+          <small>Active rows</small>
         </article>
         <article class="summary-card">
           <span class="summary-label">Duration</span>
@@ -45,30 +58,30 @@
         <article class="summary-card">
           <span class="summary-label">Completion</span>
           <strong id="completeCount">0%</strong>
-          <small>average progress</small>
+          <small>Average progress</small>
         </article>
-        <article class="summary-card accent-card">
-          <span class="summary-label">Status</span>
-          <strong id="exportStatus">Ready</strong>
-          <small>Project XML / MSPDI</small>
+        <article class="summary-card status-summary">
+          <span class="summary-label">Format</span>
+          <strong>MSPDI</strong>
+          <small>Project XML target</small>
         </article>
       </section>
 
-      <section class="toolbar" aria-label="Project actions">
-        <div class="toolbar-group">
+      <section class="command-bar" aria-label="Project actions">
+        <div class="command-group">
           <span class="group-label">Plan</span>
           <button id="newProjectBtn" type="button">New</button>
-          <button id="sampleBtn" type="button">Load Sample</button>
-          <button id="addTaskBtn" type="button" class="primary">+ Add Task</button>
+          <button id="sampleBtn" type="button">Load sample</button>
+          <button id="addTaskBtn" type="button" class="primary">+ Add task</button>
         </div>
-        <div class="toolbar-group">
+        <div class="command-group">
           <span class="group-label">Schedule</span>
-          <button id="autoScheduleBtn" type="button">Auto Schedule</button>
+          <button id="autoScheduleBtn" type="button">Auto schedule</button>
         </div>
-        <div class="toolbar-group push-right">
+        <div class="command-group push-right">
           <span class="group-label">Exchange</span>
           <button id="exportXmlBtn" type="button" class="success">Export XML</button>
-          <button id="exportCsvBtn" type="button">CSV</button>
+          <button id="exportCsvBtn" type="button">Export CSV</button>
           <label class="file-button">
             Import XML
             <input id="importXmlInput" type="file" accept=".xml,text/xml,application/xml" />
@@ -83,7 +96,7 @@
           <div class="card-header">
             <div>
               <h2>Task grid</h2>
-              <p>Edit the schedule details MS Project cares about.</p>
+              <p>Edit the schedule details Microsoft Project cares about.</p>
             </div>
             <span class="card-badge">Live save</span>
           </div>
@@ -93,7 +106,7 @@
                 <tr>
                   <th>ID</th>
                   <th>WBS</th>
-                  <th>Task Name</th>
+                  <th>Task name</th>
                   <th>Start</th>
                   <th>Finish</th>
                   <th>Dur</th>
