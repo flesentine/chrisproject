@@ -983,3 +983,36 @@ button.success:hover { background: #0d6334; }
   .brand-photo img { border-radius: 15px; }
   .range-control { min-width: 100%; }
 }
+
+.gantt-bar .link-hint {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  z-index: 4;
+  transform: translateY(-50%);
+  display: none;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(11, 18, 32, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.gantt-bar.is-link-target {
+  outline: 3px solid rgba(16, 124, 65, 0.36);
+  outline-offset: 4px;
+  box-shadow: 0 16px 34px rgba(16, 124, 65, 0.22), 0 0 0 1px rgba(255,255,255,0.70) inset;
+}
+
+.gantt-bar.is-link-target .link-hint {
+  display: inline-flex;
+}
+
+.is-link-hovering .gantt-wrap {
+  cursor: copy;
+}

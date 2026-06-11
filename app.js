@@ -2,6 +2,15 @@ const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v1";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
+const LINK_TYPES = ["FS", "SS", "FF", "SF"];
+const LINK_TYPE_LABELS = {
+  FS: "Finish → Start",
+  SS: "Start → Start",
+  FF: "Finish → Finish",
+  SF: "Start → Finish",
+};
+const LINK_TYPE_TO_PROJECT = { FF: 0, FS: 1, SS: 2, SF: 3 };
+const PROJECT_TO_LINK_TYPE = { 0: "FF", 1: "FS", 2: "SS", 3: "SF" };
 
 const els = {
   projectName: document.getElementById("projectName"),
@@ -147,6 +156,64 @@ function normalizeLevel(value) {
   return Math.min(10, Math.max(1, Math.round(n)));
 }
 
+function normalizeLinkType(value) {
+  if (value === undefined || value === null || value === "") return "FS";
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && PROJECT_TO_LINK_TYPE[numeric]) return PROJECT_TO_LINK_TYPE[numeric];
+  const text = String(value).trim().toUpperCase();
+  return LINK_TYPES.includes(text) ? text : "FS";
+}
+
+function normalizeTaskLinks(task) {
+  const rawLinks = Array.isArray(task.links) && task.links.length
+    ? task.links
+    : (task.predecessors || []).map((id) => ({ id, type: "FS" }));
+  const seen = new Set();
+  const normalized = [];
+
+  rawLinks.forEach((link) => {
+    const id = Number(typeof link === "object" ? (link.id ?? link.predId ?? link.predecessorId) : link);
+    const type = normalizeLinkType(typeof link === "object" ? link.type : "FS");
+    const key = `${id}:${type}`;
+    if (!Number.isInteger(id) || id <= 0 || seen.has(key)) return;
+    seen.add(key);
+    normalized.push({ id, type });
+  });
+
+  return normalized;
+}
+
+function getTaskLinks(task) {
+  return normalizeTaskLinks(task);
+}
+
+function formatLinks(links) {
+  return getTaskLinks({ links }).map((link) => `${link.id}${link.type}`).join(",");
+}
+
+function parseLinksInput(value, selfId) {
+  const text = String(value || "").trim();
+  if (!text) return [];
+  const links = [];
+  const seen = new Set();
+  const matches = text.matchAll(/(\d+)\s*[:\-]?\s*(FS|SS|FF|SF)?/gi);
+
+  for (const match of matches) {
+    const id = Number(match[1]);
+    const type = normalizeLinkType(match[2] || "FS");
+    const key = `${id}:${type}`;
+    if (!Number.isInteger(id) || id <= 0 || id === selfId || seen.has(key)) continue;
+    seen.add(key);
+    links.push({ id, type });
+  }
+
+  return links;
+}
+
+function describeLink(link) {
+  return `${link.id}${link.type}`;
+}
+
 function durationToDays(durationText) {
   if (!durationText) return 1;
   const hours = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/i.exec(durationText);
@@ -184,9 +251,8 @@ function ensureDecorations() {
     task.finish = task.finish || toDateInputValue(addDays(task.start, Math.max(1, task.durationDays || 1) - 1));
     task.percent = normalizePercent(task.percent);
     task.durationDays = daysBetween(task.start, task.finish);
-    task.predecessors = [...new Set((task.predecessors || [])
-      .map(Number)
-      .filter((id) => Number.isInteger(id) && id > 0 && id !== task.id))];
+    task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
+    task.predecessors = task.links.map((link) => link.id);
 
     const level = task.outlineLevel;
     counters.length = level;
@@ -290,7 +356,7 @@ function renderTaskTable() {
           <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
         </div>
       </td>
-      <td><input data-field="predecessors" data-index="${index}" value="${escapeXml(task.predecessors.join(","))}" placeholder="1,2" /></td>
+      <td><input data-field="predecessors" data-index="${index}" value="${escapeXml(formatLinks(task.links))}" placeholder="1FS, 2SS" title="Use 1FS, 2SS, 3FF, or 4SF" /></td>
       <td><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></td>
       <td><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></td>
     `;
@@ -325,7 +391,7 @@ function renderGantt() {
 
   els.timeline.style.gridTemplateColumns = `${labelWidth}px repeat(${totalDays}, ${dayWidth}px)`;
   els.timeline.style.width = `${gridWidth}px`;
-  const timelineCells = [`<div class="timeline-cell is-task-heading"><strong>Task</strong><span>drag + resize</span></div>`];
+  const timelineCells = [`<div class="timeline-cell is-task-heading"><strong>Task</strong><span>drag · resize · drop to link</span></div>`];
   for (let i = 0; i < totalDays; i += 1) {
     const d = addDays(min, i);
     const classes = ["timeline-cell"];
@@ -346,14 +412,16 @@ function renderGantt() {
     const left = labelWidth + startOffset * dayWidth;
     const width = Math.max(32, duration * dayWidth - 8);
     const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
+    const linkText = task.links.length ? `Pred ${formatLinks(task.links)}` : "No predecessors";
     return `
       <div class="gantt-row" style="--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
         <div class="gantt-label" title="${escapeXml(task.name)}">
           <strong>${task.id}. ${escapeXml(task.name)}</strong>
-          <span>${duration}d · ${task.percent}% · ${formatShortDate(task.start)} → ${formatShortDate(task.finish)}</span>
+          <span>${duration}d · ${task.percent}% · ${linkText}</span>
         </div>
-        <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull the edges to resize. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+        <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drop this bar on another task to create FS, SS, FF, or SF dependency. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
           <span>${escapeXml(task.name)}</span>
+          <em class="link-hint" aria-hidden="true">Drop to link</em>
           <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
           <i class="resize-handle resize-right" data-resize-edge="finish" aria-hidden="true"></i>
         </div>
@@ -371,14 +439,30 @@ function validateProject() {
     if (!dateOnly(task.finish)) issues.push(`Task ${task.id} has an invalid finish date.`);
     if (dateOnly(task.finish) < dateOnly(task.start)) issues.push(`Task ${task.id} finishes before it starts.`);
 
-    task.predecessors.forEach((predId) => {
+    task.links.forEach((link) => {
+      const predId = link.id;
       if (!idSet.has(predId)) {
         issues.push(`Task ${task.id} references missing predecessor ID ${predId}.`);
         return;
       }
       const pred = state.tasks[predId - 1];
-      if (pred && dateOnly(task.start) <= dateOnly(pred.finish)) {
-        issues.push(`Task ${task.id} starts before predecessor ${predId} has clearly finished. Use Auto Schedule or adjust dates.`);
+      if (pred) {
+        const predStart = dateOnly(pred.start);
+        const predFinish = dateOnly(pred.finish);
+        const taskStart = dateOnly(task.start);
+        const taskFinish = dateOnly(task.finish);
+        if (link.type === "FS" && taskStart <= predFinish) {
+          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before task ${predId} has clearly finished. Use Auto schedule or adjust dates.`);
+        }
+        if (link.type === "SS" && taskStart < predStart) {
+          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before task ${predId} starts.`);
+        }
+        if (link.type === "FF" && taskFinish < predFinish) {
+          issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before task ${predId} finishes.`);
+        }
+        if (link.type === "SF" && taskFinish < predStart) {
+          issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before task ${predId} starts.`);
+        }
       }
       if (predId >= task.id) {
         issues.push(`Task ${task.id} depends on task ${predId}, which appears later in the schedule. MS Project can handle this, but it is easy to create loops.`);
@@ -407,7 +491,7 @@ function detectCycles() {
     visiting.add(id);
     stack.push(id);
     const task = byId.get(id);
-    (task?.predecessors || []).forEach((predId) => dfs(predId));
+    (task?.links || []).forEach((link) => dfs(link.id));
     stack.pop();
     visiting.delete(id);
     visited.add(id);
@@ -420,7 +504,7 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, dates, duration, percent complete, WBS, outline level, and finish-to-start predecessors.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, dates, duration, percent complete, WBS, outline level, and FS, SS, FF, and SF predecessors.</p></div></div>`;
     return;
   }
 
@@ -440,10 +524,8 @@ function updateTask(index, field, value) {
   if (field === "percent") task.percent = normalizePercent(value);
   else if (field === "outlineLevel") task.outlineLevel = normalizeLevel(value);
   else if (field === "predecessors") {
-    task.predecessors = String(value)
-      .split(/[;,\s]+/)
-      .map(Number)
-      .filter((n) => Number.isInteger(n) && n > 0 && n !== task.id);
+    task.links = parseLinksInput(value, task.id);
+    task.predecessors = task.links.map((link) => link.id);
   } else if (field === "start") {
     const oldDuration = task.durationDays || daysBetween(task.start, task.finish);
     task.start = value || state.projectStart;
@@ -468,6 +550,7 @@ function addTask() {
     durationDays: 3,
     percent: 0,
     predecessors: last ? [last.id] : [],
+    links: last ? [{ id: last.id, type: "FS" }] : [],
     outlineLevel: last ? last.outlineLevel : 1,
   });
   render();
@@ -477,44 +560,74 @@ function deleteTask(index) {
   const deletedId = state.tasks[index]?.id;
   state.tasks.splice(index, 1);
   state.tasks.forEach((task) => {
-    task.predecessors = task.predecessors
-      .filter((id) => id !== deletedId)
-      .map((id) => (id > deletedId ? id - 1 : id));
+    task.links = normalizeTaskLinks(task)
+      .filter((link) => link.id !== deletedId)
+      .map((link) => ({ ...link, id: link.id > deletedId ? link.id - 1 : link.id }));
+    task.predecessors = task.links.map((link) => link.id);
   });
   render();
 }
 
-function autoSchedule() {
+function autoSchedule(options = {}) {
   ensureDecorations();
   const cycles = detectCycles();
   if (cycles.length) {
-    alert("Fix dependency loops before auto-scheduling.");
-    return;
+    if (!options.silent) alert("Fix dependency loops before auto-scheduling.");
+    return false;
   }
 
   const byId = new Map(state.tasks.map((t) => [t.id, t]));
   let changed = true;
   let guard = 0;
-  while (changed && guard < state.tasks.length * state.tasks.length + 10) {
+  while (changed && guard < state.tasks.length * state.tasks.length + 20) {
     changed = false;
     guard += 1;
     state.tasks.forEach((task) => {
-      if (!task.predecessors.length) return;
-      const predFinishes = task.predecessors
-        .map((id) => byId.get(id))
-        .filter(Boolean)
-        .map((pred) => dateOnly(pred.finish));
-      if (!predFinishes.length) return;
-      const earliest = toDateInputValue(addDays(new Date(Math.max(...predFinishes.map(Number))), 1));
-      if (dateOnly(task.start) < dateOnly(earliest)) {
-        const duration = task.durationDays || daysBetween(task.start, task.finish);
-        task.start = earliest;
-        task.finish = toDateInputValue(addDays(task.start, duration - 1));
-        changed = true;
-      }
+      const links = getTaskLinks(task);
+      if (!links.length) return;
+      const duration = Math.max(1, task.durationDays || daysBetween(task.start, task.finish));
+
+      links.forEach((link) => {
+        const pred = byId.get(link.id);
+        if (!pred) return;
+        const predStart = dateOnly(pred.start);
+        const predFinish = dateOnly(pred.finish);
+        const taskStart = dateOnly(task.start);
+        const taskFinish = dateOnly(task.finish);
+        if (!predStart || !predFinish || !taskStart || !taskFinish) return;
+
+        if (link.type === "FS") {
+          const requiredStart = addDays(predFinish, 1);
+          if (taskStart < requiredStart) {
+            task.start = toDateInputValue(requiredStart);
+            task.finish = toDateInputValue(addDays(requiredStart, duration - 1));
+            changed = true;
+          }
+        } else if (link.type === "SS") {
+          if (taskStart < predStart) {
+            task.start = toDateInputValue(predStart);
+            task.finish = toDateInputValue(addDays(predStart, duration - 1));
+            changed = true;
+          }
+        } else if (link.type === "FF") {
+          if (taskFinish < predFinish) {
+            task.finish = toDateInputValue(predFinish);
+            task.start = toDateInputValue(addDays(predFinish, 1 - duration));
+            changed = true;
+          }
+        } else if (link.type === "SF") {
+          if (taskFinish < predStart) {
+            task.finish = toDateInputValue(predStart);
+            task.start = toDateInputValue(addDays(predStart, 1 - duration));
+            changed = true;
+          }
+        }
+      });
+      task.durationDays = daysBetween(task.start, task.finish);
     });
   }
   render();
+  return true;
 }
 
 function buildProjectXml() {
@@ -548,13 +661,13 @@ function buildProjectXml() {
 
   const taskXml = state.tasks.map((task) => {
     const duration = task.durationDays || daysBetween(task.start, task.finish);
-    const predecessors = task.predecessors.map((predId) => {
-      const pred = taskById.get(predId);
+    const predecessors = getTaskLinks(task).map((link) => {
+      const pred = taskById.get(link.id);
       if (!pred) return "";
       return `
       <PredecessorLink>
         <PredecessorUID>${pred.uid}</PredecessorUID>
-        <Type>1</Type>
+        <Type>${LINK_TYPE_TO_PROJECT[link.type] ?? 1}</Type>
         <CrossProject>0</CrossProject>
         <LinkLag>0</LinkLag>
         <LagFormat>7</LagFormat>
@@ -680,6 +793,7 @@ function importProjectXml(text) {
       durationDays: daysBetween(start, finish),
       percent,
       predecessors: [],
+      links: [],
       outlineLevel,
     });
   });
@@ -691,10 +805,14 @@ function importProjectXml(text) {
   });
 
   rawTasks.forEach((task) => {
-    const links = childrenByName(task.node, "PredecessorLink");
-    task.predecessors = links
-      .map((link) => uidToImportedId.get(Number(childText(link, "PredecessorUID"))))
-      .filter((id) => Number.isInteger(id) && id > 0 && id !== task.id);
+    const predecessorLinks = childrenByName(task.node, "PredecessorLink");
+    task.links = predecessorLinks
+      .map((link) => ({
+        id: uidToImportedId.get(Number(childText(link, "PredecessorUID"))),
+        type: normalizeLinkType(childText(link, "Type") || "1"),
+      }))
+      .filter((link) => Number.isInteger(link.id) && link.id > 0 && link.id !== task.id);
+    task.predecessors = task.links.map((link) => link.id);
     delete task.node;
     delete task.importedId;
   });
@@ -723,7 +841,7 @@ function exportCsv() {
       task.finish,
       task.durationDays,
       task.percent,
-      task.predecessors.join(";"),
+      formatLinks(task.links).replaceAll(",", ";"),
       task.outlineLevel,
     ]);
   });
@@ -758,18 +876,81 @@ function loadSample(shouldRender = true) {
     projectStart: start,
     nextUid: 8,
     tasks: [
-      { uid: 1, name: "Finalize requirements", start, finish: toDateInputValue(addDays(start, 1)), percent: 100, predecessors: [], outlineLevel: 1 },
-      { uid: 2, name: "Build import/export MVP", start: toDateInputValue(addDays(start, 2)), finish: toDateInputValue(addDays(start, 5)), percent: 70, predecessors: [1], outlineLevel: 1 },
-      { uid: 3, name: "Validate Microsoft Project XML", start: toDateInputValue(addDays(start, 6)), finish: toDateInputValue(addDays(start, 7)), percent: 25, predecessors: [2], outlineLevel: 1 },
-      { uid: 4, name: "Add schedule polish", start: toDateInputValue(addDays(start, 8)), finish: toDateInputValue(addDays(start, 10)), percent: 0, predecessors: [3], outlineLevel: 1 },
-      { uid: 5, name: "User acceptance test", start: toDateInputValue(addDays(start, 11)), finish: toDateInputValue(addDays(start, 12)), percent: 0, predecessors: [4], outlineLevel: 1 },
-      { uid: 6, name: "Prepare release notes", start: toDateInputValue(addDays(start, 11)), finish: toDateInputValue(addDays(start, 12)), percent: 0, predecessors: [4], outlineLevel: 1 },
-      { uid: 7, name: "Submit build", start: toDateInputValue(addDays(start, 13)), finish: toDateInputValue(addDays(start, 13)), percent: 0, predecessors: [5, 6], outlineLevel: 1 },
+      { uid: 1, name: "Finalize requirements", start, finish: toDateInputValue(addDays(start, 1)), percent: 100, predecessors: [], links: [], outlineLevel: 1 },
+      { uid: 2, name: "Build import/export MVP", start: toDateInputValue(addDays(start, 2)), finish: toDateInputValue(addDays(start, 5)), percent: 70, predecessors: [1], links: [{ id: 1, type: "FS" }], outlineLevel: 1 },
+      { uid: 3, name: "Validate Microsoft Project XML", start: toDateInputValue(addDays(start, 6)), finish: toDateInputValue(addDays(start, 7)), percent: 25, predecessors: [2], links: [{ id: 2, type: "FS" }], outlineLevel: 1 },
+      { uid: 4, name: "Add schedule polish", start: toDateInputValue(addDays(start, 8)), finish: toDateInputValue(addDays(start, 10)), percent: 0, predecessors: [3], links: [{ id: 3, type: "FS" }], outlineLevel: 1 },
+      { uid: 5, name: "User acceptance test", start: toDateInputValue(addDays(start, 11)), finish: toDateInputValue(addDays(start, 12)), percent: 0, predecessors: [4], links: [{ id: 4, type: "FS" }], outlineLevel: 1 },
+      { uid: 6, name: "Prepare release notes", start: toDateInputValue(addDays(start, 11)), finish: toDateInputValue(addDays(start, 12)), percent: 0, predecessors: [4], links: [{ id: 4, type: "SS" }], outlineLevel: 1 },
+      { uid: 7, name: "Submit build", start: toDateInputValue(addDays(start, 13)), finish: toDateInputValue(addDays(start, 13)), percent: 0, predecessors: [5, 6], links: [{ id: 5, type: "FS" }, { id: 6, type: "FF" }], outlineLevel: 1 },
     ],
   };
   if (shouldRender) render();
 }
 
+
+function findLinkTargetFromPoint(clientX, clientY, sourceIndex) {
+  const candidates = document.elementsFromPoint(clientX, clientY);
+  const targetBar = candidates
+    .map((element) => element.closest?.(".gantt-bar"))
+    .find((bar) => bar && Number(bar.dataset.index) !== sourceIndex);
+  if (!targetBar) return null;
+  const index = Number(targetBar.dataset.index);
+  return Number.isInteger(index) ? { index, bar: targetBar } : null;
+}
+
+function clearLinkTargetHighlight() {
+  document.querySelectorAll(".gantt-bar.is-link-target").forEach((bar) => bar.classList.remove("is-link-target"));
+  document.body.classList.remove("is-link-hovering");
+}
+
+function updateLinkTargetHighlight(clientX, clientY) {
+  if (!activeBarDrag || activeBarDrag.mode !== "move") return;
+  clearLinkTargetHighlight();
+  const target = findLinkTargetFromPoint(clientX, clientY, activeBarDrag.index);
+  activeBarDrag.linkTargetIndex = target?.index ?? null;
+  if (target?.bar) {
+    target.bar.classList.add("is-link-target");
+    document.body.classList.add("is-link-hovering");
+  }
+}
+
+function askDependencyType(predecessor, successor) {
+  const response = window.prompt(
+    `Create dependency:\n${predecessor.id}. ${predecessor.name} → ${successor.id}. ${successor.name}\n\nType FS, SS, FF, or SF`,
+    "FS"
+  );
+  if (response === null) return null;
+  const type = String(response).trim().toUpperCase();
+  if (!LINK_TYPES.includes(type)) {
+    alert("Use one of these dependency types: FS, SS, FF, or SF.");
+    return null;
+  }
+  return type;
+}
+
+function addDependencyLink(sourceIndex, targetIndex, type) {
+  ensureDecorations();
+  const predecessor = state.tasks[sourceIndex];
+  const successor = state.tasks[targetIndex];
+  if (!predecessor || !successor || predecessor.id === successor.id) return false;
+
+  const previousLinks = getTaskLinks(successor);
+  successor.links = previousLinks.filter((link) => link.id !== predecessor.id);
+  successor.links.push({ id: predecessor.id, type });
+  successor.predecessors = successor.links.map((link) => link.id);
+
+  const cycles = detectCycles();
+  if (cycles.length) {
+    successor.links = previousLinks;
+    successor.predecessors = previousLinks.map((link) => link.id);
+    alert(`That would create a dependency loop: ${cycles[0].join(" → ")}.`);
+    return false;
+  }
+
+  autoSchedule({ silent: true });
+  return true;
+}
 
 function beginGanttDrag(event) {
   const bar = event.target.closest(".gantt-bar");
@@ -780,7 +961,8 @@ function beginGanttDrag(event) {
   const task = state.tasks[index];
   if (!task) return;
 
-  const edge = event.target.dataset.resizeEdge;
+  const resizeHandle = event.target.closest("[data-resize-edge]");
+  const edge = resizeHandle?.dataset.resizeEdge;
   const mode = edge === "start" ? "resize-start" : edge === "finish" ? "resize-finish" : "move";
   const startDate = dateOnly(task.start);
   const finishDate = dateOnly(task.finish);
@@ -791,8 +973,12 @@ function beginGanttDrag(event) {
     mode,
     pointerId: event.pointerId,
     startX: event.clientX,
+    startY: event.clientY,
+    currentX: event.clientX,
+    currentY: event.clientY,
     originalStart: startDate,
     originalFinish: finishDate,
+    linkTargetIndex: null,
   };
 
   document.body.classList.add("is-gantt-dragging");
@@ -803,6 +989,8 @@ function beginGanttDrag(event) {
 
 function updateGanttDrag(event) {
   if (!activeBarDrag) return;
+  activeBarDrag.currentX = event.clientX;
+  activeBarDrag.currentY = event.clientY;
   const deltaDays = Math.round((event.clientX - activeBarDrag.startX) / uiPrefs.dayWidth);
   const task = state.tasks[activeBarDrag.index];
   if (!task) return;
@@ -823,13 +1011,34 @@ function updateGanttDrag(event) {
   task.durationDays = daysBetween(task.start, task.finish);
   renderGantt();
   renderSummary();
+  updateLinkTargetHighlight(event.clientX, event.clientY);
   event.preventDefault();
 }
 
-function endGanttDrag() {
+function endGanttDrag(event) {
   if (!activeBarDrag) return;
+  const drag = activeBarDrag;
+  const sourceTask = state.tasks[drag.index];
+  const target = drag.mode === "move"
+    ? findLinkTargetFromPoint(drag.currentX ?? event?.clientX ?? drag.startX, drag.currentY ?? event?.clientY ?? drag.startY, drag.index)
+    : null;
+
+  clearLinkTargetHighlight();
   activeBarDrag = null;
   document.body.classList.remove("is-gantt-dragging");
+
+  if (sourceTask && target && target.index !== drag.index) {
+    sourceTask.start = toDateInputValue(drag.originalStart);
+    sourceTask.finish = toDateInputValue(drag.originalFinish);
+    sourceTask.durationDays = daysBetween(sourceTask.start, sourceTask.finish);
+    const targetTask = state.tasks[target.index];
+    const type = askDependencyType(sourceTask, targetTask);
+    if (type) {
+      addDependencyLink(drag.index, target.index, type);
+      return;
+    }
+  }
+
   render();
 }
 

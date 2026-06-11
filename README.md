@@ -8,8 +8,10 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Show an interactive Gantt preview
 - Drag Gantt task bars left/right to change dates
 - Resize Gantt task bars from either edge to change duration
+- Drop one Gantt bar onto another to create dependency links
+- Choose FS, SS, FF, or SF link types when prompted
 - Adjust chart width, day-cell size, and row height from the toolbar
-- Track start, finish, duration, percent complete, WBS, outline level, and finish-to-start predecessors
+- Track start, finish, duration, percent complete, WBS, outline level, and typed predecessors
 - Import Microsoft Project XML / MSPDI files
 - Export Microsoft Project XML / MSPDI files that can be opened by Microsoft Project Desktop
 - Export CSV for quick review
@@ -20,6 +22,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Renamed to **Chris's Discount Project Maker**
 - Added a branded portrait image
 - Added direct-manipulation scheduling in the Gantt chart
+- Added drag-to-link Gantt dependencies with FS, SS, FF, and SF options
 - Added range controls for chart width, day cell width, and row height
 - Cleaner app header with project context
 - Project summary cards for task count, duration, completion, and XML readiness
@@ -60,10 +63,11 @@ http://localhost:5173
 1. Open this app.
 2. Click **Load sample**.
 3. Drag or resize tasks in the Gantt chart.
-4. Click **Export XML**.
-5. Open the downloaded `.xml` file in Microsoft Project Desktop.
-6. Save it from Microsoft Project as `.mpp` if needed.
-7. Optionally export back to XML from Microsoft Project and import it into this app.
+4. Drop one task bar on another to create a dependency and choose FS, SS, FF, or SF.
+5. Click **Export XML**.
+6. Open the downloaded `.xml` file in Microsoft Project Desktop.
+7. Save it from Microsoft Project as `.mpp` if needed.
+8. Optionally export back to XML from Microsoft Project and import it into this app.
 
 ## Known limitations
 
