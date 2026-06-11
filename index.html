@@ -36,13 +36,13 @@
         <div class="hero-copy">
           <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
           <h2>Make a real schedule without paying enterprise money.</h2>
-          <p>Drag tasks directly on the Gantt chart, resize edges to change duration, drop one task on another to link FS/SS/FF/SF dependencies, then export clean MSPDI XML for Microsoft Project Desktop.</p>
+          <p>Drag tasks directly on the Gantt chart, resize edges to change duration, drop one task on another, pick the relationship in a popup, then export clean MSPDI XML for Microsoft Project Desktop.</p>
         </div>
 
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
           <span class="readiness-label">Export readiness</span>
           <strong id="exportStatus">Ready</strong>
-          <p>Supported: tasks, dates, duration, percent complete, WBS, outline level, and finish-to-start predecessors.</p>
+          <p>Supported: tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependencies.</p>
         </aside>
       </section>
 
@@ -142,7 +142,7 @@
           <div class="card-header">
             <div>
               <h2>Gantt preview</h2>
-              <p>Drag bars to move dates. Grab an edge to resize duration. Drop a bar on another task to link them.</p>
+              <p>Drag bars to move dates. Grab an edge to resize duration. Drop a bar on another task, then choose the link type from a popup.</p>
             </div>
             <span class="card-badge">Drag + link</span>
           </div>
@@ -158,6 +158,39 @@
       <span>Compatibility target: Microsoft Project XML / MSPDI. Native .mpp needs a backend converter such as MPXJ.</span>
       <span id="saveStatus">Saved locally</span>
     </footer>
+  </div>
+
+  <div id="dependencyModal" class="dependency-modal" hidden>
+    <div class="dependency-backdrop" data-link-choice="cancel"></div>
+    <section class="dependency-dialog" role="dialog" aria-modal="true" aria-labelledby="dependencyModalTitle" aria-describedby="dependencyModalCopy">
+      <button id="dependencyCloseBtn" class="dependency-close" type="button" data-link-choice="cancel" aria-label="Cancel dependency link">×</button>
+      <p class="eyebrow">Choose dependency</p>
+      <h2 id="dependencyModalTitle">Link these tasks</h2>
+      <p id="dependencyModalCopy" class="dependency-copy">Pick how the dragged task should control the target task.</p>
+      <div class="dependency-options" role="group" aria-label="Dependency type">
+        <button type="button" data-link-choice="FS">
+          <strong>FS</strong>
+          <span>Finish → Start</span>
+          <small>Target starts after source finishes. Most common.</small>
+        </button>
+        <button type="button" data-link-choice="SS">
+          <strong>SS</strong>
+          <span>Start → Start</span>
+          <small>Target starts when source starts.</small>
+        </button>
+        <button type="button" data-link-choice="FF">
+          <strong>FF</strong>
+          <span>Finish → Finish</span>
+          <small>Target finishes when source finishes.</small>
+        </button>
+        <button type="button" data-link-choice="SF">
+          <strong>SF</strong>
+          <span>Start → Finish</span>
+          <small>Target finishes after source starts. Rare, but supported.</small>
+        </button>
+      </div>
+      <p class="dependency-tip">No typing needed. Pick one and I’ll add the link, auto-schedule, and update the grid.</p>
+    </section>
   </div>
 
   <script src="app.js"></script>

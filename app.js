@@ -41,6 +41,9 @@ const els = {
   chartWidthValue: document.getElementById("chartWidthValue"),
   dayWidthValue: document.getElementById("dayWidthValue"),
   rowHeightValue: document.getElementById("rowHeightValue"),
+  dependencyModal: document.getElementById("dependencyModal"),
+  dependencyModalTitle: document.getElementById("dependencyModalTitle"),
+  dependencyModalCopy: document.getElementById("dependencyModalCopy"),
 };
 
 const today = toDateInputValue(new Date());
@@ -60,6 +63,7 @@ const DEFAULT_UI_PREFS = {
 
 let uiPrefs = loadUiPrefs();
 let activeBarDrag = null;
+let pendingDependencyChoice = null;
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -419,7 +423,7 @@ function renderGantt() {
           <strong>${task.id}. ${escapeXml(task.name)}</strong>
           <span>${duration}d · ${task.percent}% · ${linkText}</span>
         </div>
-        <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drop this bar on another task to create FS, SS, FF, or SF dependency. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+        <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drop this bar on another task and pick FS, SS, FF, or SF from the popup. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
           <span>${escapeXml(task.name)}</span>
           <em class="link-hint" aria-hidden="true">Drop to link</em>
           <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
@@ -915,18 +919,38 @@ function updateLinkTargetHighlight(clientX, clientY) {
   }
 }
 
-function askDependencyType(predecessor, successor) {
-  const response = window.prompt(
-    `Create dependency:\n${predecessor.id}. ${predecessor.name} → ${successor.id}. ${successor.name}\n\nType FS, SS, FF, or SF`,
-    "FS"
-  );
-  if (response === null) return null;
-  const type = String(response).trim().toUpperCase();
-  if (!LINK_TYPES.includes(type)) {
-    alert("Use one of these dependency types: FS, SS, FF, or SF.");
-    return null;
+function openDependencyPicker(predecessor, successor, onChoice) {
+  if (!els.dependencyModal) {
+    onChoice("FS");
+    return;
   }
-  return type;
+
+  pendingDependencyChoice = { onChoice };
+  if (els.dependencyModalTitle) {
+    els.dependencyModalTitle.textContent = `Link ${predecessor.id}. ${predecessor.name} to ${successor.id}. ${successor.name}`;
+  }
+  if (els.dependencyModalCopy) {
+    els.dependencyModalCopy.textContent = `${predecessor.name} will become the predecessor for ${successor.name}. Choose how their dates should relate.`;
+  }
+
+  els.dependencyModal.hidden = false;
+  document.body.classList.add("is-modal-open");
+  requestAnimationFrame(() => {
+    els.dependencyModal?.querySelector("[data-link-choice='FS']")?.focus();
+  });
+}
+
+function finishDependencyPicker(type) {
+  const request = pendingDependencyChoice;
+  pendingDependencyChoice = null;
+
+  if (els.dependencyModal) {
+    els.dependencyModal.hidden = true;
+  }
+  document.body.classList.remove("is-modal-open");
+
+  if (!request) return;
+  request.onChoice(LINK_TYPES.includes(type) ? type : null);
 }
 
 function addDependencyLink(sourceIndex, targetIndex, type) {
@@ -1032,11 +1056,16 @@ function endGanttDrag(event) {
     sourceTask.finish = toDateInputValue(drag.originalFinish);
     sourceTask.durationDays = daysBetween(sourceTask.start, sourceTask.finish);
     const targetTask = state.tasks[target.index];
-    const type = askDependencyType(sourceTask, targetTask);
-    if (type) {
-      addDependencyLink(drag.index, target.index, type);
-      return;
-    }
+    renderGantt();
+    renderSummary();
+    openDependencyPicker(sourceTask, targetTask, (type) => {
+      if (type) {
+        addDependencyLink(drag.index, target.index, type);
+      } else {
+        render();
+      }
+    });
+    return;
   }
 
   render();
@@ -1108,6 +1137,20 @@ els.importXmlInput.addEventListener("change", async (event) => {
     els.importXmlInput.value = "";
   } catch (error) {
     alert(error.message || "Import failed.");
+  }
+});
+
+
+els.dependencyModal?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-link-choice]");
+  if (!button) return;
+  const choice = button.dataset.linkChoice;
+  finishDependencyPicker(choice === "cancel" ? null : choice);
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && pendingDependencyChoice) {
+    finishDependencyPicker(null);
   }
 });
 

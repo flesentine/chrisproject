@@ -1016,3 +1016,161 @@ button.success:hover { background: #0d6334; }
 .is-link-hovering .gantt-wrap {
   cursor: copy;
 }
+
+/* Dependency picker modal */
+body.is-modal-open {
+  overflow: hidden;
+}
+
+.dependency-modal[hidden] {
+  display: none;
+}
+
+.dependency-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.dependency-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(37, 99, 235, 0.20), transparent 34%),
+    rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.dependency-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 26px;
+  padding: 28px;
+  background:
+    linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98)),
+    var(--surface, #0f172a);
+  box-shadow: 0 32px 96px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  animation: dependencyPop 0.16s ease-out;
+}
+
+@keyframes dependencyPop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dependency-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--muted, #94a3b8);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.dependency-dialog .eyebrow {
+  margin-bottom: 8px;
+}
+
+.dependency-dialog h2 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.05;
+}
+
+.dependency-copy {
+  margin: 12px 48px 22px 0;
+  color: var(--muted, #94a3b8);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.dependency-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dependency-options button {
+  min-height: 126px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 18px;
+  text-align: left;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.66), rgba(15, 23, 42, 0.36)),
+    rgba(30, 41, 59, 0.78);
+}
+
+.dependency-options button:hover,
+.dependency-options button:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(74, 222, 128, 0.72);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28), 0 0 0 4px rgba(74, 222, 128, 0.10);
+}
+
+.dependency-options strong {
+  width: fit-content;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: #052e16;
+  background: linear-gradient(135deg, #86efac, #22c55e);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.dependency-options span {
+  color: var(--text, #e5e7eb);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.dependency-options small {
+  color: var(--muted, #94a3b8);
+  line-height: 1.45;
+}
+
+.dependency-tip {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: var(--muted, #94a3b8);
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+@media (max-width: 700px) {
+  .dependency-modal {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .dependency-dialog {
+    padding: 22px;
+    border-radius: 22px;
+  }
+
+  .dependency-options {
+    grid-template-columns: 1fr;
+  }
+}

@@ -9,7 +9,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Drag Gantt task bars left/right to change dates
 - Resize Gantt task bars from either edge to change duration
 - Drop one Gantt bar onto another to create dependency links
-- Choose FS, SS, FF, or SF link types when prompted
+- Choose FS, SS, FF, or SF link types from a no-typing popup
 - Adjust chart width, day-cell size, and row height from the toolbar
 - Track start, finish, duration, percent complete, WBS, outline level, and typed predecessors
 - Import Microsoft Project XML / MSPDI files
@@ -22,7 +22,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Renamed to **Chris's Discount Project Maker**
 - Added a branded portrait image
 - Added direct-manipulation scheduling in the Gantt chart
-- Added drag-to-link Gantt dependencies with FS, SS, FF, and SF options
+- Added drag-to-link Gantt dependencies with a no-typing FS/SS/FF/SF picker popup
 - Added range controls for chart width, day cell width, and row height
 - Cleaner app header with project context
 - Project summary cards for task count, duration, completion, and XML readiness
@@ -63,7 +63,7 @@ http://localhost:5173
 1. Open this app.
 2. Click **Load sample**.
 3. Drag or resize tasks in the Gantt chart.
-4. Drop one task bar on another to create a dependency and choose FS, SS, FF, or SF.
+4. Drop one task bar on another to create a dependency and pick FS, SS, FF, or SF from the popup.
 5. Click **Export XML**.
 6. Open the downloaded `.xml` file in Microsoft Project Desktop.
 7. Save it from Microsoft Project as `.mpp` if needed.
