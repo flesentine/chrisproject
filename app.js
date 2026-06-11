@@ -17,6 +17,11 @@ const els = {
   exportXmlBtn: document.getElementById("exportXmlBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   importXmlInput: document.getElementById("importXmlInput"),
+  taskCount: document.getElementById("taskCount"),
+  durationCount: document.getElementById("durationCount"),
+  completeCount: document.getElementById("completeCount"),
+  dateRange: document.getElementById("dateRange"),
+  exportStatus: document.getElementById("exportStatus"),
 };
 
 const today = toDateInputValue(new Date());
@@ -168,8 +173,36 @@ function render() {
   els.projectStart.value = state.projectStart;
   renderTaskTable();
   renderGantt();
+  renderSummary();
   renderValidation();
   save();
+}
+
+function formatShortDate(value) {
+  const d = dateOnly(value);
+  if (!d) return "No date";
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+function renderSummary() {
+  const tasks = state.tasks;
+  const starts = tasks.map((t) => dateOnly(t.start)).filter(Boolean);
+  const finishes = tasks.map((t) => dateOnly(t.finish)).filter(Boolean);
+  const min = starts.length ? new Date(Math.min(...starts.map(Number))) : null;
+  const max = finishes.length ? new Date(Math.max(...finishes.map(Number))) : null;
+  const duration = min && max ? daysBetween(min, max) : 0;
+  const averagePercent = tasks.length
+    ? Math.round(tasks.reduce((sum, task) => sum + normalizePercent(task.percent), 0) / tasks.length)
+    : 0;
+  const issueCount = validateProject().length;
+
+  if (els.taskCount) els.taskCount.textContent = String(tasks.length);
+  if (els.durationCount) els.durationCount.textContent = `${duration}d`;
+  if (els.completeCount) els.completeCount.textContent = `${averagePercent}%`;
+  if (els.dateRange) {
+    els.dateRange.textContent = min && max ? `${formatShortDate(min)} → ${formatShortDate(max)}` : "No date range";
+  }
+  if (els.exportStatus) els.exportStatus.textContent = issueCount ? `${issueCount} issue${issueCount === 1 ? "" : "s"}` : "Ready";
 }
 
 function renderTaskTable() {
@@ -178,17 +211,24 @@ function renderTaskTable() {
 
   state.tasks.forEach((task, index) => {
     const row = document.createElement("tr");
+    row.className = `task-row ${task.percent === 100 ? "is-complete" : ""}`;
+    const indent = Math.max(0, task.outlineLevel - 1) * 18;
     row.innerHTML = `
-      <td>${task.id}</td>
+      <td><span class="id-pill">${task.id}</span></td>
       <td>${escapeXml(task.wbs)}</td>
-      <td><input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></td>
+      <td><div class="task-name-cell" style="--indent:${indent}px"><input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></td>
       <td><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}" /></td>
       <td><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}" /></td>
-      <td>${task.durationDays}</td>
-      <td><input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" /></td>
+      <td><span class="duration-pill">${task.durationDays}d</span></td>
+      <td>
+        <div class="percent-cell">
+          <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete" />
+          <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
+        </div>
+      </td>
       <td><input data-field="predecessors" data-index="${index}" value="${escapeXml(task.predecessors.join(","))}" placeholder="1,2" /></td>
-      <td><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" /></td>
-      <td><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task">Delete</button></td>
+      <td><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></td>
+      <td><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></td>
     `;
     fragment.appendChild(row);
   });
@@ -200,7 +240,7 @@ function renderGantt() {
   const tasks = state.tasks;
   if (!tasks.length) {
     els.timeline.innerHTML = "";
-    els.gantt.innerHTML = `<div class="gantt-row"><div class="gantt-label">No tasks yet</div></div>`;
+    els.gantt.innerHTML = `<div class="empty-state"><div><strong>No tasks yet</strong><span>Add a task to start building the schedule.</span></div></div>`;
     return;
   }
 
@@ -211,15 +251,23 @@ function renderGantt() {
   min = addDays(min, -1);
   max = addDays(max, 2);
   const totalDays = Math.max(1, daysBetween(min, max));
-  const dayWidth = Math.max(34, Math.min(64, Math.floor(900 / totalDays)));
-  const gridWidth = totalDays * dayWidth + 150;
+  const dayWidth = Math.max(42, Math.min(74, Math.floor(1040 / totalDays)));
+  const labelWidth = 190;
+  const gridWidth = totalDays * dayWidth + labelWidth;
 
-  els.timeline.style.gridTemplateColumns = `150px repeat(${totalDays}, ${dayWidth}px)`;
+  els.timeline.style.gridTemplateColumns = `${labelWidth}px repeat(${totalDays}, ${dayWidth}px)`;
   els.timeline.style.width = `${gridWidth}px`;
-  const timelineCells = [`<div class="timeline-cell">Task</div>`];
+  const timelineCells = [`<div class="timeline-cell is-task-heading"><strong>Task</strong><span>timeline</span></div>`];
   for (let i = 0; i < totalDays; i += 1) {
     const d = addDays(min, i);
-    timelineCells.push(`<div class="timeline-cell">${d.toLocaleDateString([], { month: "short", day: "numeric" })}</div>`);
+    const classes = ["timeline-cell"];
+    if ([0, 6].includes(d.getDay())) classes.push("is-weekend");
+    if (toDateInputValue(d) === today) classes.push("is-today");
+    timelineCells.push(`
+      <div class="${classes.join(" ")}">
+        <strong>${d.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
+        <span>${d.toLocaleDateString([], { weekday: "short" })}</span>
+      </div>`);
   }
   els.timeline.innerHTML = timelineCells.join("");
 
@@ -227,18 +275,21 @@ function renderGantt() {
   els.gantt.innerHTML = tasks.map((task) => {
     const startOffset = Math.max(0, daysBetween(min, task.start) - 1);
     const duration = Math.max(1, daysBetween(task.start, task.finish));
-    const left = 150 + startOffset * dayWidth;
-    const width = Math.max(22, duration * dayWidth - 6);
+    const left = labelWidth + startOffset * dayWidth;
+    const width = Math.max(30, duration * dayWidth - 8);
+    const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
     return `
-      <div class="gantt-row" style="background-size:${dayWidth}px 48px">
-        <div class="gantt-label" title="${escapeXml(task.name)}">${task.id}. ${escapeXml(task.name)}</div>
-        <div class="gantt-bar" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+      <div class="gantt-row" style="background-size:${dayWidth}px 56px">
+        <div class="gantt-label" title="${escapeXml(task.name)}">
+          <strong>${task.id}. ${escapeXml(task.name)}</strong>
+          <span>${duration}d · ${task.percent}% · WBS ${escapeXml(task.wbs)}</span>
+        </div>
+        <div class="${barClass}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="${escapeXml(task.name)}: ${task.start} to ${task.finish}">
           <span>${escapeXml(task.name)}</span>
         </div>
       </div>`;
   }).join("");
 }
-
 function validateProject() {
   ensureDecorations();
   const issues = [];
@@ -299,14 +350,16 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><p><strong>Project looks clean.</strong> Exported XML should open in Microsoft Project Desktop for the supported fields: tasks, dates, duration, percent complete, WBS, outline level, and finish-to-start predecessors.</p></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, dates, duration, percent complete, WBS, outline level, and finish-to-start predecessors.</p></div></div>`;
     return;
   }
 
   els.validationPanel.innerHTML = `
     <div class="validation-card warn">
-      <p><strong>${issues.length} thing${issues.length === 1 ? "" : "s"} to fix before export.</strong></p>
-      <ul>${issues.slice(0, 8).map((issue) => `<li>${escapeXml(issue)}</li>`).join("")}</ul>
+      <div>
+        <p><strong>${issues.length} thing${issues.length === 1 ? "" : "s"} to fix before export.</strong> Auto Schedule can fix most dependency timing issues.</p>
+        <ul>${issues.slice(0, 8).map((issue) => `<li>${escapeXml(issue)}</li>`).join("")}</ul>
+      </div>
     </div>`;
 }
 

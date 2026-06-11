@@ -5,12 +5,23 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 ## What it does
 
 - Create and edit task schedules
-- Show a simple Gantt chart
+- Show a polished Gantt preview
 - Track start, finish, duration, percent complete, WBS, outline level, and finish-to-start predecessors
 - Import Microsoft Project XML / MSPDI files
 - Export Microsoft Project XML / MSPDI files that can be opened by Microsoft Project Desktop
 - Export CSV for quick review
 - Save automatically in browser localStorage
+
+## UX upgrades in this version
+
+- Cleaner app header with project context
+- Project summary cards for task count, duration, completion, and XML readiness
+- Grouped toolbar actions so planning, scheduling, and import/export are easier to scan
+- Card-based task grid and Gantt layout
+- Better table row density, progress indicators, and delete affordance
+- Cleaner validation messaging
+- Polished Gantt timeline with weekday labels, weekend shading, and better task labels
+- Custom dark scrollbars and improved responsive behavior
 
 ## Compatibility target
 
@@ -28,7 +39,7 @@ Because this is a static app, you can open `index.html` directly in a browser.
 For a cleaner local server:
 
 ```bash
-cd ms-project-webapp
+cd chrisproject
 python3 -m http.server 5173
 ```
 
@@ -42,7 +53,7 @@ http://localhost:5173
 
 1. Open this app.
 2. Click **Load Sample**.
-3. Click **Export Project XML**.
+3. Click **Export XML**.
 4. Open the downloaded `.xml` file in Microsoft Project Desktop.
 5. Save it from Microsoft Project as `.mpp` if needed.
 6. Optionally export back to XML from Microsoft Project and import it into this app.
@@ -58,4 +69,3 @@ This MVP intentionally keeps the model small. It does not yet support:
 - Calendars beyond a simple 8-hour day
 - Critical path calculation
 - Native `.mpp` import/export
-
