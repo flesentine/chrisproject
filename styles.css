@@ -860,7 +860,7 @@ button.success:hover { background: #0d6334; }
   align-items: center;
   column-gap: 8px;
   row-gap: 3px;
-  min-width: 120px;
+  min-width: 132px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 750;
@@ -1228,7 +1228,7 @@ body.is-modal-open {
 .planner-fields {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 54px 76px minmax(190px, 1fr) 130px 130px 72px 92px 126px 72px 48px;
+  grid-template-columns: 48px 64px minmax(230px, 1fr) 128px 128px 58px 86px 126px 62px 44px;
 }
 
 .planner-fields-heading {
@@ -1416,6 +1416,41 @@ body.is-modal-open {
 
   .planner-fields-heading,
   .planner-fields {
-    grid-template-columns: 48px 68px minmax(180px, 1fr) 122px 122px 66px 86px 116px 66px 44px;
+    grid-template-columns: 44px 56px minmax(200px, 1fr) 120px 120px 54px 78px 110px 58px 42px;
   }
+}
+
+
+/* Clean unified grid patch: keep all task-entry fields inside the left pane before the timeline starts. */
+.planner-fields-heading,
+.planner-fields {
+  overflow: hidden;
+}
+
+.planner-fields-heading {
+  box-shadow: 8px 0 18px rgba(15, 23, 42, 0.06);
+}
+
+.planner-dates-heading {
+  border-left: 2px solid var(--line-strong);
+}
+
+.planner-cell {
+  overflow: hidden;
+}
+
+.planner-cell input {
+  min-width: 0;
+}
+
+.planner-cell .percent-cell input {
+  width: 64px;
+}
+
+.planner-cell .percent-track {
+  width: 64px;
+}
+
+.planner-cell.action-cell .delete-btn {
+  flex: 0 0 auto;
 }

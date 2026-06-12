@@ -56,7 +56,7 @@ let state = {
 };
 
 const DEFAULT_UI_PREFS = {
-  chartWidth: 48,
+  chartWidth: 1000,
   dayWidth: 58,
   rowHeight: 56,
 };
@@ -75,7 +75,7 @@ function loadUiPrefs() {
   try {
     const parsed = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
     return {
-      chartWidth: clamp(parsed.chartWidth ?? DEFAULT_UI_PREFS.chartWidth, 35, 70),
+      chartWidth: clamp(parsed.chartWidth ?? DEFAULT_UI_PREFS.chartWidth, 900, 1180),
       dayWidth: clamp(parsed.dayWidth ?? DEFAULT_UI_PREFS.dayWidth, 36, 104),
       rowHeight: clamp(parsed.rowHeight ?? DEFAULT_UI_PREFS.rowHeight, 44, 88),
     };
@@ -92,7 +92,7 @@ function applyUiPrefs() {
   if (els.chartWidthControl) els.chartWidthControl.value = uiPrefs.chartWidth;
   if (els.dayWidthControl) els.dayWidthControl.value = uiPrefs.dayWidth;
   if (els.rowHeightControl) els.rowHeightControl.value = uiPrefs.rowHeight;
-  if (els.chartWidthValue) els.chartWidthValue.textContent = `${uiPrefs.chartWidth}%`;
+  if (els.chartWidthValue) els.chartWidthValue.textContent = `${uiPrefs.chartWidth}px`;
   if (els.dayWidthValue) els.dayWidthValue.textContent = `${uiPrefs.dayWidth}px`;
   if (els.rowHeightValue) els.rowHeightValue.textContent = `${uiPrefs.rowHeight}px`;
 
@@ -350,7 +350,7 @@ function renderGantt() {
   const barHeight = Math.min(34, Math.max(24, rowHeight - 24));
   const barTop = Math.max(8, Math.round((rowHeight - barHeight) / 2));
   const dayWidth = uiPrefs.dayWidth;
-  const leftPaneWidth = Math.round(520 + (70 - uiPrefs.chartWidth) * 8);
+  const leftPaneWidth = uiPrefs.chartWidth;
 
   if (!tasks.length) {
     els.timeline.innerHTML = `
@@ -1072,7 +1072,7 @@ function endGanttDrag(event) {
 }
 
 function handleUiRangeChange(key, value) {
-  uiPrefs[key] = key === "chartWidth" ? clamp(value, 35, 70) : key === "dayWidth" ? clamp(value, 36, 104) : clamp(value, 44, 88);
+  uiPrefs[key] = key === "chartWidth" ? clamp(value, 900, 1180) : key === "dayWidth" ? clamp(value, 36, 104) : clamp(value, 44, 88);
   saveUiPrefs();
   applyUiPrefs();
   renderGantt();
