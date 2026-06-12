@@ -63,6 +63,7 @@ const els = {
   scheduleLinkTitle: document.getElementById("scheduleLinkTitle"),
   scheduleLinkCopy: document.getElementById("scheduleLinkCopy"),
   scheduleLinkPreview: document.getElementById("scheduleLinkPreview"),
+  linkSuggestion: document.getElementById("linkSuggestion"),
   linkDragLayer: document.getElementById("linkDragLayer"),
   linkDragPath: document.getElementById("linkDragPath"),
   linkDragDot: document.getElementById("linkDragDot"),
@@ -396,6 +397,7 @@ function render() {
   renderGantt();
   renderSummary();
   renderValidation();
+  renderScheduleLinkSuggestion();
   save();
 }
 
@@ -463,6 +465,12 @@ function renderGantt() {
 
   const starts = tasks.map((t) => dateOnly(t.start)).filter(Boolean);
   const finishes = tasks.map((t) => dateOnly(t.finish)).filter(Boolean);
+  if (pendingScheduleChoice?.proposedDates) {
+    const proposedStart = dateOnly(pendingScheduleChoice.proposedDates.start);
+    const proposedFinish = dateOnly(pendingScheduleChoice.proposedDates.finish);
+    if (proposedStart) starts.push(proposedStart);
+    if (proposedFinish) finishes.push(proposedFinish);
+  }
   let min = new Date(Math.min(...starts.map(Number)));
   let max = new Date(Math.max(...finishes.map(Number)));
   min = addDays(min, -1);
@@ -503,6 +511,15 @@ function renderGantt() {
     const width = Math.max(32, duration * dayWidth - 8);
     const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
     const linkText = task.links.length ? formatLinks(task.links) : "";
+    const pendingPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
+    let ghostMarkup = "";
+    if (pendingPreview) {
+      const ghostStartOffset = Math.max(0, daysBetween(min, pendingPreview.start) - 1);
+      const ghostDuration = Math.max(1, daysBetween(pendingPreview.start, pendingPreview.finish));
+      const ghostLeft = ghostStartOffset * dayWidth;
+      const ghostWidth = Math.max(32, ghostDuration * dayWidth - 8);
+      ghostMarkup = `<div class="gantt-ghost-bar" style="left:${ghostLeft}px;width:${ghostWidth}px" aria-hidden="true"><span>suggested move</span></div>`;
+    }
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `
       <div class="planner-row ${task.percent === 100 ? "is-complete" : ""}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
@@ -524,6 +541,7 @@ function renderGantt() {
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
+          ${ghostMarkup}
           <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
             <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
             <span>${escapeXml(task.name)}</span>
@@ -1156,65 +1174,140 @@ function datesAlreadyMatch(task, proposedDates) {
   return proposedDates && task.start === proposedDates.start && task.finish === proposedDates.finish;
 }
 
-function openScheduleLinkModal(details) {
-  if (!els.scheduleLinkModal) {
-    details.onChoice("move");
+function buildScheduleSuggestionHtml(details) {
+  const { predecessor, successor, type, proposedDates } = details;
+  const current = `${formatFriendlyDate(successor.start)} → ${formatFriendlyDate(successor.finish)}`;
+  const proposed = `${formatFriendlyDate(proposedDates.start)} → ${formatFriendlyDate(proposedDates.finish)}`;
+  const relationship = describeLinkType(type);
+  return `
+    <div class="link-suggestion-head">
+      <span class="link-type-chip">${escapeXml(type)}</span>
+      <div>
+        <strong>Link created: ${escapeXml(predecessor.name)} → ${escapeXml(successor.name)}</strong>
+        <small>${escapeXml(relationship)}. The blue ghost bar shows the suggested schedule move.</small>
+      </div>
+      <button type="button" class="link-suggestion-x" data-schedule-action="cancel" aria-label="Undo dependency link">×</button>
+    </div>
+    <div class="link-suggestion-grid">
+      <div>
+        <span>Current</span>
+        <strong>${escapeXml(current)}</strong>
+      </div>
+      <div>
+        <span>Suggested</span>
+        <strong>${escapeXml(proposed)}</strong>
+      </div>
+    </div>
+    <div class="link-suggestion-actions">
+      <button type="button" class="primary" data-schedule-action="move">Apply move</button>
+      <button type="button" data-schedule-action="keep">Keep dates</button>
+      <button type="button" data-schedule-action="cancel">Undo link</button>
+    </div>`;
+}
+
+function getRenderedPortCenter(taskId, endpoint) {
+  const index = state.tasks.findIndex((task) => task.id === taskId);
+  if (index < 0) return null;
+  const port = document.querySelector(`.dependency-port[data-index="${index}"][data-link-endpoint="${endpoint}"]`);
+  return port ? getPortCenter(port) : null;
+}
+
+function drawPendingConnectorLine() {
+  if (!pendingScheduleChoice || !els.linkDragPath) return;
+  const { predecessor, successor, sourceEndpoint, targetEndpoint, type } = pendingScheduleChoice;
+  const start = getRenderedPortCenter(predecessor.id, sourceEndpoint || type?.[0] || "F");
+  const end = getRenderedPortCenter(successor.id, targetEndpoint || type?.[1] || "S");
+  if (!start || !end) return;
+  const spread = Math.max(48, Math.abs(end.x - start.x) * 0.42);
+  const direction = end.x >= start.x ? 1 : -1;
+  const c1x = start.x + spread * direction;
+  const c2x = end.x - spread * direction;
+  els.linkDragPath.setAttribute("d", `M ${start.x} ${start.y} C ${c1x} ${start.y}, ${c2x} ${end.y}, ${end.x} ${end.y}`);
+  if (els.linkDragDot) {
+    els.linkDragDot.setAttribute("cx", String(end.x));
+    els.linkDragDot.setAttribute("cy", String(end.y));
+  }
+  if (els.linkDragLabel) {
+    els.linkDragLabel.textContent = `${type} · ${describeLinkType(type)}`;
+    els.linkDragLabel.setAttribute("x", String((start.x + end.x) / 2 + 10));
+    els.linkDragLabel.setAttribute("y", String((start.y + end.y) / 2 - 10));
+  }
+}
+
+function clearConnectorOverlay() {
+  if (activeDependencyDrag || pendingScheduleChoice) return;
+  if (els.linkDragPath) els.linkDragPath.setAttribute("d", "");
+  if (els.linkDragLabel) els.linkDragLabel.textContent = "";
+  if (els.linkDragDot) {
+    els.linkDragDot.setAttribute("cx", "0");
+    els.linkDragDot.setAttribute("cy", "0");
+  }
+}
+
+function positionScheduleSuggestion() {
+  if (!pendingScheduleChoice || !els.linkSuggestion || els.linkSuggestion.hidden) return;
+  const anchor = pendingScheduleChoice.anchor || {};
+  const successorIndex = state.tasks.findIndex((task) => task.id === pendingScheduleChoice.successor?.id);
+  const targetBar = successorIndex >= 0 ? document.querySelector(`.gantt-bar[data-index="${successorIndex}"]`) : null;
+  const barRect = targetBar?.getBoundingClientRect();
+  const cardRect = els.linkSuggestion.getBoundingClientRect();
+  const preferredX = anchor.x ?? (barRect ? barRect.left + barRect.width / 2 : window.innerWidth / 2);
+  const preferredY = anchor.y ?? (barRect ? barRect.bottom + 14 : window.innerHeight / 2);
+  const margin = 18;
+  const left = clamp(preferredX - cardRect.width / 2, margin, Math.max(margin, window.innerWidth - cardRect.width - margin));
+  let top = preferredY + 18;
+  if (top + cardRect.height > window.innerHeight - margin && barRect) {
+    top = barRect.top - cardRect.height - 16;
+  }
+  top = clamp(top, margin, Math.max(margin, window.innerHeight - cardRect.height - margin));
+  els.linkSuggestion.style.left = `${left}px`;
+  els.linkSuggestion.style.top = `${top}px`;
+}
+
+function renderScheduleLinkSuggestion() {
+  if (!els.linkSuggestion) return;
+  if (!pendingScheduleChoice) {
+    els.linkSuggestion.hidden = true;
+    els.linkSuggestion.innerHTML = "";
+    document.body.classList.remove("has-link-suggestion");
+    clearConnectorOverlay();
     return;
   }
 
-  pendingScheduleChoice = details;
-  const { predecessor, successor, type, proposedDates } = details;
-
-  if (els.scheduleLinkTitle) {
-    els.scheduleLinkTitle.textContent = `${type} link created — move ${successor.name}?`;
-  }
-
-  if (els.scheduleLinkCopy) {
-    els.scheduleLinkCopy.textContent = `${predecessor.name} is now the predecessor for ${successor.name}. ${describeLinkType(type)} usually means the successor should be repositioned to match that relationship.`;
-  }
-
-  if (els.scheduleLinkPreview) {
-    const current = `${formatFriendlyDate(successor.start)} → ${formatFriendlyDate(successor.finish)}`;
-    const proposed = `${formatFriendlyDate(proposedDates.start)} → ${formatFriendlyDate(proposedDates.finish)}`;
-    els.scheduleLinkPreview.innerHTML = `
-      <div>
-        <span>Relationship</span>
-        <strong>${type}</strong>
-        <small>${describeLinkType(type)}</small>
-      </div>
-      <div>
-        <span>Current ${successor.id}</span>
-        <strong>${escapeXml(current)}</strong>
-        <small>${escapeXml(successor.name)}</small>
-      </div>
-      <div>
-        <span>Move to</span>
-        <strong>${escapeXml(proposed)}</strong>
-        <small>Duration stays ${proposedDates.durationDays}d</small>
-      </div>`;
-  }
-
-  els.scheduleLinkModal.hidden = false;
-  document.body.classList.add("is-modal-open");
+  els.linkSuggestion.innerHTML = buildScheduleSuggestionHtml(pendingScheduleChoice);
+  els.linkSuggestion.hidden = false;
+  document.body.classList.add("has-link-suggestion");
   requestAnimationFrame(() => {
-    els.scheduleLinkModal?.querySelector("[data-schedule-action='move']")?.focus();
+    positionScheduleSuggestion();
+    drawPendingConnectorLine();
   });
+}
+
+function openScheduleLinkModal(details) {
+  // Kept the old function name so the dependency flow stays simple, but this is
+  // now an inline schedule suggestion instead of a blocking modal.
+  pendingScheduleChoice = details;
+  render();
 }
 
 function finishScheduleLinkChoice(choice) {
   const request = pendingScheduleChoice;
   pendingScheduleChoice = null;
 
+  if (els.linkSuggestion) {
+    els.linkSuggestion.hidden = true;
+    els.linkSuggestion.innerHTML = "";
+  }
   if (els.scheduleLinkModal) {
     els.scheduleLinkModal.hidden = true;
   }
-  document.body.classList.remove("is-modal-open");
+  document.body.classList.remove("is-modal-open", "has-link-suggestion");
 
   if (!request) return;
   request.onChoice(choice);
 }
 
-function addDependencyLink(sourceIndex, targetIndex, type) {
+function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
   ensureDecorations();
   const predecessor = state.tasks[sourceIndex];
   const successor = state.tasks[targetIndex];
@@ -1249,7 +1342,10 @@ function addDependencyLink(sourceIndex, targetIndex, type) {
     predecessor: { ...predecessor },
     successor: { ...successor },
     type,
+    sourceEndpoint: type[0],
+    targetEndpoint: type[1],
     proposedDates,
+    anchor,
     onChoice: (choice) => {
       if (choice === "move") {
         successor.start = proposedDates.start;
@@ -1331,7 +1427,7 @@ function endDependencyDrag(event) {
   if (els.linkDragLabel) els.linkDragLabel.textContent = "";
 
   if (target && type) {
-    addDependencyLink(drag.sourceIndex, target.index, type);
+    addDependencyLink(drag.sourceIndex, target.index, type, { x: drag.currentX ?? target.x, y: drag.currentY ?? target.y });
     return;
   }
 
@@ -1563,6 +1659,21 @@ els.importXmlInput.addEventListener("change", async (event) => {
 });
 
 
+
+els.linkSuggestion?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-schedule-action]");
+  if (!button) return;
+  finishScheduleLinkChoice(button.dataset.scheduleAction || "cancel");
+});
+
+window.addEventListener("resize", () => {
+  positionScheduleSuggestion();
+  drawPendingConnectorLine();
+});
+window.addEventListener("scroll", () => {
+  positionScheduleSuggestion();
+  drawPendingConnectorLine();
+}, true);
 
 els.scheduleLinkModal?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-schedule-action]");
