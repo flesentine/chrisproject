@@ -59,6 +59,10 @@ const els = {
   dependencyModal: document.getElementById("dependencyModal"),
   dependencyModalTitle: document.getElementById("dependencyModalTitle"),
   dependencyModalCopy: document.getElementById("dependencyModalCopy"),
+  scheduleLinkModal: document.getElementById("scheduleLinkModal"),
+  scheduleLinkTitle: document.getElementById("scheduleLinkTitle"),
+  scheduleLinkCopy: document.getElementById("scheduleLinkCopy"),
+  scheduleLinkPreview: document.getElementById("scheduleLinkPreview"),
   linkDragLayer: document.getElementById("linkDragLayer"),
   linkDragPath: document.getElementById("linkDragPath"),
   linkDragDot: document.getElementById("linkDragDot"),
@@ -86,6 +90,7 @@ let activeBarDrag = null;
 let activeColumnDrag = null;
 let activeDependencyDrag = null;
 let pendingDependencyChoice = null;
+let pendingScheduleChoice = null;
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -1103,6 +1108,112 @@ function finishDependencyPicker(type) {
   request.onChoice(LINK_TYPES.includes(type) ? type : null);
 }
 
+
+function describeLinkType(type) {
+  return LINK_TYPE_LABELS[type] || LINK_TYPE_LABELS.FS;
+}
+
+function formatFriendlyDate(value) {
+  const date = dateOnly(value);
+  if (!date) return "unknown";
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+function calculateLinkAlignedDates(predecessor, successor, type) {
+  const duration = Math.max(1, successor.durationDays || daysBetween(successor.start, successor.finish));
+  const predStart = dateOnly(predecessor.start);
+  const predFinish = dateOnly(predecessor.finish);
+  if (!predStart || !predFinish) return null;
+
+  let start;
+  let finish;
+
+  if (type === "FS") {
+    start = addDays(predFinish, 1);
+    finish = addDays(start, duration - 1);
+  } else if (type === "SS") {
+    start = predStart;
+    finish = addDays(start, duration - 1);
+  } else if (type === "FF") {
+    finish = predFinish;
+    start = addDays(finish, 1 - duration);
+  } else if (type === "SF") {
+    finish = predStart;
+    start = addDays(finish, 1 - duration);
+  } else {
+    start = addDays(predFinish, 1);
+    finish = addDays(start, duration - 1);
+  }
+
+  return {
+    start: toDateInputValue(start),
+    finish: toDateInputValue(finish),
+    durationDays: duration,
+  };
+}
+
+function datesAlreadyMatch(task, proposedDates) {
+  return proposedDates && task.start === proposedDates.start && task.finish === proposedDates.finish;
+}
+
+function openScheduleLinkModal(details) {
+  if (!els.scheduleLinkModal) {
+    details.onChoice("move");
+    return;
+  }
+
+  pendingScheduleChoice = details;
+  const { predecessor, successor, type, proposedDates } = details;
+
+  if (els.scheduleLinkTitle) {
+    els.scheduleLinkTitle.textContent = `${type} link created — move ${successor.name}?`;
+  }
+
+  if (els.scheduleLinkCopy) {
+    els.scheduleLinkCopy.textContent = `${predecessor.name} is now the predecessor for ${successor.name}. ${describeLinkType(type)} usually means the successor should be repositioned to match that relationship.`;
+  }
+
+  if (els.scheduleLinkPreview) {
+    const current = `${formatFriendlyDate(successor.start)} → ${formatFriendlyDate(successor.finish)}`;
+    const proposed = `${formatFriendlyDate(proposedDates.start)} → ${formatFriendlyDate(proposedDates.finish)}`;
+    els.scheduleLinkPreview.innerHTML = `
+      <div>
+        <span>Relationship</span>
+        <strong>${type}</strong>
+        <small>${describeLinkType(type)}</small>
+      </div>
+      <div>
+        <span>Current ${successor.id}</span>
+        <strong>${escapeXml(current)}</strong>
+        <small>${escapeXml(successor.name)}</small>
+      </div>
+      <div>
+        <span>Move to</span>
+        <strong>${escapeXml(proposed)}</strong>
+        <small>Duration stays ${proposedDates.durationDays}d</small>
+      </div>`;
+  }
+
+  els.scheduleLinkModal.hidden = false;
+  document.body.classList.add("is-modal-open");
+  requestAnimationFrame(() => {
+    els.scheduleLinkModal?.querySelector("[data-schedule-action='move']")?.focus();
+  });
+}
+
+function finishScheduleLinkChoice(choice) {
+  const request = pendingScheduleChoice;
+  pendingScheduleChoice = null;
+
+  if (els.scheduleLinkModal) {
+    els.scheduleLinkModal.hidden = true;
+  }
+  document.body.classList.remove("is-modal-open");
+
+  if (!request) return;
+  request.onChoice(choice);
+}
+
 function addDependencyLink(sourceIndex, targetIndex, type) {
   ensureDecorations();
   const predecessor = state.tasks[sourceIndex];
@@ -1110,6 +1221,12 @@ function addDependencyLink(sourceIndex, targetIndex, type) {
   if (!predecessor || !successor || predecessor.id === successor.id) return false;
 
   const previousLinks = getTaskLinks(successor);
+  const previousDates = {
+    start: successor.start,
+    finish: successor.finish,
+    durationDays: successor.durationDays,
+  };
+
   successor.links = previousLinks.filter((link) => link.id !== predecessor.id);
   successor.links.push({ id: predecessor.id, type });
   successor.predecessors = successor.links.map((link) => link.id);
@@ -1122,7 +1239,38 @@ function addDependencyLink(sourceIndex, targetIndex, type) {
     return false;
   }
 
-  autoSchedule({ silent: true });
+  const proposedDates = calculateLinkAlignedDates(predecessor, successor, type);
+  if (!proposedDates || datesAlreadyMatch(successor, proposedDates)) {
+    render();
+    return true;
+  }
+
+  openScheduleLinkModal({
+    predecessor: { ...predecessor },
+    successor: { ...successor },
+    type,
+    proposedDates,
+    onChoice: (choice) => {
+      if (choice === "move") {
+        successor.start = proposedDates.start;
+        successor.finish = proposedDates.finish;
+        successor.durationDays = proposedDates.durationDays;
+        autoSchedule({ silent: true });
+        return;
+      }
+
+      if (choice === "cancel") {
+        successor.links = previousLinks;
+        successor.predecessors = previousLinks.map((link) => link.id);
+        successor.start = previousDates.start;
+        successor.finish = previousDates.finish;
+        successor.durationDays = previousDates.durationDays;
+      }
+
+      render();
+    },
+  });
+
   return true;
 }
 
@@ -1415,6 +1563,13 @@ els.importXmlInput.addEventListener("change", async (event) => {
 });
 
 
+
+els.scheduleLinkModal?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-schedule-action]");
+  if (!button) return;
+  finishScheduleLinkChoice(button.dataset.scheduleAction || "cancel");
+});
+
 els.dependencyModal?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-link-choice]");
   if (!button) return;
@@ -1423,6 +1578,10 @@ els.dependencyModal?.addEventListener("click", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && pendingScheduleChoice) {
+    finishScheduleLinkChoice("cancel");
+    return;
+  }
   if (event.key === "Escape" && pendingDependencyChoice) {
     finishDependencyPicker(null);
   }

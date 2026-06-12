@@ -175,6 +175,23 @@
     </section>
   </div>
 
+  <div id="scheduleLinkModal" class="dependency-modal schedule-link-modal" hidden>
+    <div class="dependency-backdrop" data-schedule-action="cancel"></div>
+    <section class="dependency-dialog schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="scheduleLinkTitle" aria-describedby="scheduleLinkCopy">
+      <button class="dependency-close" type="button" data-schedule-action="cancel" aria-label="Cancel dependency scheduling">×</button>
+      <p class="eyebrow">Schedule this link?</p>
+      <h2 id="scheduleLinkTitle">Move the linked task?</h2>
+      <p id="scheduleLinkCopy" class="dependency-copy">This dependency can update the task dates now, or you can keep the current dates and only save the relationship.</p>
+      <div id="scheduleLinkPreview" class="schedule-preview" aria-live="polite"></div>
+      <div class="schedule-actions">
+        <button type="button" class="primary" data-schedule-action="move">Move task now</button>
+        <button type="button" data-schedule-action="keep">Keep dates, just link</button>
+        <button type="button" data-schedule-action="cancel">Cancel link</button>
+      </div>
+      <p class="dependency-tip">Tip: FS, SS, FF, and SF are chosen automatically from the start/finish strings you connect.</p>
+    </section>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

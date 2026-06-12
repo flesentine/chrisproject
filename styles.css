@@ -2089,3 +2089,74 @@ body.is-link-dragging .link-drag-path {
     height: 25px;
   }
 }
+
+/* Schedule-confirmation modal for dependency links -------------------------- */
+.schedule-dialog {
+  width: min(820px, 100%);
+}
+
+.schedule-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 20px;
+}
+
+.schedule-preview > div {
+  min-height: 104px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(15, 23, 42, 0.58);
+}
+
+.schedule-preview span {
+  color: var(--muted, #94a3b8);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.schedule-preview strong {
+  color: var(--text, #e5e7eb);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.schedule-preview small {
+  color: var(--muted, #94a3b8);
+  line-height: 1.35;
+}
+
+.schedule-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.schedule-actions button {
+  min-height: 48px;
+  padding-inline: 18px;
+}
+
+.schedule-actions button.primary {
+  border-color: rgba(34, 197, 94, 0.72);
+  background: linear-gradient(135deg, #16a34a, #2563eb);
+  color: white;
+}
+
+@media (max-width: 760px) {
+  .schedule-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-actions button {
+    width: 100%;
+  }
+}

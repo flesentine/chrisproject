@@ -10,6 +10,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Resize Gantt task bars from either edge to change duration
 - Drag the little S/F connector dots on task bars to create dependency links
 - Automatically creates FS, SS, FF, or SF based on which endpoints you connect
+- After a link is created, asks whether to move the successor task to match the relationship or keep existing dates
 - Drag task-grid column edges to resize columns
 - Drag the vertical splitter between task data and Gantt dates to move the chart/data boundary
 - Drag date header edges or use the toolbar to resize day cells
@@ -26,6 +27,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Added a branded portrait image
 - Added direct-manipulation scheduling in the Gantt chart
 - Added endpoint connector handles: drag S/F dots between tasks to create FS, SS, FF, or SF automatically
+- Added dependency scheduling confirmation: move the linked task now, keep dates, or cancel the link
 - Replaced the old field-width pixel slider with direct column dragging and a draggable chart/data splitter
 - Added date-header drag resizing for day cells
 - Cleaner app header with project context
@@ -65,7 +67,7 @@ Each Gantt bar has a small visible string on the start and finish edge. Pull one
 - Finish string to Finish string = FF
 - Start string to Finish string = SF
 
-This replaces the older dot-style connector UI and makes the dependency action feel more like pulling a cable between tasks.
+This replaces the older dot-style connector UI and makes the dependency action feel more like pulling a cable between tasks. After you connect the string, the app asks whether to move the successor task to the relationship date, keep the dates as-is, or cancel the link.
 
 ## Compatibility target
 
@@ -98,8 +100,9 @@ http://localhost:5173
 1. Open this app.
 2. Click **Load sample**.
 3. Drag or resize tasks in the Gantt chart.
-4. Drag a task bar connector dot to another task connector dot to create FS, SS, FF, or SF automatically.
-5. Click **Export XML**.
+4. Pull a start/finish string to another task string to create FS, SS, FF, or SF automatically.
+5. Choose whether to move the linked task now, keep dates, or cancel the link.
+6. Click **Export XML**.
 6. Open the downloaded `.xml` file in Microsoft Project Desktop.
 7. Save it from Microsoft Project as `.mpp` if needed.
 8. Optionally export back to XML from Microsoft Project and import it into this app.
