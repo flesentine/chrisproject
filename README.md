@@ -27,10 +27,10 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Cleaner app header with project context
 - Project summary cards for task count, duration, completion, and XML readiness
 - Grouped toolbar actions so planning, scheduling, and import/export are easier to scan
-- Card-based task grid and Gantt layout
-- Better table row density, progress indicators, and delete affordance
+- Unified Microsoft Project-style rows where task fields and Gantt bars align on the same row
+- Better row density, progress indicators, delete affordance, and sticky task columns
 - Cleaner validation messaging
-- Polished Gantt timeline with weekday labels, weekend shading, and better task labels
+- Polished Gantt timeline with weekday labels, weekend shading, and inline bar editing
 
 ## Compatibility target
 
@@ -80,3 +80,14 @@ This MVP intentionally keeps the model small. It does not yet support:
 - Calendars beyond a simple 8-hour day
 - Critical path calculation
 - Native `.mpp` import/export
+
+
+## Unified grid behavior
+
+This version uses one MS Project-style schedule sheet instead of separate task and chart panels:
+
+- Each task row contains editable fields and its Gantt bar on the same line.
+- Drag a bar left or right to move the task dates.
+- Drag either edge of a bar to resize the task duration.
+- Drag one bar onto another bar and choose FS, SS, FF, or SF in the popup.
+- Use the View controls to adjust chart width, day cell size, and row height.

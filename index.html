@@ -35,14 +35,14 @@
       <section class="hero-board" aria-label="Project overview">
         <div class="hero-copy">
           <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
-          <h2>Make a real schedule without paying enterprise money.</h2>
-          <p>Drag tasks directly on the Gantt chart, resize edges to change duration, drop one task on another, pick the relationship in a popup, then export clean MSPDI XML for Microsoft Project Desktop.</p>
+          <h2>MS Project energy, discount price.</h2>
+          <p>Edit the task data and the Gantt bar on the same row. Drag bars to move dates, pull edges to change duration, and drop one task on another to choose FS, SS, FF, or SF from a popup.</p>
         </div>
 
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
           <span class="readiness-label">Export readiness</span>
           <strong id="exportStatus">Ready</strong>
-          <p>Supported: tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependencies.</p>
+          <p>Supported: tasks, dates, duration, percent complete, WBS, outline level, and dependency links.</p>
         </aside>
       </section>
 
@@ -108,47 +108,23 @@
 
       <section id="validationPanel" class="validation-panel" aria-live="polite"></section>
 
-      <section id="workspace" class="workspace">
-        <article class="work-card table-card" aria-label="Task grid">
+      <section id="workspace" class="workspace unified-workspace">
+        <article class="work-card unified-card" aria-label="Unified task grid and Gantt chart">
           <div class="card-header">
             <div>
-              <h2>Task grid</h2>
-              <p>Edit exact schedule details Microsoft Project cares about.</p>
+              <h2>Schedule grid</h2>
+              <p>Task data and Gantt bars live on the same row, like a lightweight Microsoft Project sheet.</p>
             </div>
-            <span class="card-badge">Live save</span>
+            <span class="card-badge">Unified rows</span>
           </div>
-          <div class="table-wrap">
-            <table class="task-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>WBS</th>
-                  <th>Task name</th>
-                  <th>Start</th>
-                  <th>Finish</th>
-                  <th>Dur</th>
-                  <th>%</th>
-                  <th>Pred</th>
-                  <th>Level</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="taskBody"></tbody>
-            </table>
-          </div>
-        </article>
 
-        <article class="work-card gantt-card" aria-label="Gantt chart">
-          <div class="card-header">
-            <div>
-              <h2>Gantt preview</h2>
-              <p>Drag bars to move dates. Grab an edge to resize duration. Drop a bar on another task, then choose the link type from a popup.</p>
+          <div class="planner-shell" aria-label="Task grid with Gantt chart">
+            <div class="planner-scroll">
+              <div id="timeline" class="planner-timeline"></div>
+              <div id="gantt" class="planner-body">
+                <div id="taskBody" class="planner-rows"></div>
+              </div>
             </div>
-            <span class="card-badge">Drag + link</span>
-          </div>
-          <div class="gantt-wrap">
-            <div id="timeline" class="timeline"></div>
-            <div id="gantt" class="gantt"></div>
           </div>
         </article>
       </section>

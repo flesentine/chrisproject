@@ -95,11 +95,11 @@ function applyUiPrefs() {
   if (els.chartWidthValue) els.chartWidthValue.textContent = `${uiPrefs.chartWidth}%`;
   if (els.dayWidthValue) els.dayWidthValue.textContent = `${uiPrefs.dayWidth}px`;
   if (els.rowHeightValue) els.rowHeightValue.textContent = `${uiPrefs.rowHeight}px`;
-  if (els.workspace && window.matchMedia("(min-width: 1281px)").matches) {
-    els.workspace.style.gridTemplateColumns = `minmax(520px, ${100 - uiPrefs.chartWidth}fr) minmax(460px, ${uiPrefs.chartWidth}fr)`;
-  } else if (els.workspace) {
-    els.workspace.style.gridTemplateColumns = "";
-  }
+
+  document.documentElement.style.setProperty("--planner-day-width", `${uiPrefs.dayWidth}px`);
+  document.documentElement.style.setProperty("--planner-row-height", `${uiPrefs.rowHeight}px`);
+  document.documentElement.style.setProperty("--planner-chart-strength", `${uiPrefs.chartWidth}`);
+  if (els.workspace) els.workspace.style.gridTemplateColumns = "1fr";
 }
 
 function dateOnly(value) {
@@ -340,34 +340,8 @@ function renderSummary() {
 }
 
 function renderTaskTable() {
-  els.taskBody.innerHTML = "";
-  const fragment = document.createDocumentFragment();
-
-  state.tasks.forEach((task, index) => {
-    const row = document.createElement("tr");
-    row.className = `task-row ${task.percent === 100 ? "is-complete" : ""}`;
-    const indent = Math.max(0, task.outlineLevel - 1) * 18;
-    row.innerHTML = `
-      <td><span class="id-pill">${task.id}</span></td>
-      <td>${escapeXml(task.wbs)}</td>
-      <td><div class="task-name-cell" style="--indent:${indent}px"><input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></td>
-      <td><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}" /></td>
-      <td><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}" /></td>
-      <td><span class="duration-pill">${task.durationDays}d</span></td>
-      <td>
-        <div class="percent-cell">
-          <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete" />
-          <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
-        </div>
-      </td>
-      <td><input data-field="predecessors" data-index="${index}" value="${escapeXml(formatLinks(task.links))}" placeholder="1FS, 2SS" title="Use 1FS, 2SS, 3FF, or 4SF" /></td>
-      <td><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></td>
-      <td><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></td>
-    `;
-    fragment.appendChild(row);
-  });
-
-  els.taskBody.appendChild(fragment);
+  // The MS Project-style unified grid is rendered in renderGantt so the editable
+  // task fields and the Gantt bar stay on the exact same visual row.
 }
 
 function renderGantt() {
@@ -375,10 +349,17 @@ function renderGantt() {
   const rowHeight = uiPrefs.rowHeight;
   const barHeight = Math.min(34, Math.max(24, rowHeight - 24));
   const barTop = Math.max(8, Math.round((rowHeight - barHeight) / 2));
+  const dayWidth = uiPrefs.dayWidth;
+  const leftPaneWidth = Math.round(520 + (70 - uiPrefs.chartWidth) * 8);
 
   if (!tasks.length) {
-    els.timeline.innerHTML = "";
-    els.gantt.innerHTML = `<div class="empty-state"><div><strong>No tasks yet</strong><span>Add a task to start building the schedule.</span></div></div>`;
+    els.timeline.innerHTML = `
+      <div class="planner-fields-heading" style="width:${leftPaneWidth}px">
+        <span>ID</span><span>WBS</span><span>Task name</span><span>Start</span><span>Finish</span><span>Dur</span><span>%</span><span>Pred</span><span>Lvl</span><span></span>
+      </div>
+      <div class="planner-dates-heading" style="width:${dayWidth * 8}px"><span>No dates yet</span></div>`;
+    els.gantt.style.width = `${leftPaneWidth + dayWidth * 8}px`;
+    els.taskBody.innerHTML = `<div class="empty-state unified-empty" style="width:${leftPaneWidth + dayWidth * 8}px"><div><strong>No tasks yet</strong><span>Add a task to start building the schedule.</span></div></div>`;
     return;
   }
 
@@ -389,45 +370,64 @@ function renderGantt() {
   min = addDays(min, -1);
   max = addDays(max, 2);
   const totalDays = Math.max(1, daysBetween(min, max));
-  const dayWidth = uiPrefs.dayWidth;
-  const labelWidth = 210;
-  const gridWidth = totalDays * dayWidth + labelWidth;
+  const chartWidthPx = totalDays * dayWidth;
+  const totalWidth = leftPaneWidth + chartWidthPx;
 
-  els.timeline.style.gridTemplateColumns = `${labelWidth}px repeat(${totalDays}, ${dayWidth}px)`;
-  els.timeline.style.width = `${gridWidth}px`;
-  const timelineCells = [`<div class="timeline-cell is-task-heading"><strong>Task</strong><span>drag · resize · drop to link</span></div>`];
+  const dateCells = [];
   for (let i = 0; i < totalDays; i += 1) {
     const d = addDays(min, i);
-    const classes = ["timeline-cell"];
+    const classes = ["planner-date-cell"];
     if ([0, 6].includes(d.getDay())) classes.push("is-weekend");
     if (toDateInputValue(d) === today) classes.push("is-today");
-    timelineCells.push(`
-      <div class="${classes.join(" ")}">
+    dateCells.push(`
+      <div class="${classes.join(" ")}" style="width:${dayWidth}px">
         <strong>${d.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
         <span>${d.toLocaleDateString([], { weekday: "short" })}</span>
       </div>`);
   }
-  els.timeline.innerHTML = timelineCells.join("");
 
-  els.gantt.style.width = `${gridWidth}px`;
-  els.gantt.innerHTML = tasks.map((task, index) => {
+  els.timeline.style.width = `${totalWidth}px`;
+  els.timeline.innerHTML = `
+    <div class="planner-fields-heading" style="width:${leftPaneWidth}px">
+      <span>ID</span><span>WBS</span><span>Task name</span><span>Start</span><span>Finish</span><span>Dur</span><span>%</span><span>Pred</span><span>Lvl</span><span></span>
+    </div>
+    <div class="planner-dates-heading" style="width:${chartWidthPx}px;grid-template-columns:repeat(${totalDays}, ${dayWidth}px)">${dateCells.join("")}</div>`;
+
+  els.gantt.style.width = `${totalWidth}px`;
+  els.taskBody.innerHTML = tasks.map((task, index) => {
     const startOffset = Math.max(0, daysBetween(min, task.start) - 1);
     const duration = Math.max(1, daysBetween(task.start, task.finish));
-    const left = labelWidth + startOffset * dayWidth;
+    const left = startOffset * dayWidth;
     const width = Math.max(32, duration * dayWidth - 8);
     const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
-    const linkText = task.links.length ? `Pred ${formatLinks(task.links)}` : "No predecessors";
+    const linkText = task.links.length ? formatLinks(task.links) : "";
+    const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `
-      <div class="gantt-row" style="--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
-        <div class="gantt-label" title="${escapeXml(task.name)}">
-          <strong>${task.id}. ${escapeXml(task.name)}</strong>
-          <span>${duration}d · ${task.percent}% · ${linkText}</span>
+      <div class="planner-row ${task.percent === 100 ? "is-complete" : ""}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
+        <div class="planner-fields" style="width:${leftPaneWidth}px">
+          <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
+          <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
+          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px"><input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
+          <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}" /></div>
+          <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}" /></div>
+          <div class="planner-cell"><span class="duration-pill">${task.durationDays}d</span></div>
+          <div class="planner-cell">
+            <div class="percent-cell">
+              <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete" />
+              <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
+            </div>
+          </div>
+          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="drag to link" title="You can still type 1FS, 2SS, 3FF, or 4SF" /></div>
+          <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
+          <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
-        <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drop this bar on another task and pick FS, SS, FF, or SF from the popup. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
-          <span>${escapeXml(task.name)}</span>
-          <em class="link-hint" aria-hidden="true">Drop to link</em>
-          <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
-          <i class="resize-handle resize-right" data-resize-edge="finish" aria-hidden="true"></i>
+        <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
+          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drop this bar on another task and pick FS, SS, FF, or SF from the popup. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+            <span>${escapeXml(task.name)}</span>
+            <em class="link-hint" aria-hidden="true">Drop to link</em>
+            <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
+            <i class="resize-handle resize-right" data-resize-edge="finish" aria-hidden="true"></i>
+          </div>
         </div>
       </div>`;
   }).join("");
