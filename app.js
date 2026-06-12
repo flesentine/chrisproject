@@ -1,5 +1,5 @@
 const STORAGE_KEY = "projectxml-planner-v1";
-const UI_PREFS_KEY = "chris-discount-project-maker-ui-v1";
+const UI_PREFS_KEY = "chris-discount-project-maker-ui-v2";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
 const LINK_TYPES = ["FS", "SS", "FF", "SF"];
@@ -26,6 +26,7 @@ const FIELD_COLUMNS = [
 ];
 const FIELD_COLUMN_MAP = new Map(FIELD_COLUMNS.map((column) => [column.key, column]));
 const SPLITTER_RESIZE_COLUMN = "name";
+const MIN_FIELD_PANE_WIDTH = 260;
 const els = {
   projectName: document.getElementById("projectName"),
   projectStart: document.getElementById("projectStart"),
@@ -71,6 +72,7 @@ let state = {
 
 const DEFAULT_UI_PREFS = {
   fieldColumns: Object.fromEntries(FIELD_COLUMNS.map((column) => [column.key, column.defaultWidth])),
+  fieldPaneWidth: null,
   dayWidth: 58,
   rowHeight: 56,
 };
@@ -99,28 +101,23 @@ function loadUiPrefs() {
     const parsed = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
     const fieldColumns = normalizeFieldColumns(parsed.fieldColumns);
 
-    // Backward compatibility with the old Fields slider. If someone had widened
-    // the old left pane, preserve that intent by putting the extra space into
-    // the task-name column.
-    if (!parsed.fieldColumns && parsed.chartWidth) {
-      const defaultTotal = getFieldPaneWidth({ fieldColumns: DEFAULT_UI_PREFS.fieldColumns });
-      const delta = Number(parsed.chartWidth) - defaultTotal;
-      const nameColumn = FIELD_COLUMN_MAP.get(SPLITTER_RESIZE_COLUMN);
-      fieldColumns[SPLITTER_RESIZE_COLUMN] = clamp(
-        fieldColumns[SPLITTER_RESIZE_COLUMN] + delta,
-        nameColumn.min,
-        nameColumn.max
-      );
-    }
+    // Older builds had a crude Fields slider. Treat that as the visible width of
+    // the task-data pane, not as a reason to distort individual columns.
+    const totalFieldWidth = getTotalFieldColumnWidth({ fieldColumns });
+    const legacyPaneWidth = Number.isFinite(Number(parsed.chartWidth)) ? Number(parsed.chartWidth) : null;
+    const savedPaneWidth = parsed.fieldPaneWidth ?? legacyPaneWidth ?? totalFieldWidth;
 
     return {
       fieldColumns,
+      fieldPaneWidth: clamp(savedPaneWidth, MIN_FIELD_PANE_WIDTH, totalFieldWidth),
       dayWidth: clamp(parsed.dayWidth ?? DEFAULT_UI_PREFS.dayWidth, 36, 120),
       rowHeight: clamp(parsed.rowHeight ?? DEFAULT_UI_PREFS.rowHeight, 44, 88),
     };
   } catch {
+    const fieldColumns = normalizeFieldColumns(DEFAULT_UI_PREFS.fieldColumns);
     return {
-      fieldColumns: normalizeFieldColumns(DEFAULT_UI_PREFS.fieldColumns),
+      fieldColumns,
+      fieldPaneWidth: getTotalFieldColumnWidth({ fieldColumns }),
       dayWidth: DEFAULT_UI_PREFS.dayWidth,
       rowHeight: DEFAULT_UI_PREFS.rowHeight,
     };
@@ -131,8 +128,21 @@ function saveUiPrefs() {
   localStorage.setItem(UI_PREFS_KEY, JSON.stringify(uiPrefs));
 }
 
-function getFieldPaneWidth(prefs = uiPrefs) {
+function getTotalFieldColumnWidth(prefs = uiPrefs) {
   return FIELD_COLUMNS.reduce((total, column) => total + (prefs.fieldColumns?.[column.key] ?? column.defaultWidth), 0);
+}
+
+function getFieldPaneWidth(prefs = uiPrefs) {
+  const totalWidth = getTotalFieldColumnWidth(prefs);
+  return clamp(prefs.fieldPaneWidth ?? totalWidth, MIN_FIELD_PANE_WIDTH, totalWidth);
+}
+
+function setFieldPaneWidth(width) {
+  uiPrefs.fieldPaneWidth = clamp(width, MIN_FIELD_PANE_WIDTH, getTotalFieldColumnWidth());
+}
+
+function isFieldPaneClipped() {
+  return getFieldPaneWidth() < getTotalFieldColumnWidth() - 1;
 }
 
 function getFieldGridTemplate() {
@@ -154,6 +164,8 @@ function sizeLabel(value, compactMax, wideMin) {
 }
 
 function applyUiPrefs() {
+  setFieldPaneWidth(uiPrefs.fieldPaneWidth ?? getTotalFieldColumnWidth());
+
   if (els.dayWidthControl) els.dayWidthControl.value = uiPrefs.dayWidth;
   if (els.rowHeightControl) els.rowHeightControl.value = uiPrefs.rowHeight;
   if (els.dayWidthValue) els.dayWidthValue.textContent = sizeLabel(uiPrefs.dayWidth, 48, 82);
@@ -162,6 +174,7 @@ function applyUiPrefs() {
   document.documentElement.style.setProperty("--planner-day-width", `${uiPrefs.dayWidth}px`);
   document.documentElement.style.setProperty("--planner-row-height", `${uiPrefs.rowHeight}px`);
   document.documentElement.style.setProperty("--planner-fields-width", `${getFieldPaneWidth()}px`);
+  document.documentElement.style.setProperty("--planner-field-template", getFieldGridTemplate());
   if (els.workspace) els.workspace.style.gridTemplateColumns = "1fr";
 }
 
@@ -414,13 +427,15 @@ function renderGantt() {
   const barTop = Math.max(8, Math.round((rowHeight - barHeight) / 2));
   const dayWidth = uiPrefs.dayWidth;
   const leftPaneWidth = getFieldPaneWidth();
+  const totalFieldWidth = getTotalFieldColumnWidth();
   const fieldGridTemplate = getFieldGridTemplate();
+  const fieldClipClass = leftPaneWidth < totalFieldWidth - 1 ? " is-clipped" : "";
 
   if (!tasks.length) {
     els.timeline.innerHTML = `
-      <div class="planner-fields-heading" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
+      <div class="planner-fields-heading${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
         ${renderFieldHeadingCells()}
-        <button class="pane-splitter" type="button" data-pane-splitter title="Drag to move the line between task data and the Gantt chart" aria-label="Resize task fields pane"></button>
+        <button class="pane-splitter" type="button" data-pane-splitter title="Drag left to hide task-data columns. Drag right to reveal them." aria-label="Hide or reveal task-data columns"></button>
       </div>
       <div class="planner-dates-heading" style="width:${dayWidth * 8}px"><span>No dates yet</span></div>`;
     els.gantt.style.width = `${leftPaneWidth + dayWidth * 8}px`;
@@ -454,9 +469,9 @@ function renderGantt() {
 
   els.timeline.style.width = `${totalWidth}px`;
   els.timeline.innerHTML = `
-    <div class="planner-fields-heading" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
+    <div class="planner-fields-heading${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
       ${renderFieldHeadingCells()}
-      <button class="pane-splitter" type="button" data-pane-splitter title="Drag to move the line between task data and the Gantt chart" aria-label="Resize task fields pane"></button>
+      <button class="pane-splitter" type="button" data-pane-splitter title="Drag left to hide task-data columns. Drag right to reveal them." aria-label="Hide or reveal task-data columns"></button>
     </div>
     <div class="planner-dates-heading" style="width:${chartWidthPx}px;grid-template-columns:repeat(${totalDays}, ${dayWidth}px)">${dateCells.join("")}</div>`;
 
@@ -471,7 +486,7 @@ function renderGantt() {
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `
       <div class="planner-row ${task.percent === 100 ? "is-complete" : ""}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
-        <div class="planner-fields" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
+        <div class="planner-fields${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
           <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
           <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
           <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px"><input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
@@ -1153,16 +1168,25 @@ function beginColumnResize(event) {
       startX: event.clientX,
       originalWidth: uiPrefs.dayWidth,
     };
+  } else if (splitterHandle) {
+    activeColumnDrag = {
+      type: "splitter",
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      originalWidth: getFieldPaneWidth(),
+    };
   } else {
-    const key = splitterHandle ? SPLITTER_RESIZE_COLUMN : columnHandle.dataset.columnResize;
+    const key = columnHandle.dataset.columnResize;
     const column = FIELD_COLUMN_MAP.get(key);
     if (!column) return;
     activeColumnDrag = {
-      type: splitterHandle ? "splitter" : "column",
+      type: "column",
       key,
       pointerId: event.pointerId,
       startX: event.clientX,
       originalWidth: uiPrefs.fieldColumns[key] ?? column.defaultWidth,
+      originalPaneWidth: getFieldPaneWidth(),
+      originalTotalWidth: getTotalFieldColumnWidth(),
     };
   }
 
@@ -1178,10 +1202,21 @@ function updateColumnResize(event) {
 
   if (activeColumnDrag.type === "day") {
     uiPrefs.dayWidth = clamp(activeColumnDrag.originalWidth + delta, 36, 120);
+  } else if (activeColumnDrag.type === "splitter") {
+    setFieldPaneWidth(activeColumnDrag.originalWidth + delta);
   } else {
     const column = FIELD_COLUMN_MAP.get(activeColumnDrag.key);
     if (!column) return;
     uiPrefs.fieldColumns[activeColumnDrag.key] = clamp(activeColumnDrag.originalWidth + delta, column.min, column.max);
+
+    // If the fields pane was fully open when the resize started, keep it fully
+    // open. If it was intentionally collapsed, keep the same clipped boundary.
+    const newTotalWidth = getTotalFieldColumnWidth();
+    if (activeColumnDrag.originalPaneWidth >= activeColumnDrag.originalTotalWidth - 1) {
+      uiPrefs.fieldPaneWidth = newTotalWidth;
+    } else {
+      setFieldPaneWidth(uiPrefs.fieldPaneWidth);
+    }
   }
 
   saveUiPrefs();

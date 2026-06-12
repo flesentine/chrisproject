@@ -36,6 +36,10 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Cleaner validation messaging
 - Polished Gantt timeline with weekday labels, weekend shading, and inline bar editing
 
+## Latest layout improvement
+
+The unified grid now has a stronger splitter between task data and the Gantt timeline. Drag it left to hide the right-side data columns and give the chart more room. Drag it right to reveal the full task-entry grid again. Individual task columns and date cells can still be resized by dragging their header edges.
+
 ## Compatibility target
 
 The first-class compatibility target is Microsoft Project XML, also called MSPDI. Native `.mpp` is not implemented in this static app because `.mpp` is a binary Microsoft Project format and generally requires a dedicated parser/converter library or backend service.

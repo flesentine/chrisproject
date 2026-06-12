@@ -1599,3 +1599,101 @@ body.is-column-resizing * {
     min-width: 180px;
   }
 }
+
+/* Power splitter: drag the task/chart boundary to hide or reveal data columns. */
+.planner-fields-heading,
+.planner-fields {
+  width: var(--planner-fields-width, 1000px);
+  overflow: hidden;
+  grid-template-columns: var(--planner-field-template, 48px 64px 240px 128px 128px 58px 86px 126px 62px 60px);
+}
+
+.planner-fields-heading {
+  isolation: isolate;
+  border-right: 2px solid #9fb7d7;
+  box-shadow: 12px 0 26px rgba(15, 23, 42, 0.08);
+}
+
+.planner-fields {
+  isolation: isolate;
+  border-right: 2px solid #9fb7d7;
+  box-shadow: 12px 0 24px rgba(15, 23, 42, 0.07);
+}
+
+.planner-fields-heading.is-clipped::after,
+.planner-fields.is-clipped::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 38;
+  width: 42px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(247, 251, 255, 0), rgba(247, 251, 255, 0.97));
+}
+
+.planner-fields.is-clipped::after {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.94));
+}
+
+.planner-row:nth-child(even) .planner-fields.is-clipped::after {
+  background: linear-gradient(90deg, rgba(251, 253, 255, 0), rgba(251, 253, 255, 0.94));
+}
+
+.pane-splitter {
+  right: -1px;
+  z-index: 60;
+  width: 26px;
+  border-left: 1px solid rgba(37, 99, 235, 0.16);
+  background: linear-gradient(90deg, rgba(219, 234, 254, 0), rgba(219, 234, 254, 0.65));
+}
+
+.pane-splitter::before {
+  top: 9px;
+  bottom: 9px;
+  left: 11px;
+  width: 4px;
+  background: #7d9cc4;
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.08);
+}
+
+.pane-splitter::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 12px;
+  height: 28px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background:
+    radial-gradient(circle, #ffffff 1.5px, transparent 2px) 2px 4px / 8px 8px,
+    rgba(37, 99, 235, 0.34);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.18);
+  opacity: 0.72;
+}
+
+.pane-splitter:hover,
+body.is-column-resizing .pane-splitter {
+  background: linear-gradient(90deg, rgba(219, 234, 254, 0), rgba(191, 219, 254, 0.95));
+}
+
+.pane-splitter:hover::before,
+body.is-column-resizing .pane-splitter::before {
+  background: var(--brand);
+  box-shadow: 0 0 0 7px rgba(37, 99, 235, 0.18);
+}
+
+.pane-splitter:hover::after,
+body.is-column-resizing .pane-splitter::after {
+  opacity: 1;
+}
+
+.planner-dates-heading {
+  border-left: 0;
+}
+
+.drag-help small::after {
+  content: " Drag the main splitter left to hide fields or right to reveal them.";
+}
