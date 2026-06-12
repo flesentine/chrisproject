@@ -10,7 +10,10 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Resize Gantt task bars from either edge to change duration
 - Drop one Gantt bar onto another to create dependency links
 - Choose FS, SS, FF, or SF link types from a no-typing popup
-- Adjust chart width, day-cell size, and row height from the toolbar
+- Drag task-grid column edges to resize columns
+- Drag the vertical splitter between task data and Gantt dates to move the chart/data boundary
+- Drag date header edges or use the toolbar to resize day cells
+- Adjust row height from the toolbar
 - Track start, finish, duration, percent complete, WBS, outline level, and typed predecessors
 - Import Microsoft Project XML / MSPDI files
 - Export Microsoft Project XML / MSPDI files that can be opened by Microsoft Project Desktop
@@ -23,7 +26,8 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Added a branded portrait image
 - Added direct-manipulation scheduling in the Gantt chart
 - Added drag-to-link Gantt dependencies with a no-typing FS/SS/FF/SF picker popup
-- Added range controls for chart width, day cell width, and row height
+- Replaced the old field-width pixel slider with direct column dragging and a draggable chart/data splitter
+- Added date-header drag resizing for day cells
 - Cleaner app header with project context
 - Project summary cards for task count, duration, completion, and XML readiness
 - Grouped toolbar actions so planning, scheduling, and import/export are easier to scan
@@ -90,4 +94,7 @@ This version uses one MS Project-style schedule sheet instead of separate task a
 - Drag a bar left or right to move the task dates.
 - Drag either edge of a bar to resize the task duration.
 - Drag one bar onto another bar and choose FS, SS, FF, or SF in the popup.
-- Use the View controls to adjust chart width, day cell size, and row height.
+- Drag column edges in the header to resize task fields.
+- Drag the vertical divider between the task fields and the date timeline to give more room to the data side or the chart side.
+- Drag date header edges to resize day cells, or use the View control as a backup.
+- Use the View control to adjust row height.
