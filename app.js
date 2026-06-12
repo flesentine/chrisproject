@@ -64,6 +64,7 @@ const els = {
   scheduleLinkCopy: document.getElementById("scheduleLinkCopy"),
   scheduleLinkPreview: document.getElementById("scheduleLinkPreview"),
   linkSuggestion: document.getElementById("linkSuggestion"),
+  cascadeSuggestion: document.getElementById("cascadeSuggestion"),
   linkDragLayer: document.getElementById("linkDragLayer"),
   linkDragPath: document.getElementById("linkDragPath"),
   linkDragDot: document.getElementById("linkDragDot"),
@@ -92,6 +93,7 @@ let activeColumnDrag = null;
 let activeDependencyDrag = null;
 let pendingDependencyChoice = null;
 let pendingScheduleChoice = null;
+let pendingCascadeChoice = null;
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -398,6 +400,7 @@ function render() {
   renderSummary();
   renderValidation();
   renderScheduleLinkSuggestion();
+  renderCascadeImpactSuggestion();
   save();
 }
 
@@ -471,6 +474,12 @@ function renderGantt() {
     if (proposedStart) starts.push(proposedStart);
     if (proposedFinish) finishes.push(proposedFinish);
   }
+  (pendingCascadeChoice?.changes || []).forEach((change) => {
+    const proposedStart = dateOnly(change.to.start);
+    const proposedFinish = dateOnly(change.to.finish);
+    if (proposedStart) starts.push(proposedStart);
+    if (proposedFinish) finishes.push(proposedFinish);
+  });
   let min = new Date(Math.min(...starts.map(Number)));
   let max = new Date(Math.max(...finishes.map(Number)));
   min = addDays(min, -1);
@@ -511,14 +520,17 @@ function renderGantt() {
     const width = Math.max(32, duration * dayWidth - 8);
     const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
     const linkText = task.links.length ? formatLinks(task.links) : "";
-    const pendingPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
+    const linkPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
+    const cascadePreview = (pendingCascadeChoice?.changes || []).find((change) => change.id === task.id)?.to || null;
+    const pendingPreview = linkPreview || cascadePreview;
     let ghostMarkup = "";
     if (pendingPreview) {
       const ghostStartOffset = Math.max(0, daysBetween(min, pendingPreview.start) - 1);
       const ghostDuration = Math.max(1, daysBetween(pendingPreview.start, pendingPreview.finish));
       const ghostLeft = ghostStartOffset * dayWidth;
       const ghostWidth = Math.max(32, ghostDuration * dayWidth - 8);
-      ghostMarkup = `<div class="gantt-ghost-bar" style="left:${ghostLeft}px;width:${ghostWidth}px" aria-hidden="true"><span>suggested move</span></div>`;
+      const ghostLabel = cascadePreview ? "will move" : "suggested move";
+      ghostMarkup = `<div class="gantt-ghost-bar" style="left:${ghostLeft}px;width:${ghostWidth}px" aria-hidden="true"><span>${ghostLabel}</span></div>`;
     }
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `
@@ -1234,6 +1246,154 @@ function scheduleAllLinkedTasks(options = {}) {
   return true;
 }
 
+function cloneScheduleTasks(tasks = state.tasks) {
+  return tasks.map((task) => ({
+    ...task,
+    links: getTaskLinks(task).map((link) => ({ ...link })),
+    predecessors: [...(task.predecessors || [])],
+  }));
+}
+
+function cascadeTaskListFromSource(tasks, sourceTaskId) {
+  const impacted = new Set([sourceTaskId]);
+  let changed = true;
+  let guard = 0;
+
+  while (changed && guard < tasks.length * tasks.length + 20) {
+    changed = false;
+    guard += 1;
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+
+    tasks.forEach((task) => {
+      if (!getTaskLinks(task).some((link) => impacted.has(link.id))) return;
+      if (alignTaskToLinks(task, byId)) {
+        impacted.add(task.id);
+        changed = true;
+      }
+    });
+  }
+
+  return impacted;
+}
+
+function calculateCascadeImpact(sourceTaskId) {
+  ensureDecorations();
+  if (!state.tasks.some((task) => task.id === sourceTaskId)) return [];
+
+  const originalById = new Map(state.tasks.map((task) => [task.id, task]));
+  const simulatedTasks = cloneScheduleTasks();
+  cascadeTaskListFromSource(simulatedTasks, sourceTaskId);
+
+  return simulatedTasks
+    .filter((task) => task.id !== sourceTaskId)
+    .map((task) => {
+      const original = originalById.get(task.id);
+      if (!original) return null;
+      const changed = original.start !== task.start || original.finish !== task.finish || original.durationDays !== task.durationDays;
+      if (!changed) return null;
+      return {
+        id: task.id,
+        name: task.name,
+        from: {
+          start: original.start,
+          finish: original.finish,
+          durationDays: original.durationDays,
+        },
+        to: {
+          start: task.start,
+          finish: task.finish,
+          durationDays: task.durationDays,
+        },
+      };
+    })
+    .filter(Boolean);
+}
+
+function applyCascadeImpact(changes) {
+  const byId = new Map(state.tasks.map((task) => [task.id, task]));
+  (changes || []).forEach((change) => {
+    const task = byId.get(change.id);
+    if (!task) return;
+    task.start = change.to.start;
+    task.finish = change.to.finish;
+    task.durationDays = change.to.durationDays;
+  });
+}
+
+function buildCascadeSuggestionHtml(details) {
+  const changes = details.changes || [];
+  const source = details.source || { name: "this task" };
+  const list = changes.slice(0, 5).map((change) => `
+    <li>
+      <strong>${escapeXml(change.name)}</strong>
+      <span>${escapeXml(formatFriendlyDate(change.from.start))} → ${escapeXml(formatFriendlyDate(change.from.finish))}</span>
+      <b>→</b>
+      <span>${escapeXml(formatFriendlyDate(change.to.start))} → ${escapeXml(formatFriendlyDate(change.to.finish))}</span>
+    </li>`).join("");
+  const extra = changes.length > 5 ? `<p class="cascade-extra">+ ${changes.length - 5} more linked task${changes.length - 5 === 1 ? "" : "s"}</p>` : "";
+
+  return `
+    <div class="cascade-suggestion-head">
+      <span class="cascade-impact-chip">${changes.length}</span>
+      <div>
+        <strong>Update linked tasks?</strong>
+        <small>You changed ${escapeXml(source.name)}. Linked successors can be moved to keep FS / SS / FF / SF logic clean.</small>
+      </div>
+      <button type="button" class="link-suggestion-x" data-cascade-action="keep" aria-label="Keep downstream dates">×</button>
+    </div>
+    <ul class="cascade-impact-list">${list}</ul>
+    ${extra}
+    <div class="link-suggestion-actions cascade-actions">
+      <button type="button" class="primary" data-cascade-action="apply">Move linked tasks</button>
+      <button type="button" data-cascade-action="keep">Keep downstream dates</button>
+      <button type="button" data-cascade-action="undo">Undo my edit</button>
+    </div>`;
+}
+
+function renderCascadeImpactSuggestion() {
+  if (!els.cascadeSuggestion) return;
+  if (!pendingCascadeChoice) {
+    els.cascadeSuggestion.hidden = true;
+    els.cascadeSuggestion.innerHTML = "";
+    document.body.classList.remove("has-cascade-suggestion");
+    return;
+  }
+
+  els.cascadeSuggestion.innerHTML = buildCascadeSuggestionHtml(pendingCascadeChoice);
+  els.cascadeSuggestion.hidden = false;
+  document.body.classList.add("has-cascade-suggestion");
+}
+
+function openCascadeImpactPrompt(details) {
+  pendingCascadeChoice = details;
+  render();
+}
+
+function finishCascadeImpactChoice(choice) {
+  const request = pendingCascadeChoice;
+  pendingCascadeChoice = null;
+  if (els.cascadeSuggestion) {
+    els.cascadeSuggestion.hidden = true;
+    els.cascadeSuggestion.innerHTML = "";
+  }
+  document.body.classList.remove("has-cascade-suggestion");
+
+  if (!request) return;
+
+  if (choice === "apply") {
+    applyCascadeImpact(request.changes);
+  } else if (choice === "undo") {
+    const source = state.tasks.find((task) => task.id === request.source?.id);
+    if (source && request.originalDates) {
+      source.start = request.originalDates.start;
+      source.finish = request.originalDates.finish;
+      source.durationDays = request.originalDates.durationDays;
+    }
+  }
+
+  render();
+}
+
 function buildScheduleSuggestionHtml(details) {
   const { predecessor, successor, type, proposedDates } = details;
   const current = `${formatFriendlyDate(successor.start)} → ${formatFriendlyDate(successor.finish)}`;
@@ -1552,7 +1712,7 @@ function updateGanttDrag(event) {
   }
 
   task.durationDays = daysBetween(task.start, task.finish);
-  cascadeScheduleFromTask(task.id, { render: false, silent: true });
+  pendingCascadeChoice = null;
   renderGantt();
   renderSummary();
   event.preventDefault();
@@ -1560,10 +1720,39 @@ function updateGanttDrag(event) {
 
 function endGanttDrag() {
   if (!activeBarDrag) return;
-  const editedTaskId = state.tasks[activeBarDrag.index]?.id;
+  const drag = activeBarDrag;
+  const task = state.tasks[drag.index];
+  const editedTaskId = task?.id;
+  const originalDates = drag.originalStart && drag.originalFinish ? {
+    start: toDateInputValue(drag.originalStart),
+    finish: toDateInputValue(drag.originalFinish),
+    durationDays: daysBetween(drag.originalStart, drag.originalFinish),
+  } : null;
+
   activeBarDrag = null;
   document.body.classList.remove("is-gantt-dragging");
-  if (editedTaskId) cascadeScheduleFromTask(editedTaskId, { render: false, silent: true });
+
+  if (!task || !editedTaskId || !originalDates) {
+    render();
+    return;
+  }
+
+  const taskChanged = task.start !== originalDates.start || task.finish !== originalDates.finish || task.durationDays !== originalDates.durationDays;
+  if (!taskChanged) {
+    render();
+    return;
+  }
+
+  const changes = calculateCascadeImpact(editedTaskId);
+  if (changes.length) {
+    openCascadeImpactPrompt({
+      source: { id: task.id, name: task.name },
+      originalDates,
+      changes,
+    });
+    return;
+  }
+
   render();
 }
 
@@ -1729,6 +1918,12 @@ els.linkSuggestion?.addEventListener("click", (event) => {
   finishScheduleLinkChoice(button.dataset.scheduleAction || "cancel");
 });
 
+els.cascadeSuggestion?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-cascade-action]");
+  if (!button) return;
+  finishCascadeImpactChoice(button.dataset.cascadeAction || "keep");
+});
+
 window.addEventListener("resize", () => {
   positionScheduleSuggestion();
   drawPendingConnectorLine();
@@ -1752,6 +1947,10 @@ els.dependencyModal?.addEventListener("click", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && pendingCascadeChoice) {
+    finishCascadeImpactChoice("keep");
+    return;
+  }
   if (event.key === "Escape" && pendingScheduleChoice) {
     finishScheduleLinkChoice("cancel");
     return;
