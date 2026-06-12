@@ -159,3 +159,9 @@ This version uses one MS Project-style schedule sheet instead of separate task a
 - Drag the vertical divider between the task fields and the date timeline to give more room to the data side or the chart side.
 - Drag date header edges to resize day cells, or use the View control as a backup.
 - Use the View control to adjust row height.
+
+
+## Latest polish
+
+- Fixed downstream ghost previews so they show the impacted task name instead of a generic "will move" label.
+- The ghost preview now includes a clearer tooltip and compact preview chip when there is enough room.

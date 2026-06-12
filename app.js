@@ -530,8 +530,16 @@ function renderGantt() {
       const ghostDuration = Math.max(1, daysBetween(pendingPreview.start, pendingPreview.finish));
       const ghostLeft = ghostStartOffset * dayWidth;
       const ghostWidth = Math.max(32, ghostDuration * dayWidth - 8);
-      const ghostLabel = cascadePreview ? "will move" : "suggested move";
-      ghostMarkup = `<div class="gantt-ghost-bar" style="left:${ghostLeft}px;width:${ghostWidth}px" aria-hidden="true"><span>${ghostLabel}</span></div>`;
+      const ghostKind = cascadePreview ? "Preview" : "Suggested";
+      const ghostTitle = cascadePreview
+        ? `${task.name} preview: ${formatFriendlyDate(pendingPreview.start)} → ${formatFriendlyDate(pendingPreview.finish)}`
+        : `Suggested position for ${task.name}: ${formatFriendlyDate(pendingPreview.start)} → ${formatFriendlyDate(pendingPreview.finish)}`;
+      const showGhostMeta = ghostWidth >= 150;
+      ghostMarkup = `
+        <div class="gantt-ghost-bar ${cascadePreview ? "is-cascade-preview" : "is-link-preview"}" style="left:${ghostLeft}px;width:${ghostWidth}px" aria-hidden="true" title="${escapeXml(ghostTitle)}">
+          <span>${escapeXml(task.name)}</span>
+          ${showGhostMeta ? `<small>${ghostKind}</small>` : ""}
+        </div>`;
     }
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `

@@ -2192,7 +2192,9 @@ body.has-link-suggestion .link-drag-label {
   z-index: 4;
   display: flex;
   align-items: center;
-  padding-left: 14px;
+  gap: 8px;
+  min-width: 34px;
+  padding: 0 12px;
   border: 2px dashed rgba(37, 99, 235, 0.72);
   border-radius: 999px;
   background:
@@ -2210,11 +2212,27 @@ body.has-link-suggestion .link-drag-label {
 .gantt-ghost-bar span {
   position: relative;
   z-index: 1;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.gantt-ghost-bar small {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
 }
 
 @keyframes ghostMarch {
