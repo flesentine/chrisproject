@@ -2362,3 +2362,112 @@ body.has-link-suggestion .link-drag-label {
     flex: 1 1 100%;
   }
 }
+
+/* Hover-reveal dependency strings ------------------------------------------
+   Keep the Gantt bars clean until the user is working near a task. The S/F
+   pull strings appear on row hover, keyboard focus, active linking, or while
+   a suggestion is visible. This preserves the marching-ants connector without
+   cluttering the chart all the time. */
+.gantt-bar .dependency-port {
+  opacity: 0;
+  pointer-events: none;
+  filter: blur(1px);
+  transform: translateY(-50%) scale(0.82);
+}
+
+.gantt-bar .dependency-port::before {
+  transform: translateY(-50%) scaleX(0.28);
+  transform-origin: center;
+}
+
+.gantt-bar .dependency-port::after {
+  transform: translateY(-50%) scale(0.82);
+}
+
+.planner-row:hover .gantt-bar .dependency-port,
+.gantt-row:hover .gantt-bar .dependency-port,
+.gantt-bar:hover .dependency-port,
+.gantt-bar:focus-within .dependency-port,
+.gantt-bar.is-connector-hot .dependency-port,
+.gantt-bar.is-link-target .dependency-port,
+body.is-link-dragging .dependency-port,
+body.has-link-suggestion .dependency-port.is-link-source,
+body.has-link-suggestion .dependency-port.is-link-target {
+  opacity: 0.94;
+  pointer-events: auto;
+  filter: none;
+  transform: translateY(-50%) scale(1);
+}
+
+.planner-row:hover .gantt-bar .dependency-port::before,
+.gantt-row:hover .gantt-bar .dependency-port::before,
+.gantt-bar:hover .dependency-port::before,
+.gantt-bar:focus-within .dependency-port::before,
+.gantt-bar.is-connector-hot .dependency-port::before,
+.gantt-bar.is-link-target .dependency-port::before,
+body.is-link-dragging .dependency-port::before,
+body.has-link-suggestion .dependency-port.is-link-source::before,
+body.has-link-suggestion .dependency-port.is-link-target::before {
+  transform: translateY(-50%) scaleX(1);
+}
+
+.planner-row:hover .gantt-bar .dependency-port::after,
+.gantt-row:hover .gantt-bar .dependency-port::after,
+.gantt-bar:hover .dependency-port::after,
+.gantt-bar:focus-within .dependency-port::after,
+.gantt-bar.is-connector-hot .dependency-port::after,
+.gantt-bar.is-link-target .dependency-port::after,
+body.is-link-dragging .dependency-port::after,
+body.has-link-suggestion .dependency-port.is-link-source::after,
+body.has-link-suggestion .dependency-port.is-link-target::after {
+  transform: translateY(-50%) scale(1);
+}
+
+.gantt-bar::after {
+  content: "link";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  z-index: 6;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.14s ease;
+  pointer-events: none;
+}
+
+.planner-row:hover .gantt-bar::after,
+.gantt-row:hover .gantt-bar::after,
+.gantt-bar:hover::after,
+.gantt-bar.is-connector-hot::after {
+  opacity: 0.72;
+}
+
+body.is-link-dragging .gantt-bar::after,
+body.has-link-suggestion .gantt-bar::after {
+  opacity: 0;
+}
+
+@media (hover: none) {
+  .gantt-bar .dependency-port {
+    opacity: 0.72;
+    pointer-events: auto;
+    filter: none;
+    transform: translateY(-50%) scale(0.96);
+  }
+
+  .gantt-bar .dependency-port::before {
+    transform: translateY(-50%) scaleX(0.82);
+  }
+
+  .gantt-bar .dependency-port::after {
+    transform: translateY(-50%) scale(0.96);
+  }
+}
