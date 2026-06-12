@@ -695,65 +695,7 @@ function deleteTask(index) {
 }
 
 function autoSchedule(options = {}) {
-  ensureDecorations();
-  const cycles = detectCycles();
-  if (cycles.length) {
-    if (!options.silent) alert("Fix dependency loops before auto-scheduling.");
-    return false;
-  }
-
-  const byId = new Map(state.tasks.map((t) => [t.id, t]));
-  let changed = true;
-  let guard = 0;
-  while (changed && guard < state.tasks.length * state.tasks.length + 20) {
-    changed = false;
-    guard += 1;
-    state.tasks.forEach((task) => {
-      const links = getTaskLinks(task);
-      if (!links.length) return;
-      const duration = Math.max(1, task.durationDays || daysBetween(task.start, task.finish));
-
-      links.forEach((link) => {
-        const pred = byId.get(link.id);
-        if (!pred) return;
-        const predStart = dateOnly(pred.start);
-        const predFinish = dateOnly(pred.finish);
-        const taskStart = dateOnly(task.start);
-        const taskFinish = dateOnly(task.finish);
-        if (!predStart || !predFinish || !taskStart || !taskFinish) return;
-
-        if (link.type === "FS") {
-          const requiredStart = addDays(predFinish, 1);
-          if (taskStart < requiredStart) {
-            task.start = toDateInputValue(requiredStart);
-            task.finish = toDateInputValue(addDays(requiredStart, duration - 1));
-            changed = true;
-          }
-        } else if (link.type === "SS") {
-          if (taskStart < predStart) {
-            task.start = toDateInputValue(predStart);
-            task.finish = toDateInputValue(addDays(predStart, duration - 1));
-            changed = true;
-          }
-        } else if (link.type === "FF") {
-          if (taskFinish < predFinish) {
-            task.finish = toDateInputValue(predFinish);
-            task.start = toDateInputValue(addDays(predFinish, 1 - duration));
-            changed = true;
-          }
-        } else if (link.type === "SF") {
-          if (taskFinish < predStart) {
-            task.finish = toDateInputValue(predStart);
-            task.start = toDateInputValue(addDays(predStart, 1 - duration));
-            changed = true;
-          }
-        }
-      });
-      task.durationDays = daysBetween(task.start, task.finish);
-    });
-  }
-  render();
-  return true;
+  return scheduleAllLinkedTasks(options);
 }
 
 function buildProjectXml() {
@@ -1174,6 +1116,124 @@ function datesAlreadyMatch(task, proposedDates) {
   return proposedDates && task.start === proposedDates.start && task.finish === proposedDates.finish;
 }
 
+
+function latestDate(dates) {
+  const valid = dates.filter(Boolean).map((date) => dateOnly(date)).filter(Boolean);
+  if (!valid.length) return null;
+  return new Date(Math.max(...valid.map(Number)));
+}
+
+function calculateTaskDatesFromLinks(task, byId) {
+  const links = getTaskLinks(task);
+  if (!links.length) return null;
+
+  const duration = Math.max(1, task.durationDays || daysBetween(task.start, task.finish));
+  const startRequirements = [];
+  const finishRequirements = [];
+
+  links.forEach((link) => {
+    const pred = byId.get(link.id);
+    if (!pred) return;
+    const predStart = dateOnly(pred.start);
+    const predFinish = dateOnly(pred.finish);
+    if (!predStart || !predFinish) return;
+
+    if (link.type === "FS") startRequirements.push(addDays(predFinish, 1));
+    else if (link.type === "SS") startRequirements.push(predStart);
+    else if (link.type === "FF") finishRequirements.push(predFinish);
+    else if (link.type === "SF") finishRequirements.push(predStart);
+  });
+
+  const latestStartRequirement = latestDate(startRequirements);
+  const latestFinishRequirement = latestDate(finishRequirements);
+  if (!latestStartRequirement && !latestFinishRequirement) return null;
+
+  const finishDrivenStart = latestFinishRequirement ? addDays(latestFinishRequirement, 1 - duration) : null;
+  const desiredStart = latestDate([latestStartRequirement, finishDrivenStart]) || dateOnly(task.start) || dateOnly(state.projectStart) || dateOnly(today);
+  const desiredFinish = addDays(desiredStart, duration - 1);
+
+  return {
+    start: toDateInputValue(desiredStart),
+    finish: toDateInputValue(desiredFinish),
+    durationDays: duration,
+  };
+}
+
+function applyDatesToTask(task, dates) {
+  if (!task || !dates) return false;
+  const changed = task.start !== dates.start || task.finish !== dates.finish || task.durationDays !== dates.durationDays;
+  if (!changed) return false;
+  task.start = dates.start;
+  task.finish = dates.finish;
+  task.durationDays = dates.durationDays;
+  return true;
+}
+
+function alignTaskToLinks(task, byId) {
+  return applyDatesToTask(task, calculateTaskDatesFromLinks(task, byId));
+}
+
+function cascadeScheduleFromTask(sourceTaskId, options = {}) {
+  ensureDecorations();
+  const cycles = detectCycles();
+  if (cycles.length) {
+    if (!options.silent) alert("Fix dependency loops before cascading linked tasks.");
+    return false;
+  }
+
+  const impacted = new Set([sourceTaskId]);
+  let changedAny = false;
+  let changed = true;
+  let guard = 0;
+
+  while (changed && guard < state.tasks.length * state.tasks.length + 20) {
+    changed = false;
+    guard += 1;
+    const byId = new Map(state.tasks.map((task) => [task.id, task]));
+
+    state.tasks.forEach((task) => {
+      if (!getTaskLinks(task).some((link) => impacted.has(link.id))) return;
+      if (alignTaskToLinks(task, byId)) {
+        impacted.add(task.id);
+        changed = true;
+        changedAny = true;
+      }
+    });
+  }
+
+  if (options.render !== false) render();
+  return changedAny;
+}
+
+function scheduleAllLinkedTasks(options = {}) {
+  ensureDecorations();
+  const cycles = detectCycles();
+  if (cycles.length) {
+    if (!options.silent) alert("Fix dependency loops before auto-scheduling.");
+    return false;
+  }
+
+  let changedAny = false;
+  let changed = true;
+  let guard = 0;
+
+  while (changed && guard < state.tasks.length * state.tasks.length + 20) {
+    changed = false;
+    guard += 1;
+    const byId = new Map(state.tasks.map((task) => [task.id, task]));
+
+    state.tasks.forEach((task) => {
+      if (alignTaskToLinks(task, byId)) {
+        changed = true;
+        changedAny = true;
+      }
+    });
+  }
+
+  if (options.render !== false) render();
+  return true;
+}
+
 function buildScheduleSuggestionHtml(details) {
   const { predecessor, successor, type, proposedDates } = details;
   const current = `${formatFriendlyDate(successor.start)} → ${formatFriendlyDate(successor.finish)}`;
@@ -1184,7 +1244,7 @@ function buildScheduleSuggestionHtml(details) {
       <span class="link-type-chip">${escapeXml(type)}</span>
       <div>
         <strong>Link created: ${escapeXml(predecessor.name)} → ${escapeXml(successor.name)}</strong>
-        <small>${escapeXml(relationship)}. The blue ghost bar shows the suggested schedule move.</small>
+        <small>${escapeXml(relationship)}. The ghost bar shows the suggested move; downstream linked tasks will follow.</small>
       </div>
       <button type="button" class="link-suggestion-x" data-schedule-action="cancel" aria-label="Undo dependency link">×</button>
     </div>
@@ -1351,7 +1411,7 @@ function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
         successor.start = proposedDates.start;
         successor.finish = proposedDates.finish;
         successor.durationDays = proposedDates.durationDays;
-        autoSchedule({ silent: true });
+        cascadeScheduleFromTask(successor.id, { silent: true });
         return;
       }
 
@@ -1492,6 +1552,7 @@ function updateGanttDrag(event) {
   }
 
   task.durationDays = daysBetween(task.start, task.finish);
+  cascadeScheduleFromTask(task.id, { render: false, silent: true });
   renderGantt();
   renderSummary();
   event.preventDefault();
@@ -1499,8 +1560,10 @@ function updateGanttDrag(event) {
 
 function endGanttDrag() {
   if (!activeBarDrag) return;
+  const editedTaskId = state.tasks[activeBarDrag.index]?.id;
   activeBarDrag = null;
   document.body.classList.remove("is-gantt-dragging");
+  if (editedTaskId) cascadeScheduleFromTask(editedTaskId, { render: false, silent: true });
   render();
 }
 

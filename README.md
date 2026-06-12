@@ -11,6 +11,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Pull visible S/F connector strings on task bars to create dependency links
 - Automatically creates FS, SS, FF, or SF based on which endpoints you connect
 - Shows an inline schedule suggestion with a ghost preview instead of a blocking modal
+- Cascades linked successors when a predecessor is moved or resized, including pulling tasks backward when the link allows it
 - Drag task-grid column edges to resize columns
 - Drag the vertical splitter between task data and Gantt dates to move the chart/data boundary
 - Drag date header edges or use the toolbar to resize day cells
@@ -29,6 +30,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Added visible pull-string connectors: drag S/F strings between tasks to create FS, SS, FF, or SF automatically
 - Replaced the heavy scheduling modal with a contextual inline suggestion next to the affected task
 - Preserved the marching-ants connector while the schedule decision is pending
+- Added cascading dependency scheduling so connected tasks follow predecessor changes in both directions
 - Replaced the old field-width pixel slider with direct column dragging and a draggable chart/data splitter
 - Added date-header drag resizing for day cells
 - Cleaner app header with project context
@@ -80,6 +82,17 @@ When a dependency link would change dates, the app now stays in the schedule ins
 - A small contextual card appears near the task with **Apply move**, **Keep dates**, and **Undo link**.
 
 This keeps the chart visible while you decide what to do.
+
+## Cascading linked schedule behavior
+
+When you move or resize a task that has linked successors, the downstream tasks now follow the dependency instead of only moving when they are late:
+
+- **FS** pulls the successor start to the predecessor finish + 1 day.
+- **SS** pulls the successor start to the predecessor start.
+- **FF** pulls the successor finish to the predecessor finish.
+- **SF** pulls the successor finish to the predecessor start.
+
+That means shortening a predecessor can pull the next linked task back earlier, while still respecting any other predecessor links on that successor.
 
 ## Compatibility target
 
