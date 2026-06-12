@@ -521,7 +521,8 @@ function renderGantt() {
     const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
     const linkText = task.links.length ? formatLinks(task.links) : "";
     const linkPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
-    const cascadePreview = (pendingCascadeChoice?.changes || []).find((change) => change.id === task.id)?.to || null;
+    const primaryCascadeChange = pendingCascadeChoice?.changes?.[0] || null;
+    const cascadePreview = primaryCascadeChange?.id === task.id ? primaryCascadeChange.to : null;
     const pendingPreview = linkPreview || cascadePreview;
     let ghostMarkup = "";
     if (pendingPreview) {
@@ -1323,29 +1324,38 @@ function applyCascadeImpact(changes) {
 function buildCascadeSuggestionHtml(details) {
   const changes = details.changes || [];
   const source = details.source || { name: "this task" };
-  const list = changes.slice(0, 5).map((change) => `
-    <li>
-      <strong>${escapeXml(change.name)}</strong>
-      <span>${escapeXml(formatFriendlyDate(change.from.start))} → ${escapeXml(formatFriendlyDate(change.from.finish))}</span>
-      <b>→</b>
-      <span>${escapeXml(formatFriendlyDate(change.to.start))} → ${escapeXml(formatFriendlyDate(change.to.finish))}</span>
-    </li>`).join("");
-  const extra = changes.length > 5 ? `<p class="cascade-extra">+ ${changes.length - 5} more linked task${changes.length - 5 === 1 ? "" : "s"}</p>` : "";
+  const primary = changes[0] || null;
+  const remainingCount = Math.max(0, changes.length - 1);
+  const primaryMarkup = primary ? `
+    <div class="cascade-primary-impact">
+      <div>
+        <span class="impact-kicker">Next linked task</span>
+        <strong>${escapeXml(primary.name)}</strong>
+      </div>
+      <div class="impact-dates">
+        <span>${escapeXml(formatFriendlyDate(primary.from.start))} → ${escapeXml(formatFriendlyDate(primary.from.finish))}</span>
+        <b>→</b>
+        <span>${escapeXml(formatFriendlyDate(primary.to.start))} → ${escapeXml(formatFriendlyDate(primary.to.finish))}</span>
+      </div>
+    </div>` : "";
+  const extra = remainingCount > 0
+    ? `<p class="cascade-extra">Also affects ${remainingCount} more downstream linked task${remainingCount === 1 ? "" : "s"}. Choose <strong>Move linked tasks</strong> to update the whole chain.</p>`
+    : `<p class="cascade-extra">Only the next linked task needs adjustment.</p>`;
 
   return `
     <div class="cascade-suggestion-head">
       <span class="cascade-impact-chip">${changes.length}</span>
       <div>
-        <strong>Update linked tasks?</strong>
-        <small>You changed ${escapeXml(source.name)}. Linked successors can be moved to keep FS / SS / FF / SF logic clean.</small>
+        <strong>Linked task may need to move</strong>
+        <small>You changed ${escapeXml(source.name)}. Showing the next impacted task; the rest of the chain is summarized so the popup stays lightweight.</small>
       </div>
       <button type="button" class="link-suggestion-x" data-cascade-action="keep" aria-label="Keep downstream dates">×</button>
     </div>
-    <ul class="cascade-impact-list">${list}</ul>
+    ${primaryMarkup}
     ${extra}
     <div class="link-suggestion-actions cascade-actions">
       <button type="button" class="primary" data-cascade-action="apply">Move linked tasks</button>
-      <button type="button" data-cascade-action="keep">Keep downstream dates</button>
+      <button type="button" data-cascade-action="keep">Keep dates</button>
       <button type="button" data-cascade-action="undo">Undo my edit</button>
     </div>`;
 }
