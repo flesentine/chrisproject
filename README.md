@@ -102,3 +102,7 @@ This version uses one MS Project-style schedule sheet instead of separate task a
 - Drag the vertical divider between the task fields and the date timeline to give more room to the data side or the chart side.
 - Drag date header edges to resize day cells, or use the View control as a backup.
 - Use the View control to adjust row height.
+
+## Latest UX polish
+
+- Skinny task and date headers automatically rotate so labels stay readable instead of clipping.

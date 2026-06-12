@@ -150,11 +150,19 @@ function getFieldGridTemplate() {
 }
 
 function renderFieldHeadingCells() {
-  return FIELD_COLUMNS.map((column) => `
-    <div class="field-heading-cell" data-column-key="${column.key}" title="Drag the edge to resize ${escapeXml(column.label || "this column")}">
+  return FIELD_COLUMNS.map((column) => {
+    const width = uiPrefs.fieldColumns[column.key] ?? column.defaultWidth;
+    const shouldRotate = column.label && column.label.length > 2 && width <= 68;
+    const shouldCompact = column.label && width <= 88;
+    const classes = ["field-heading-cell"];
+    if (shouldCompact) classes.push("is-skinny");
+    if (shouldRotate) classes.push("is-vertical");
+    return `
+    <div class="${classes.join(" ")}" data-column-key="${column.key}" title="Drag the edge to resize ${escapeXml(column.label || "this column")}">
       <span>${escapeXml(column.label)}</span>
       <i class="column-resize-handle" data-column-resize="${column.key}" aria-hidden="true"></i>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 function sizeLabel(value, compactMax, wideMin) {
@@ -459,6 +467,8 @@ function renderGantt() {
     const classes = ["planner-date-cell"];
     if ([0, 6].includes(d.getDay())) classes.push("is-weekend");
     if (toDateInputValue(d) === today) classes.push("is-today");
+    if (dayWidth <= 50) classes.push("is-vertical");
+    else if (dayWidth <= 64) classes.push("is-skinny");
     dateCells.push(`
       <div class="${classes.join(" ")}" style="width:${dayWidth}px" title="Drag the right edge to resize day columns">
         <strong>${d.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
