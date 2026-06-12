@@ -1953,3 +1953,139 @@ body.is-link-dragging .link-drag-layer {
   .dependency-port-start { left: -29px; }
   .dependency-port-finish { right: -29px; }
 }
+
+/* Pull-string dependency connectors: visible cords from each task edge. */
+.gantt-bar {
+  overflow: visible;
+}
+
+.gantt-bar .dependency-port {
+  position: absolute;
+  top: 50%;
+  z-index: 12;
+  width: 56px;
+  height: 30px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #174ea6;
+  opacity: 0.58;
+  transform: translateY(-50%);
+  cursor: grab;
+  touch-action: none;
+  transition: opacity 0.14s ease, filter 0.14s ease, transform 0.14s ease;
+}
+
+.gantt-bar .dependency-port-start { left: -54px; }
+.gantt-bar .dependency-port-finish { right: -54px; }
+
+.gantt-bar .dependency-port::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 39px;
+  height: 3px;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(90deg, rgba(37, 99, 235, 0.82) 0 5px, rgba(14, 165, 233, 0.36) 5px 10px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 4px 10px rgba(37, 99, 235, 0.16);
+  transform: translateY(-50%);
+}
+
+.gantt-bar .dependency-port-start::before {
+  left: 16px;
+}
+
+.gantt-bar .dependency-port-finish::before {
+  right: 16px;
+}
+
+.gantt-bar .dependency-port::after {
+  content: attr(data-link-endpoint);
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #eff6ff, #ffffff);
+  color: #174ea6;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18), 0 0 0 3px rgba(37, 99, 235, 0.12);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.gantt-bar .dependency-port-start::after { left: 0; }
+.gantt-bar .dependency-port-finish::after { right: 0; }
+
+.gantt-bar:hover .dependency-port,
+.gantt-bar:focus-within .dependency-port,
+body.is-link-dragging .dependency-port {
+  opacity: 0.92;
+}
+
+.gantt-bar .dependency-port:hover,
+.gantt-bar .dependency-port:focus-visible,
+.gantt-bar .dependency-port.is-link-source,
+.gantt-bar .dependency-port.is-link-target {
+  opacity: 1;
+  outline: none;
+  filter: drop-shadow(0 10px 14px rgba(37, 99, 235, 0.22));
+  transform: translateY(-50%) scale(1.08);
+}
+
+.gantt-bar .dependency-port.is-link-source {
+  cursor: grabbing;
+}
+
+.gantt-bar .dependency-port.is-link-source::before,
+.gantt-bar .dependency-port.is-link-source::after {
+  background: linear-gradient(180deg, #dbeafe, #bfdbfe);
+}
+
+.gantt-bar .dependency-port.is-link-target::before {
+  background: repeating-linear-gradient(90deg, rgba(16, 124, 65, 0.90) 0 5px, rgba(34, 197, 94, 0.44) 5px 10px);
+}
+
+.gantt-bar .dependency-port.is-link-target::after {
+  background: linear-gradient(180deg, #dcfce7, #ffffff);
+  color: #047857;
+  box-shadow: 0 10px 24px rgba(16, 124, 65, 0.28), 0 0 0 5px rgba(16, 124, 65, 0.16);
+}
+
+body.is-link-dragging .gantt-bar {
+  cursor: crosshair;
+}
+
+body.is-link-dragging .link-drag-path {
+  stroke-width: 4.5;
+  stroke-dasharray: 7 7;
+}
+
+.link-drag-label {
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .gantt-bar .dependency-port {
+    width: 62px;
+    height: 34px;
+  }
+
+  .gantt-bar .dependency-port-start { left: -60px; }
+  .gantt-bar .dependency-port-finish { right: -60px; }
+
+  .gantt-bar .dependency-port::before { width: 44px; }
+
+  .gantt-bar .dependency-port::after {
+    width: 25px;
+    height: 25px;
+  }
+}

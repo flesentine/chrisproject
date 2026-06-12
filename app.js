@@ -514,18 +514,18 @@ function renderGantt() {
               <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
             </div>
           </div>
-          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="connect dots" title="Use the connector dots on the Gantt bars, or type 1FS, 2SS, 3FF, or 4SF" /></div>
+          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="connect dots" title="Use the pull strings on the Gantt bars, or type 1FS, 2SS, 3FF, or 4SF" /></div>
           <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
-          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drag S/F connector dots to another task connector to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
-            <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Drag from start"></button>
+          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+            <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
             <span>${escapeXml(task.name)}</span>
-            <em class="link-hint" aria-hidden="true">Connect to S or F</em>
+            <em class="link-hint" aria-hidden="true">Drop on S or F</em>
             <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
             <i class="resize-handle resize-right" data-resize-edge="finish" aria-hidden="true"></i>
-            <button type="button" class="dependency-port dependency-port-finish" data-index="${index}" data-link-endpoint="F" aria-label="Create dependency from the finish of ${escapeXml(task.name)}" title="Drag from finish"></button>
+            <button type="button" class="dependency-port dependency-port-finish" data-index="${index}" data-link-endpoint="F" aria-label="Create dependency from the finish of ${escapeXml(task.name)}" title="Pull finish string"></button>
           </div>
         </div>
       </div>`;

@@ -56,6 +56,17 @@ Drag from one handle to another task's handle and the dependency type is chosen 
 
 This replaces the old drop-on-bar dependency popup for normal linking.
 
+## Pull-string dependencies
+
+Each Gantt bar has a small visible string on the start and finish edge. Pull one string to another task string to create the dependency automatically:
+
+- Finish string to Start string = FS
+- Start string to Start string = SS
+- Finish string to Finish string = FF
+- Start string to Finish string = SF
+
+This replaces the older dot-style connector UI and makes the dependency action feel more like pulling a cable between tasks.
+
 ## Compatibility target
 
 The first-class compatibility target is Microsoft Project XML, also called MSPDI. Native `.mpp` is not implemented in this static app because `.mpp` is a binary Microsoft Project format and generally requires a dedicated parser/converter library or backend service.
