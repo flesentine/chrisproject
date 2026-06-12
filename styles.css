@@ -1784,3 +1784,172 @@ body.is-column-resizing .pane-splitter::after {
 .planner-date-cell.is-vertical .date-resize-handle {
   right: -6px;
 }
+
+/* Connector-handle dependency linking: drag S/F dots instead of dropping bars on bars. */
+.gantt-bar {
+  overflow: visible;
+}
+
+.gantt-bar::before {
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.dependency-port {
+  position: absolute;
+  top: 50%;
+  z-index: 8;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff, #eff6ff);
+  color: #174ea6;
+  box-shadow: 0 7px 16px rgba(15, 23, 42, 0.18), 0 0 0 3px rgba(37, 99, 235, 0.10);
+  opacity: 0.78;
+  transform: translateY(-50%) scale(0.92);
+  transition: opacity 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.dependency-port::after {
+  content: attr(data-link-endpoint);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.dependency-port::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.52), rgba(14, 165, 233, 0.22));
+  transform: translateY(-50%);
+}
+
+.dependency-port-start {
+  left: -25px;
+}
+
+.dependency-port-start::before {
+  left: 17px;
+}
+
+.dependency-port-finish {
+  right: -25px;
+}
+
+.dependency-port-finish::before {
+  right: 17px;
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.gantt-bar:hover .dependency-port,
+.gantt-bar:focus-within .dependency-port,
+body.is-link-dragging .dependency-port {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.dependency-port:hover,
+.dependency-port:focus-visible,
+.dependency-port.is-link-source,
+.dependency-port.is-link-target {
+  opacity: 1;
+  outline: none;
+  background: linear-gradient(180deg, #ecfeff, #dbeafe);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28), 0 0 0 5px rgba(37, 99, 235, 0.16);
+  transform: translateY(-50%) scale(1.14);
+}
+
+.dependency-port.is-link-source {
+  color: #1d4ed8;
+  background: linear-gradient(180deg, #dbeafe, #bfdbfe);
+}
+
+.dependency-port.is-link-target {
+  color: #047857;
+  background: linear-gradient(180deg, #dcfce7, #bbf7d0);
+  box-shadow: 0 10px 24px rgba(16, 124, 65, 0.32), 0 0 0 6px rgba(16, 124, 65, 0.18);
+}
+
+body.is-link-dragging .resize-handle {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+body.is-link-dragging .gantt-bar {
+  cursor: crosshair;
+}
+
+.gantt-bar.is-link-target {
+  outline: 3px solid rgba(16, 124, 65, 0.30);
+  outline-offset: 9px;
+}
+
+.link-drag-layer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1400;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.08s ease;
+}
+
+body.is-link-dragging .link-drag-layer {
+  opacity: 1;
+}
+
+.link-drag-path {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 9 8;
+  filter: drop-shadow(0 8px 10px rgba(37, 99, 235, 0.22));
+  animation: connectorMarch 0.65s linear infinite;
+}
+
+.link-drag-dot {
+  fill: #ffffff;
+  stroke: #107c41;
+  stroke-width: 3;
+  filter: drop-shadow(0 5px 10px rgba(16, 124, 65, 0.28));
+}
+
+.link-drag-label {
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  fill: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+@keyframes connectorMarch {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -17; }
+}
+
+@media (max-width: 760px) {
+  .dependency-port {
+    width: 24px;
+    height: 24px;
+  }
+
+  .dependency-port-start { left: -29px; }
+  .dependency-port-finish { right: -29px; }
+}

@@ -36,7 +36,7 @@
         <div class="hero-copy">
           <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
           <h2>MS Project energy, discount price.</h2>
-          <p>Edit the task data and the Gantt bar on the same row. Drag bars to move dates, pull edges to change duration, and drop one task on another to choose FS, SS, FF, or SF from a popup.</p>
+          <p>Edit the task data and the Gantt bar on the same row. Drag bars to move dates, pull edges to change duration, and grab the little start/end connector dots to link tasks automatically as FS, SS, FF, or SF.</p>
         </div>
 
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
@@ -136,13 +136,19 @@
     </footer>
   </div>
 
+  <svg id="linkDragLayer" class="link-drag-layer" width="100%" height="100%" aria-hidden="true">
+    <path id="linkDragPath" class="link-drag-path" d="" />
+    <circle id="linkDragDot" class="link-drag-dot" cx="0" cy="0" r="5" />
+    <text id="linkDragLabel" class="link-drag-label" x="0" y="0"></text>
+  </svg>
+
   <div id="dependencyModal" class="dependency-modal" hidden>
     <div class="dependency-backdrop" data-link-choice="cancel"></div>
     <section class="dependency-dialog" role="dialog" aria-modal="true" aria-labelledby="dependencyModalTitle" aria-describedby="dependencyModalCopy">
       <button id="dependencyCloseBtn" class="dependency-close" type="button" data-link-choice="cancel" aria-label="Cancel dependency link">×</button>
       <p class="eyebrow">Choose dependency</p>
       <h2 id="dependencyModalTitle">Link these tasks</h2>
-      <p id="dependencyModalCopy" class="dependency-copy">Pick how the dragged task should control the target task.</p>
+      <p id="dependencyModalCopy" class="dependency-copy">Drag from a start/end connector to another connector. The link type is chosen automatically from the endpoints.</p>
       <div class="dependency-options" role="group" aria-label="Dependency type">
         <button type="button" data-link-choice="FS">
           <strong>FS</strong>
@@ -165,7 +171,7 @@
           <small>Target finishes after source starts. Rare, but supported.</small>
         </button>
       </div>
-      <p class="dependency-tip">No typing needed. Pick one and I’ll add the link, auto-schedule, and update the grid.</p>
+      <p class="dependency-tip">No typing needed. Connector-to-connector dragging chooses FS, SS, FF, or SF for you.</p>
     </section>
   </div>
 

@@ -59,6 +59,10 @@ const els = {
   dependencyModal: document.getElementById("dependencyModal"),
   dependencyModalTitle: document.getElementById("dependencyModalTitle"),
   dependencyModalCopy: document.getElementById("dependencyModalCopy"),
+  linkDragLayer: document.getElementById("linkDragLayer"),
+  linkDragPath: document.getElementById("linkDragPath"),
+  linkDragDot: document.getElementById("linkDragDot"),
+  linkDragLabel: document.getElementById("linkDragLabel"),
 };
 
 const today = toDateInputValue(new Date());
@@ -80,6 +84,7 @@ const DEFAULT_UI_PREFS = {
 let uiPrefs = loadUiPrefs();
 let activeBarDrag = null;
 let activeColumnDrag = null;
+let activeDependencyDrag = null;
 let pendingDependencyChoice = null;
 
 function clamp(value, min, max) {
@@ -509,16 +514,18 @@ function renderGantt() {
               <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
             </div>
           </div>
-          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="drag to link" title="You can still type 1FS, 2SS, 3FF, or 4SF" /></div>
+          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="connect dots" title="Use the connector dots on the Gantt bars, or type 1FS, 2SS, 3FF, or 4SF" /></div>
           <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
-          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drop this bar on another task and pick FS, SS, FF, or SF from the popup. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Drag S/F connector dots to another task connector to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+            <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Drag from start"></button>
             <span>${escapeXml(task.name)}</span>
-            <em class="link-hint" aria-hidden="true">Drop to link</em>
+            <em class="link-hint" aria-hidden="true">Connect to S or F</em>
             <i class="resize-handle resize-left" data-resize-edge="start" aria-hidden="true"></i>
             <i class="resize-handle resize-right" data-resize-edge="finish" aria-hidden="true"></i>
+            <button type="button" class="dependency-port dependency-port-finish" data-index="${index}" data-link-endpoint="F" aria-label="Create dependency from the finish of ${escapeXml(task.name)}" title="Drag from finish"></button>
           </div>
         </div>
       </div>`;
@@ -985,30 +992,81 @@ function loadSample(shouldRender = true) {
 }
 
 
-function findLinkTargetFromPoint(clientX, clientY, sourceIndex) {
-  const candidates = document.elementsFromPoint(clientX, clientY);
-  const targetBar = candidates
-    .map((element) => element.closest?.(".gantt-bar"))
-    .find((bar) => bar && Number(bar.dataset.index) !== sourceIndex);
-  if (!targetBar) return null;
-  const index = Number(targetBar.dataset.index);
-  return Number.isInteger(index) ? { index, bar: targetBar } : null;
+function linkTypeFromEndpoints(sourceEndpoint, targetEndpoint) {
+  const type = `${sourceEndpoint}${targetEndpoint}`.toUpperCase();
+  return LINK_TYPES.includes(type) ? type : "FS";
 }
 
-function clearLinkTargetHighlight() {
+function getPortCenter(port) {
+  const rect = port.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function findDependencyPortFromPoint(clientX, clientY, sourceIndex) {
+  const candidates = document.elementsFromPoint(clientX, clientY);
+  const port = candidates
+    .map((element) => element.closest?.("[data-link-endpoint]"))
+    .find((candidate) => candidate && Number(candidate.dataset.index) !== sourceIndex);
+  if (!port) return null;
+  const index = Number(port.dataset.index);
+  const endpoint = port.dataset.linkEndpoint;
+  if (!Number.isInteger(index) || !["S", "F"].includes(endpoint)) return null;
+  return { index, endpoint, port, ...getPortCenter(port) };
+}
+
+function clearDependencyTargetHighlight() {
+  document.querySelectorAll(".dependency-port.is-link-source, .dependency-port.is-link-target").forEach((port) => {
+    port.classList.remove("is-link-source", "is-link-target");
+  });
+  document.querySelectorAll(".gantt-bar.is-link-target").forEach((bar) => bar.classList.remove("is-link-target"));
+  document.body.classList.remove("is-link-dragging", "is-link-hovering");
+}
+
+function updateDependencyDragLine(clientX, clientY, target = null) {
+  if (!activeDependencyDrag || !els.linkDragPath) return;
+  const startX = activeDependencyDrag.startX;
+  const startY = activeDependencyDrag.startY;
+  const endX = target?.x ?? clientX;
+  const endY = target?.y ?? clientY;
+  const spread = Math.max(48, Math.abs(endX - startX) * 0.42);
+  const direction = endX >= startX ? 1 : -1;
+  const c1x = startX + spread * direction;
+  const c2x = endX - spread * direction;
+  els.linkDragPath.setAttribute("d", `M ${startX} ${startY} C ${c1x} ${startY}, ${c2x} ${endY}, ${endX} ${endY}`);
+
+  if (els.linkDragDot) {
+    els.linkDragDot.setAttribute("cx", String(endX));
+    els.linkDragDot.setAttribute("cy", String(endY));
+  }
+
+  if (els.linkDragLabel) {
+    const text = target
+      ? `${linkTypeFromEndpoints(activeDependencyDrag.sourceEndpoint, target.endpoint)} · ${LINK_TYPE_LABELS[linkTypeFromEndpoints(activeDependencyDrag.sourceEndpoint, target.endpoint)]}`
+      : `${activeDependencyDrag.sourceEndpoint} → grab another S/F dot`;
+    els.linkDragLabel.textContent = text;
+    els.linkDragLabel.setAttribute("x", String((startX + endX) / 2 + 10));
+    els.linkDragLabel.setAttribute("y", String((startY + endY) / 2 - 10));
+  }
+}
+
+function updateDependencyTargetHighlight(clientX, clientY) {
+  if (!activeDependencyDrag) return null;
+  document.querySelectorAll(".dependency-port.is-link-target").forEach((port) => port.classList.remove("is-link-target"));
   document.querySelectorAll(".gantt-bar.is-link-target").forEach((bar) => bar.classList.remove("is-link-target"));
   document.body.classList.remove("is-link-hovering");
-}
 
-function updateLinkTargetHighlight(clientX, clientY) {
-  if (!activeBarDrag || activeBarDrag.mode !== "move") return;
-  clearLinkTargetHighlight();
-  const target = findLinkTargetFromPoint(clientX, clientY, activeBarDrag.index);
-  activeBarDrag.linkTargetIndex = target?.index ?? null;
-  if (target?.bar) {
-    target.bar.classList.add("is-link-target");
+  const target = findDependencyPortFromPoint(clientX, clientY, activeDependencyDrag.sourceIndex);
+  activeDependencyDrag.targetIndex = target?.index ?? null;
+  activeDependencyDrag.targetEndpoint = target?.endpoint ?? null;
+
+  if (target?.port) {
+    target.port.classList.add("is-link-target");
+    target.port.closest(".gantt-bar")?.classList.add("is-link-target");
     document.body.classList.add("is-link-hovering");
   }
+
+  updateDependencyDragLine(clientX, clientY, target);
+  return target;
 }
 
 function openDependencyPicker(predecessor, successor, onChoice) {
@@ -1068,7 +1126,72 @@ function addDependencyLink(sourceIndex, targetIndex, type) {
   return true;
 }
 
+function beginDependencyDrag(event) {
+  const port = event.target.closest?.("[data-link-endpoint]");
+  if (!port) return false;
+  if (event.button !== undefined && event.button !== 0) return true;
+
+  const sourceIndex = Number(port.dataset.index);
+  const sourceEndpoint = port.dataset.linkEndpoint;
+  const sourceTask = state.tasks[sourceIndex];
+  if (!sourceTask || !["S", "F"].includes(sourceEndpoint)) return true;
+
+  const center = getPortCenter(port);
+  activeDependencyDrag = {
+    sourceIndex,
+    sourceEndpoint,
+    pointerId: event.pointerId,
+    startX: center.x,
+    startY: center.y,
+    currentX: event.clientX,
+    currentY: event.clientY,
+    targetIndex: null,
+    targetEndpoint: null,
+  };
+
+  port.classList.add("is-link-source");
+  document.body.classList.add("is-link-dragging");
+  port.setPointerCapture?.(event.pointerId);
+  updateDependencyDragLine(event.clientX, event.clientY);
+  event.preventDefault();
+  event.stopPropagation();
+  return true;
+}
+
+function updateDependencyDrag(event) {
+  if (!activeDependencyDrag) return;
+  activeDependencyDrag.currentX = event.clientX;
+  activeDependencyDrag.currentY = event.clientY;
+  updateDependencyTargetHighlight(event.clientX, event.clientY);
+  event.preventDefault();
+}
+
+function endDependencyDrag(event) {
+  if (!activeDependencyDrag) return;
+  const drag = activeDependencyDrag;
+  const target = findDependencyPortFromPoint(
+    drag.currentX ?? event?.clientX ?? drag.startX,
+    drag.currentY ?? event?.clientY ?? drag.startY,
+    drag.sourceIndex
+  );
+  const type = target ? linkTypeFromEndpoints(drag.sourceEndpoint, target.endpoint) : null;
+
+  activeDependencyDrag = null;
+  clearDependencyTargetHighlight();
+  updateDependencyDragLine(0, 0);
+  if (els.linkDragPath) els.linkDragPath.setAttribute("d", "");
+  if (els.linkDragLabel) els.linkDragLabel.textContent = "";
+
+  if (target && type) {
+    addDependencyLink(drag.sourceIndex, target.index, type);
+    return;
+  }
+
+  render();
+}
+
 function beginGanttDrag(event) {
+  if (beginDependencyDrag(event)) return;
   const bar = event.target.closest(".gantt-bar");
   if (!bar || !(event.target instanceof Element)) return;
   if (event.button !== undefined && event.button !== 0) return;
@@ -1127,39 +1250,13 @@ function updateGanttDrag(event) {
   task.durationDays = daysBetween(task.start, task.finish);
   renderGantt();
   renderSummary();
-  updateLinkTargetHighlight(event.clientX, event.clientY);
   event.preventDefault();
 }
 
-function endGanttDrag(event) {
+function endGanttDrag() {
   if (!activeBarDrag) return;
-  const drag = activeBarDrag;
-  const sourceTask = state.tasks[drag.index];
-  const target = drag.mode === "move"
-    ? findLinkTargetFromPoint(drag.currentX ?? event?.clientX ?? drag.startX, drag.currentY ?? event?.clientY ?? drag.startY, drag.index)
-    : null;
-
-  clearLinkTargetHighlight();
   activeBarDrag = null;
   document.body.classList.remove("is-gantt-dragging");
-
-  if (sourceTask && target && target.index !== drag.index) {
-    sourceTask.start = toDateInputValue(drag.originalStart);
-    sourceTask.finish = toDateInputValue(drag.originalFinish);
-    sourceTask.durationDays = daysBetween(sourceTask.start, sourceTask.finish);
-    const targetTask = state.tasks[target.index];
-    renderGantt();
-    renderSummary();
-    openDependencyPicker(sourceTask, targetTask, (type) => {
-      if (type) {
-        addDependencyLink(drag.index, target.index, type);
-      } else {
-        render();
-      }
-    });
-    return;
-  }
-
   render();
 }
 
@@ -1254,6 +1351,9 @@ els.timeline.addEventListener("pointerdown", beginColumnResize);
 window.addEventListener("pointermove", updateGanttDrag);
 window.addEventListener("pointerup", endGanttDrag);
 window.addEventListener("pointercancel", endGanttDrag);
+window.addEventListener("pointermove", updateDependencyDrag);
+window.addEventListener("pointerup", endDependencyDrag);
+window.addEventListener("pointercancel", endDependencyDrag);
 window.addEventListener("pointermove", updateColumnResize);
 window.addEventListener("pointerup", endColumnResize);
 window.addEventListener("pointercancel", endColumnResize);

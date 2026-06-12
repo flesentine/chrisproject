@@ -8,8 +8,8 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Show an interactive Gantt preview
 - Drag Gantt task bars left/right to change dates
 - Resize Gantt task bars from either edge to change duration
-- Drop one Gantt bar onto another to create dependency links
-- Choose FS, SS, FF, or SF link types from a no-typing popup
+- Drag the little S/F connector dots on task bars to create dependency links
+- Automatically creates FS, SS, FF, or SF based on which endpoints you connect
 - Drag task-grid column edges to resize columns
 - Drag the vertical splitter between task data and Gantt dates to move the chart/data boundary
 - Drag date header edges or use the toolbar to resize day cells
@@ -25,7 +25,7 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 - Renamed to **Chris's Discount Project Maker**
 - Added a branded portrait image
 - Added direct-manipulation scheduling in the Gantt chart
-- Added drag-to-link Gantt dependencies with a no-typing FS/SS/FF/SF picker popup
+- Added endpoint connector handles: drag S/F dots between tasks to create FS, SS, FF, or SF automatically
 - Replaced the old field-width pixel slider with direct column dragging and a draggable chart/data splitter
 - Added date-header drag resizing for day cells
 - Cleaner app header with project context
@@ -39,6 +39,22 @@ A lightweight Microsoft Project XML-compatible web app. It runs fully in the bro
 ## Latest layout improvement
 
 The unified grid now has a stronger splitter between task data and the Gantt timeline. Drag it left to hide the right-side data columns and give the chart more room. Drag it right to reveal the full task-entry grid again. Individual task columns and date cells can still be resized by dragging their header edges.
+
+## Endpoint connector behavior
+
+Each Gantt bar has two small connector handles:
+
+- **S** on the left/front of the task = task start
+- **F** on the right/end of the task = task finish
+
+Drag from one handle to another task's handle and the dependency type is chosen automatically:
+
+- F → S creates **FS**
+- S → S creates **SS**
+- F → F creates **FF**
+- S → F creates **SF**
+
+This replaces the old drop-on-bar dependency popup for normal linking.
 
 ## Compatibility target
 
@@ -71,7 +87,7 @@ http://localhost:5173
 1. Open this app.
 2. Click **Load sample**.
 3. Drag or resize tasks in the Gantt chart.
-4. Drop one task bar on another to create a dependency and pick FS, SS, FF, or SF from the popup.
+4. Drag a task bar connector dot to another task connector dot to create FS, SS, FF, or SF automatically.
 5. Click **Export XML**.
 6. Open the downloaded `.xml` file in Microsoft Project Desktop.
 7. Save it from Microsoft Project as `.mpp` if needed.
@@ -97,12 +113,8 @@ This version uses one MS Project-style schedule sheet instead of separate task a
 - Each task row contains editable fields and its Gantt bar on the same line.
 - Drag a bar left or right to move the task dates.
 - Drag either edge of a bar to resize the task duration.
-- Drag one bar onto another bar and choose FS, SS, FF, or SF in the popup.
+- Drag a start/finish connector dot to another task’s start/finish connector dot; the app automatically creates SS, SF, FS, or FF.
 - Drag column edges in the header to resize task fields.
 - Drag the vertical divider between the task fields and the date timeline to give more room to the data side or the chart side.
 - Drag date header edges to resize day cells, or use the View control as a backup.
 - Use the View control to adjust row height.
-
-## Latest UX polish
-
-- Skinny task and date headers automatically rotate so labels stay readable instead of clipping.
