@@ -36,13 +36,13 @@
         <div class="hero-copy">
           <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
           <h2>MS Project energy, discount price.</h2>
-          <p>Edit the task data and the Gantt bar on the same row. Drag bars to move dates, pull edges to change duration, and grab the little start/end connector dots to link tasks automatically as FS, SS, FF, or SF.</p>
+          <p>Edit task data and Gantt bars on the same row. Drag bars to move dates, resize duration from the edges, and connect tasks with hover-reveal pull strings. For .mpp files, the site gives a clean conversion path to Project XML so GitHub Pages stays fast and reliable.</p>
         </div>
 
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
           <span class="readiness-label">Export readiness</span>
           <strong id="exportStatus">Ready</strong>
-          <p>Supported: tasks, dates, duration, percent complete, WBS, outline level, and dependency links.</p>
+          <p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. Native .mpp gets a guided XML conversion flow.</p>
         </aside>
       </section>
 
@@ -103,8 +103,21 @@
             Import XML
             <input id="importXmlInput" type="file" accept=".xml,text/xml,application/xml" />
           </label>
+          <label class="file-button mpp-button">
+            Open MPP guide
+            <input id="importMppInput" type="file" accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" />
+          </label>
         </div>
       </section>
+
+      <section id="mppPanel" class="mpp-panel" aria-live="polite" hidden></section>
+
+      <div id="fileDropOverlay" class="file-drop-overlay" hidden>
+        <div>
+          <strong>Drop your file</strong>
+          <span>XML imports directly. MPP opens the conversion guide.</span>
+        </div>
+      </div>
 
       <section id="validationPanel" class="validation-panel" aria-live="polite"></section>
 
@@ -131,7 +144,7 @@
     </main>
 
     <footer class="app-footer">
-      <span>Compatibility target: Microsoft Project XML / MSPDI. Native .mpp needs a backend converter such as MPXJ.</span>
+      <span>Compatibility target: Microsoft Project XML / MSPDI. For .mpp, convert to XML first for a reliable static website flow.</span>
       <span id="saveStatus">Saved locally</span>
     </footer>
   </div>

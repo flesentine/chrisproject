@@ -42,6 +42,9 @@ const els = {
   exportXmlBtn: document.getElementById("exportXmlBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   importXmlInput: document.getElementById("importXmlInput"),
+  importMppInput: document.getElementById("importMppInput"),
+  mppPanel: document.getElementById("mppPanel"),
+  fileDropOverlay: document.getElementById("fileDropOverlay"),
   taskCount: document.getElementById("taskCount"),
   durationCount: document.getElementById("durationCount"),
   completeCount: document.getElementById("completeCount"),
@@ -94,6 +97,8 @@ let activeDependencyDrag = null;
 let pendingDependencyChoice = null;
 let pendingScheduleChoice = null;
 let pendingCascadeChoice = null;
+let lastMppFileName = null;
+let fileDragDepth = 0;
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -916,6 +921,132 @@ function importProjectXml(text) {
     tasks: rawTasks,
   };
   render();
+}
+
+function getMppConversionSteps(fileName = "your-project.mpp") {
+  return [
+    `Open ${fileName} in Microsoft Project Desktop.`,
+    "Choose File → Save As, or File → Export depending on your Project version.",
+    "Pick XML Data / Project XML as the file type.",
+    "Save the .xml file somewhere easy, like Downloads or Desktop.",
+    "Come back here and click Import XML, or drag the XML file onto this page.",
+  ];
+}
+
+function showMppConversionGuide(file = null) {
+  lastMppFileName = file?.name || lastMppFileName || "your-project.mpp";
+  const name = escapeXml(lastMppFileName);
+  const steps = getMppConversionSteps(lastMppFileName);
+
+  setMppPanel(`
+    <div class="mpp-hero">
+      <div>
+        <span class="mpp-kicker">Best static-site path</span>
+        <h3>Convert <code>${name}</code> to Project XML, then import it here.</h3>
+        <p>This site is built for GitHub Pages, so it stays simple: no server, no upload, no account, no weird background converter. Project XML is the reliable format this app can round-trip.</p>
+      </div>
+      <div class="mpp-format-card">
+        <strong>.mpp</strong>
+        <span>Native Project file</span>
+        <i>→</i>
+        <strong>.xml</strong>
+        <span>Import-ready Project XML</span>
+      </div>
+    </div>
+
+    <div class="mpp-flow">
+      ${steps.map((step, index) => `
+        <article class="mpp-step">
+          <b>${index + 1}</b>
+          <span>${escapeXml(step)}</span>
+        </article>
+      `).join("")}
+    </div>
+
+    <div class="mpp-dropzone" data-mpp-action="choose-xml">
+      <strong>Already converted?</strong>
+      <span>Click here to choose the XML file, or just drag the XML onto the page.</span>
+    </div>
+
+    <div class="mpp-actions">
+      <button type="button" class="primary" data-mpp-action="choose-xml">Import converted XML</button>
+      <button type="button" data-mpp-action="copy">Copy conversion steps</button>
+      <button type="button" data-mpp-action="checklist">Download checklist</button>
+      <button type="button" data-mpp-action="dismiss">Dismiss</button>
+    </div>
+
+    <small><strong>Why not direct .mpp?</strong> Full native MPP parsing requires a real converter library. For a simple static website, Project XML is the professional compatibility target. This guide keeps the workflow honest and dependable.</small>
+  `, "info", "MPP import guide");
+}
+
+function getMppChecklistText() {
+  const fileName = lastMppFileName || "your-project.mpp";
+  const lines = [
+    "Chris's Discount Project Maker — MPP to XML checklist",
+    "",
+    `Source file: ${fileName}`,
+    "",
+    ...getMppConversionSteps(fileName).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "After import, review task dates, dependencies, and percent complete before exporting XML back out.",
+  ];
+  return lines.join("\n");
+}
+
+async function copyMppSteps() {
+  const text = getMppChecklistText();
+  try {
+    await navigator.clipboard.writeText(text);
+    setMppPanel(`<strong>Copied.</strong> The MPP → XML steps are on your clipboard.<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="choose-xml">Import converted XML</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`, "ok", "MPP guide");
+  } catch {
+    alert(text);
+  }
+}
+
+function downloadMppChecklist() {
+  downloadText(getMppChecklistText(), `${safeFileName(lastMppFileName || "mpp-conversion")}-xml-checklist.txt`, "text/plain");
+}
+
+function chooseConvertedXml() {
+  els.importXmlInput?.click();
+}
+
+function setMppPanel(message, tone = "info", label = "MPP guide") {
+  if (!els.mppPanel) return;
+  els.mppPanel.hidden = false;
+  els.mppPanel.classList.remove("mpp-ok", "mpp-warn", "mpp-busy");
+  if (tone === "ok") els.mppPanel.classList.add("mpp-ok");
+  if (tone === "warn") els.mppPanel.classList.add("mpp-warn");
+  if (tone === "busy") els.mppPanel.classList.add("mpp-busy");
+  els.mppPanel.innerHTML = `<strong>${escapeXml(label)}:</strong> ${message}`;
+}
+
+async function handlePickedFile(file) {
+  if (!file) return;
+  const lowerName = String(file.name || "").toLowerCase();
+  if (lowerName.endsWith(".xml")) {
+    try {
+      const text = await file.text();
+      importProjectXml(text);
+      setMppPanel(`Imported converted Project XML file <code>${escapeXml(file.name)}</code>.`, "ok", "Import complete");
+    } catch (error) {
+      setMppPanel(error.message || "XML import failed.", "warn", "Import failed");
+      alert(error.message || "Import failed.");
+    }
+    return;
+  }
+
+  if (lowerName.endsWith(".mpp")) {
+    showMppConversionGuide(file);
+    return;
+  }
+
+  setMppPanel(`That file type is not supported here. Use Project XML files ending in <code>.xml</code>. For <code>.mpp</code>, use the conversion guide.`, "warn", "Unsupported file");
+}
+
+function showFileDropOverlay(show) {
+  if (!els.fileDropOverlay) return;
+  els.fileDropOverlay.hidden = !show;
 }
 
 function exportCsv() {
@@ -1918,16 +2049,51 @@ els.exportCsvBtn.addEventListener("click", exportCsv);
 
 els.importXmlInput.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    importProjectXml(text);
-    els.importXmlInput.value = "";
-  } catch (error) {
-    alert(error.message || "Import failed.");
-  }
+  await handlePickedFile(file);
+  els.importXmlInput.value = "";
 });
 
+els.importMppInput?.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  await handlePickedFile(file);
+  if (els.importMppInput) els.importMppInput.value = "";
+});
+
+els.mppPanel?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-mpp-action]");
+  if (!button) return;
+  const action = button.dataset.mppAction;
+  if (action === "choose-xml") chooseConvertedXml();
+  if (action === "copy") copyMppSteps();
+  if (action === "checklist") downloadMppChecklist();
+  if (action === "dismiss") els.mppPanel.hidden = true;
+});
+
+document.addEventListener("dragenter", (event) => {
+  if (!event.dataTransfer?.types?.includes("Files")) return;
+  fileDragDepth += 1;
+  showFileDropOverlay(true);
+});
+
+document.addEventListener("dragover", (event) => {
+  if (!event.dataTransfer?.types?.includes("Files")) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+});
+
+document.addEventListener("dragleave", (event) => {
+  if (!event.dataTransfer?.types?.includes("Files")) return;
+  fileDragDepth = Math.max(0, fileDragDepth - 1);
+  if (!fileDragDepth) showFileDropOverlay(false);
+});
+
+document.addEventListener("drop", async (event) => {
+  if (!event.dataTransfer?.files?.length) return;
+  event.preventDefault();
+  fileDragDepth = 0;
+  showFileDropOverlay(false);
+  await handlePickedFile(event.dataTransfer.files[0]);
+});
 
 
 els.linkSuggestion?.addEventListener("click", (event) => {
