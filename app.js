@@ -98,6 +98,7 @@ let pendingDependencyChoice = null;
 let pendingScheduleChoice = null;
 let pendingCascadeChoice = null;
 let lastMppFileName = null;
+let lastMppResult = null;
 let fileDragDepth = 0;
 
 function clamp(value, min, max) {
@@ -933,6 +934,27 @@ function getMppConversionSteps(fileName = "your-project.mpp") {
   ];
 }
 
+function getMppChecklistText() {
+  const fileName = lastMppFileName || "your-project.mpp";
+  const lines = [
+    "Chris's Discount Project Maker — MPP local converter notes",
+    "",
+    `Source file: ${fileName}`,
+    "",
+    "Best local-web attempt:",
+    "1. This page reads the MPP file locally in your browser.",
+    "2. If embedded Project XML/MSPDI exists, it imports that schedule directly.",
+    "3. If no XML is found, it mines the native MPP container for useful task-name hints and creates a draft XML schedule.",
+    "4. Review the recovered draft before using it as a real plan.",
+    "",
+    "Most reliable fallback:",
+    ...getMppConversionSteps(fileName).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Reality check: browser-only JavaScript cannot yet guarantee full Microsoft Project native MPP parity for every file. Project XML remains the reliable interchange format.",
+  ];
+  return lines.join("\n");
+}
+
 function showMppConversionGuide(file = null) {
   lastMppFileName = file?.name || lastMppFileName || "your-project.mpp";
   const name = escapeXml(lastMppFileName);
@@ -941,9 +963,9 @@ function showMppConversionGuide(file = null) {
   setMppPanel(`
     <div class="mpp-hero">
       <div>
-        <span class="mpp-kicker">Best static-site path</span>
+        <span class="mpp-kicker">Reliable fallback</span>
         <h3>Convert <code>${name}</code> to Project XML, then import it here.</h3>
-        <p>This site is built for GitHub Pages, so it stays simple: no server, no upload, no account, no weird background converter. Project XML is the reliable format this app can round-trip.</p>
+        <p>The local browser converter is best-effort. If it cannot recover enough from a native .mpp file, Project XML is the dependable static-site workflow.</p>
       </div>
       <div class="mpp-format-card">
         <strong>.mpp</strong>
@@ -963,55 +985,34 @@ function showMppConversionGuide(file = null) {
       `).join("")}
     </div>
 
-    <div class="mpp-dropzone" data-mpp-action="choose-xml">
-      <strong>Already converted?</strong>
-      <span>Click here to choose the XML file, or just drag the XML onto the page.</span>
-    </div>
-
     <div class="mpp-actions">
       <button type="button" class="primary" data-mpp-action="choose-xml">Import converted XML</button>
-      <button type="button" data-mpp-action="copy">Copy conversion steps</button>
+      <button type="button" data-mpp-action="copy">Copy notes</button>
       <button type="button" data-mpp-action="checklist">Download checklist</button>
       <button type="button" data-mpp-action="dismiss">Dismiss</button>
     </div>
-
-    <small><strong>Why not direct .mpp?</strong> Full native MPP parsing requires a real converter library. For a simple static website, Project XML is the professional compatibility target. This guide keeps the workflow honest and dependable.</small>
-  `, "info", "MPP import guide");
-}
-
-function getMppChecklistText() {
-  const fileName = lastMppFileName || "your-project.mpp";
-  const lines = [
-    "Chris's Discount Project Maker — MPP to XML checklist",
-    "",
-    `Source file: ${fileName}`,
-    "",
-    ...getMppConversionSteps(fileName).map((step, index) => `${index + 1}. ${step}`),
-    "",
-    "After import, review task dates, dependencies, and percent complete before exporting XML back out.",
-  ];
-  return lines.join("\n");
+  `, "info", "MPP fallback guide");
 }
 
 async function copyMppSteps() {
   const text = getMppChecklistText();
   try {
     await navigator.clipboard.writeText(text);
-    setMppPanel(`<strong>Copied.</strong> The MPP → XML steps are on your clipboard.<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="choose-xml">Import converted XML</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`, "ok", "MPP guide");
+    setMppPanel(`<strong>Copied.</strong> The local MPP converter notes are on your clipboard.<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="choose-xml">Import converted XML</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`, "ok", "MPP converter");
   } catch {
     alert(text);
   }
 }
 
 function downloadMppChecklist() {
-  downloadText(getMppChecklistText(), `${safeFileName(lastMppFileName || "mpp-conversion")}-xml-checklist.txt`, "text/plain");
+  downloadText(getMppChecklistText(), `${safeFileName(lastMppFileName || "mpp-converter")}-notes.txt`, "text/plain");
 }
 
 function chooseConvertedXml() {
   els.importXmlInput?.click();
 }
 
-function setMppPanel(message, tone = "info", label = "MPP guide") {
+function setMppPanel(message, tone = "info", label = "MPP local converter") {
   if (!els.mppPanel) return;
   els.mppPanel.hidden = false;
   els.mppPanel.classList.remove("mpp-ok", "mpp-warn", "mpp-busy");
@@ -1021,6 +1022,180 @@ function setMppPanel(message, tone = "info", label = "MPP guide") {
   els.mppPanel.innerHTML = `<strong>${escapeXml(label)}:</strong> ${message}`;
 }
 
+async function importProjectMppLocal(file) {
+  if (!file) return;
+  lastMppFileName = file.name || "project.mpp";
+
+  if (!window.NativeMppReader) {
+    setMppPanel("The browser converter script did not load. Use the XML fallback guide.", "warn", "MPP converter unavailable");
+    showMppConversionGuide(file);
+    return;
+  }
+
+  setMppPanel(`Reading <code>${escapeXml(file.name)}</code> locally in this browser. No upload, no backend, no server…`, "busy", "MPP local converter");
+
+  try {
+    const result = await window.NativeMppReader.read(file);
+    lastMppResult = result;
+
+    if (result.projectXml) {
+      importProjectXml(result.projectXml);
+      const taskCount = result.project?.taskCount ?? state.tasks.length;
+      const compressionText = result.embeddedXml?.compressed ? ` after ${escapeXml(result.embeddedXml.compression || "compressed")} decompression` : "";
+      const streamText = result.embeddedXml?.stream ? ` Found Project XML in <code>${escapeXml(result.embeddedXml.stream)}</code>${compressionText}.` : "";
+      setMppPanel(
+        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}` +
+        `<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="download-xml">Download converted XML</button><button type="button" data-mpp-action="diagnostics">Download diagnostics</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`,
+        "ok",
+        "MPP converted locally"
+      );
+      return;
+    }
+
+    const title = result.metadata?.title || result.metadata?.subject || file.name;
+    const streamCount = result.streams?.length || 0;
+    const candidates = (result.candidateStrings || []).slice(0, 12);
+    const draftCount = result.draftProject?.taskCount || 0;
+    const topStream = result.draftProject?.topStream;
+    const dateHint = result.dateHints?.[0]?.date ? ` Date hint: <code>${escapeXml(result.dateHints[0].date)}</code>.` : "";
+    const streamHint = topStream
+      ? ` Strongest recovery stream: <code>${escapeXml(topStream.stream)}</code> (${topStream.count} hints, score ${topStream.averageScore}).`
+      : "";
+    const candidateHtml = candidates.length
+      ? `<div class="mpp-recovery-list"><small><strong>Best recovered text hints</strong></small>${candidates.map((item) => `<span title="${escapeXml(item.stream || "")}">${escapeXml(item.value || item)}</span>`).join("")}</div>`
+      : "";
+    const draftAction = draftCount
+      ? `<button type="button" class="primary" data-mpp-action="draft">Load ${draftCount} recovered name${draftCount === 1 ? "" : "s"} as draft tasks</button><button type="button" data-mpp-action="download-draft-xml">Download draft XML</button>`
+      : "";
+    const textAction = candidates.length
+      ? `<button type="button" data-mpp-action="text">Download recovered text</button>`
+      : "";
+
+    setMppPanel(
+      `<div class="mpp-hero compact">
+        <div>
+          <span class="mpp-kicker">Best-effort recovery</span>
+          <h3>Read the native MPP container, but did not find embedded Project XML.</h3>
+          <p>Opened <code>${escapeXml(file.name)}</code>, found ${streamCount} internal stream${streamCount === 1 ? "" : "s"}, and detected title hint <code>${escapeXml(title)}</code>.${dateHint}${streamHint}</p>
+        </div>
+        <div class="mpp-format-card"><strong>${draftCount}</strong><span>recoverable task-name hint${draftCount === 1 ? "" : "s"}</span></div>
+      </div>` +
+      `${candidateHtml}` +
+      `<div class="mpp-actions">${draftAction}${textAction}<button type="button" data-mpp-action="diagnostics">Download diagnostics</button><button type="button" data-mpp-action="guide">Show XML fallback</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>` +
+      `<small><strong>Honest limit:</strong> this static web converter can parse the MPP/OLE wrapper and recover embedded XML or likely task text. If the schedule lives only in private binary tables, this is a draft recovery, not full Microsoft Project parity.</small>`,
+      draftCount ? "warn" : "warn",
+      "MPP recovered locally"
+    );
+  } catch (error) {
+    setMppPanel(
+      `${escapeXml(error.message || "MPP conversion failed.")} <div class="mpp-actions"><button type="button" data-mpp-action="guide">Show XML fallback</button><button type="button" data-mpp-action="checklist">Download checklist</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`,
+      "warn",
+      "MPP conversion failed"
+    );
+  }
+}
+
+function buildMppRecoveredSnapshot() {
+  const draft = lastMppResult?.draftProject;
+  if (!draft?.tasks?.length) return null;
+
+  const start = draft.start && dateOnly(draft.start) ? draft.start : (state.projectStart || today);
+  const tasks = draft.tasks.slice(0, 100).map((task, index) => {
+    const taskStart = toDateInputValue(addDays(start, index * 2));
+    const taskFinish = toDateInputValue(addDays(taskStart, 1));
+    return {
+      uid: index + 1,
+      name: task.name || `Recovered task ${index + 1}`,
+      start: taskStart,
+      finish: taskFinish,
+      durationDays: 2,
+      percent: 0,
+      predecessors: index > 0 ? [index] : [],
+      links: index > 0 ? [{ id: index, type: "FS" }] : [],
+      outlineLevel: 1,
+      recovered: true,
+      recoveryConfidence: task.confidence || 0,
+    };
+  });
+
+  return {
+    projectName: `${draft.name || lastMppResult.fileName || "Recovered MPP"} — recovered draft`,
+    projectStart: start,
+    nextUid: tasks.length + 1,
+    tasks,
+  };
+}
+
+function importMppRecoveredDraft() {
+  const snapshot = buildMppRecoveredSnapshot();
+  if (!snapshot?.tasks?.length) {
+    alert("No recovered task-name hints are available from the last MPP file.");
+    return;
+  }
+  state = snapshot;
+  render();
+  setMppPanel(`Loaded ${snapshot.tasks.length} recovered task-name hint${snapshot.tasks.length === 1 ? "" : "s"} as an editable draft. Review names, dates, and dependencies before exporting. <div class="mpp-actions"><button type="button" class="primary" data-mpp-action="download-draft-xml">Download draft XML</button><button type="button" data-mpp-action="diagnostics">Download diagnostics</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`, "ok", "Recovered draft loaded");
+}
+
+function buildXmlFromSnapshot(snapshot) {
+  const previousState = state;
+  try {
+    state = JSON.parse(JSON.stringify(snapshot));
+    return buildProjectXml();
+  } finally {
+    state = previousState;
+  }
+}
+
+function downloadMppConvertedXml() {
+  if (!lastMppResult) {
+    alert("Choose an MPP file first.");
+    return;
+  }
+  if (lastMppResult.projectXml) {
+    downloadText(lastMppResult.projectXml, `${safeFileName(lastMppResult.fileName || "converted-mpp")}.xml`, "application/xml");
+    return;
+  }
+  downloadMppDraftXml();
+}
+
+function downloadMppDraftXml() {
+  const snapshot = buildMppRecoveredSnapshot();
+  if (!snapshot?.tasks?.length) {
+    alert("No recovered draft is available from the last MPP file.");
+    return;
+  }
+  const xml = buildXmlFromSnapshot(snapshot);
+  downloadText(xml, `${safeFileName(lastMppResult?.fileName || "recovered-mpp")}-draft.xml`, "application/xml");
+}
+
+function downloadMppDiagnostics() {
+  if (!lastMppResult) {
+    alert("Choose an MPP file first.");
+    return;
+  }
+  const diagnostics = window.NativeMppReader?.buildDiagnostics
+    ? window.NativeMppReader.buildDiagnostics(lastMppResult)
+    : lastMppResult;
+  downloadText(JSON.stringify(diagnostics, null, 2), `${safeFileName(lastMppResult.fileName || "mpp")}-diagnostics.json`, "application/json");
+}
+
+function downloadMppRecoveredText() {
+  if (!lastMppResult) {
+    alert("Choose an MPP file first.");
+    return;
+  }
+  const lines = [];
+  lines.push(`Recovered text from ${lastMppResult.fileName || "MPP file"}`);
+  lines.push(`Reader: ${lastMppResult.readerVersion || "unknown"}`);
+  lines.push("");
+  (lastMppResult.candidateStrings || []).forEach((item, index) => {
+    lines.push(`${index + 1}. ${item.value}`);
+    lines.push(`   score=${item.score ?? ""} method=${item.method || ""} stream=${item.stream || ""}`);
+  });
+  downloadText(lines.join("\n"), `${safeFileName(lastMppResult.fileName || "mpp")}-recovered-text.txt`, "text/plain");
+}
+
 async function handlePickedFile(file) {
   if (!file) return;
   const lowerName = String(file.name || "").toLowerCase();
@@ -1028,7 +1203,7 @@ async function handlePickedFile(file) {
     try {
       const text = await file.text();
       importProjectXml(text);
-      setMppPanel(`Imported converted Project XML file <code>${escapeXml(file.name)}</code>.`, "ok", "Import complete");
+      setMppPanel(`Imported Project XML file <code>${escapeXml(file.name)}</code>.`, "ok", "Import complete");
     } catch (error) {
       setMppPanel(error.message || "XML import failed.", "warn", "Import failed");
       alert(error.message || "Import failed.");
@@ -1037,16 +1212,11 @@ async function handlePickedFile(file) {
   }
 
   if (lowerName.endsWith(".mpp")) {
-    showMppConversionGuide(file);
+    await importProjectMppLocal(file);
     return;
   }
 
-  setMppPanel(`That file type is not supported here. Use Project XML files ending in <code>.xml</code>. For <code>.mpp</code>, use the conversion guide.`, "warn", "Unsupported file");
-}
-
-function showFileDropOverlay(show) {
-  if (!els.fileDropOverlay) return;
-  els.fileDropOverlay.hidden = !show;
+  setMppPanel(`That file type is not supported here. Use Project XML files ending in <code>.xml</code> or native Project files ending in <code>.mpp</code>.`, "warn", "Unsupported file");
 }
 
 function exportCsv() {
@@ -2064,6 +2234,12 @@ els.mppPanel?.addEventListener("click", (event) => {
   if (!button) return;
   const action = button.dataset.mppAction;
   if (action === "choose-xml") chooseConvertedXml();
+  if (action === "draft") importMppRecoveredDraft();
+  if (action === "download-xml") downloadMppConvertedXml();
+  if (action === "download-draft-xml") downloadMppDraftXml();
+  if (action === "text") downloadMppRecoveredText();
+  if (action === "diagnostics") downloadMppDiagnostics();
+  if (action === "guide") showMppConversionGuide();
   if (action === "copy") copyMppSteps();
   if (action === "checklist") downloadMppChecklist();
   if (action === "dismiss") els.mppPanel.hidden = true;

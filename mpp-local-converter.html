@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local MPP Converter — Chris's Discount Project Maker</title>
+  <style>
+    :root { color-scheme: light; --bg:#f6f9fd; --panel:#fff; --text:#0f172a; --muted:#64748b; --line:#cbd7e7; --blue:#2563eb; --green:#12805c; --warn:#b45309; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:28px; background:var(--bg); color:var(--text); font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .wrap { max-width:1050px; margin:auto; }
+    .hero, .card { background:var(--panel); border:1px solid var(--line); border-radius:24px; box-shadow:0 20px 60px rgba(15,23,42,.08); }
+    .hero { padding:32px; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:center; }
+    h1 { margin:0; font-size:clamp(32px, 5vw, 52px); letter-spacing:-.04em; }
+    p { color:var(--muted); line-height:1.55; }
+    .badge { display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px; background:#eaf2ff; color:#1d4ed8; font-weight:800; font-size:13px; margin-bottom:12px; }
+    .drop { margin-top:22px; padding:42px; border:2px dashed #9db7d8; border-radius:24px; text-align:center; background:#f8fbff; cursor:pointer; }
+    .drop.drag { border-color:var(--blue); background:#eef6ff; }
+    .drop strong { display:block; font-size:24px; margin-bottom:8px; }
+    input[type=file] { display:none; }
+    .card { padding:24px; margin-top:18px; }
+    .status { border-left:6px solid var(--blue); }
+    .status.ok { border-left-color:var(--green); }
+    .status.warn { border-left-color:var(--warn); }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+    button, .button { border:1px solid var(--line); background:#fff; color:var(--text); padding:11px 14px; border-radius:12px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
+    button.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+    pre { overflow:auto; background:#0f172a; color:#e5e7eb; padding:16px; border-radius:14px; max-height:360px; }
+    .hints { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .hints span { padding:7px 10px; border-radius:999px; background:#eef2f7; color:#334155; font-size:13px; }
+    .fine { font-size:13px; color:#64748b; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <span class="badge">100% local browser attempt</span>
+        <h1>MPP → Project XML converter</h1>
+        <p>This page tries the best static-web conversion possible. It reads the .mpp locally, searches for embedded Project XML, and if that is not available it recovers a draft task list from text hints. No upload. No server. No account.</p>
+      </div>
+      <a class="button" href="index.html">← Back to planner</a>
+    </section>
+
+    <label id="drop" class="drop">
+      <strong>Drop an .mpp file here</strong>
+      <span>or click to choose one from your computer</span>
+      <input id="file" type="file" accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" />
+    </label>
+
+    <section id="result" class="card status" hidden></section>
+  </main>
+
+  <script src="mpp-native-reader.js"></script>
+  <script>
+    const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
+    const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
+    const drop = document.getElementById('drop');
+    const fileInput = document.getElementById('file');
+    const resultBox = document.getElementById('result');
+    let lastResult = null;
+    let lastXml = null;
+
+    function escapeXml(value) {
+      return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
+    }
+    function safeFileName(name) {
+      return String(name || 'project').trim().replace(/[^a-z0-9-_]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'project';
+    }
+    function toDateInputValue(date) {
+      const d = date ? new Date(date) : new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${day}`;
+    }
+    function addDays(value, days) {
+      const d = new Date(String(value).slice(0,10));
+      d.setDate(d.getDate() + days);
+      return toDateInputValue(d);
+    }
+    function toProjectDate(value, end=false) { return `${String(value).slice(0,10)}T${end ? '17:00:00' : '08:00:00'}`; }
+    function duration(days) { return `PT${Math.max(1, Number(days)||1)*8}H0M0S`; }
+    function downloadText(text, filename, type) {
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+    function buildDraftXml(result) {
+      const draft = result?.draftProject;
+      if (!draft?.tasks?.length) throw new Error('No draft tasks were recovered.');
+      const start = draft.start || toDateInputValue(new Date());
+      const projectName = escapeXml(`${draft.name || result.fileName || 'Recovered MPP'} - browser draft`);
+      const created = new Date().toISOString().replace(/\.\d{3}Z$/, '');
+      const tasks = draft.tasks.slice(0, 100).map((task, i) => {
+        const id = i + 1;
+        const s = addDays(start, i * 2);
+        const f = addDays(s, 1);
+        const pred = id > 1 ? `<PredecessorLink><PredecessorUID>${id-1}</PredecessorUID><Type>1</Type><CrossProject>0</CrossProject><LinkLag>0</LinkLag><LagFormat>7</LagFormat></PredecessorLink>` : '';
+        return `<Task><UID>${id}</UID><ID>${id}</ID><Name>${escapeXml(task.name || `Recovered task ${id}`)}</Name><Type>1</Type><IsNull>0</IsNull><CreateDate>${created}</CreateDate><WBS>${id}</WBS><OutlineNumber>${id}</OutlineNumber><OutlineLevel>1</OutlineLevel><Priority>500</Priority><Start>${toProjectDate(s)}</Start><Finish>${toProjectDate(f,true)}</Finish><Duration>${duration(2)}</Duration><DurationFormat>7</DurationFormat><Work>${duration(2)}</Work><PercentComplete>0</PercentComplete><Manual>1</Manual>${pred}</Task>`;
+      }).join('');
+      const finish = addDays(start, Math.max(1, draft.tasks.length * 2));
+      return `<?xml version="1.0" encoding="UTF-8"?>\n<Project xmlns="${MS_PROJECT_NS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="${MS_PROJECT_SCHEMA_LOCATION}"><SaveVersion>12</SaveVersion><Name>${projectName}</Name><Title>${projectName}</Title><Subject>Recovered locally in browser</Subject><CreationDate>${created}</CreationDate><ScheduleFromStart>1</ScheduleFromStart><StartDate>${toProjectDate(start)}</StartDate><FinishDate>${toProjectDate(finish,true)}</FinishDate><CalendarUID>1</CalendarUID><DefaultStartTime>08:00:00</DefaultStartTime><DefaultFinishTime>17:00:00</DefaultFinishTime><MinutesPerDay>480</MinutesPerDay><MinutesPerWeek>2400</MinutesPerWeek><DaysPerMonth>20</DaysPerMonth><DefaultTaskType>1</DefaultTaskType><DurationFormat>7</DurationFormat><WorkFormat>2</WorkFormat><Tasks><Task><UID>0</UID><ID>0</ID><Name>${projectName}</Name><Type>1</Type><IsNull>0</IsNull><CreateDate>${created}</CreateDate><WBS>0</WBS><OutlineNumber>0</OutlineNumber><OutlineLevel>0</OutlineLevel><Priority>500</Priority><Start>${toProjectDate(start)}</Start><Finish>${toProjectDate(finish,true)}</Finish><Duration>${duration(Math.max(1, draft.tasks.length * 2))}</Duration><DurationFormat>7</DurationFormat><Work>PT0H0M0S</Work><Summary>1</Summary><Manual>1</Manual></Task>${tasks}</Tasks></Project>`;
+    }
+    function show(html, tone='') {
+      resultBox.hidden = false;
+      resultBox.className = `card status ${tone}`;
+      resultBox.innerHTML = html;
+    }
+    async function handleFile(file) {
+      if (!file) return;
+      if (!window.NativeMppReader) { show('<h2>Reader failed to load</h2><p>The local JavaScript converter script did not load.</p>', 'warn'); return; }
+      show(`<h2>Reading ${escapeXml(file.name)}…</h2><p>No upload. The browser is parsing the file locally.</p>`);
+      try {
+        lastResult = await window.NativeMppReader.read(file);
+        if (lastResult.projectXml) {
+          lastXml = lastResult.projectXml;
+          show(`<h2>Converted from embedded Project XML</h2><p>Found import-ready Project XML inside <strong>${escapeXml(file.name)}</strong>. Tasks detected: ${lastResult.project?.taskCount ?? 'unknown'}.</p><div class="actions"><button class="primary" id="downloadXml">Download XML</button><button id="downloadDiag">Download diagnostics</button><a class="button" href="index.html">Open planner</a></div>`, 'ok');
+          return;
+        }
+        const count = lastResult.draftProject?.taskCount || 0;
+        const hints = (lastResult.candidateStrings || []).slice(0, 15).map(x => `<span>${escapeXml(x.value || x)}</span>`).join('');
+        lastXml = count ? buildDraftXml(lastResult) : null;
+        show(`<h2>Best-effort draft recovery</h2><p>The browser read the MPP container but did not find embedded XML. It recovered <strong>${count}</strong> likely task-name hints. This draft XML is useful as a starting point, not a guaranteed faithful import.</p><div class="hints">${hints}</div><div class="actions">${count ? '<button class="primary" id="downloadXml">Download draft XML</button>' : ''}<button id="downloadText">Download recovered text</button><button id="downloadDiag">Download diagnostics</button><a class="button" href="index.html">Open planner</a></div><p class="fine">For exact conversion, open the MPP in Microsoft Project and export/save as Project XML.</p>`, 'warn');
+      } catch (e) {
+        show(`<h2>Could not convert this MPP</h2><p>${escapeXml(e.message || e)}</p><p>Fallback: open the file in Microsoft Project and export/save as Project XML, then import it in the planner.</p>`, 'warn');
+      }
+    }
+    resultBox.addEventListener('click', (event) => {
+      if (event.target.id === 'downloadXml' && lastXml) downloadText(lastXml, `${safeFileName(lastResult?.fileName || 'converted-mpp')}.xml`, 'application/xml');
+      if (event.target.id === 'downloadDiag' && lastResult) downloadText(JSON.stringify(window.NativeMppReader.buildDiagnostics(lastResult), null, 2), `${safeFileName(lastResult.fileName || 'mpp')}-diagnostics.json`, 'application/json');
+      if (event.target.id === 'downloadText' && lastResult) downloadText((lastResult.candidateStrings || []).map((x,i)=>`${i+1}. ${x.value || x}\n   stream=${x.stream || ''} score=${x.score || ''}`).join('\n'), `${safeFileName(lastResult.fileName || 'mpp')}-recovered-text.txt`, 'text/plain');
+    });
+    fileInput.addEventListener('change', e => handleFile(e.target.files?.[0]));
+    ['dragenter','dragover'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.add('drag'); }));
+    ['dragleave','drop'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+    drop.addEventListener('drop', e => handleFile(e.dataTransfer.files?.[0]));
+  </script>
+</body>
+</html>

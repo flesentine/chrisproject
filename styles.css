@@ -2960,3 +2960,22 @@ body.has-cascade-suggestion .gantt-ghost-bar {
   .mpp-flow { grid-template-columns: 1fr; }
   .mpp-step { min-height: auto; }
 }
+
+.standalone-converter-link {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  display: inline-flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 13px;
+  text-decoration: none;
+}
+
+.standalone-converter-link:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}

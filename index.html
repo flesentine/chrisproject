@@ -36,13 +36,13 @@
         <div class="hero-copy">
           <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
           <h2>MS Project energy, discount price.</h2>
-          <p>Edit task data and Gantt bars on the same row. Drag bars to move dates, resize duration from the edges, and connect tasks with hover-reveal pull strings. For .mpp files, the site gives a clean conversion path to Project XML so GitHub Pages stays fast and reliable.</p>
+          <p>Edit task data and Gantt bars on the same row. Drag bars to move dates, resize duration from the edges, and connect tasks with hover-reveal pull strings. For .mpp files, the site tries a local browser-only conversion first. When the file has embedded Project XML it imports cleanly; otherwise it recovers a best-effort draft and gives you diagnostics.</p>
         </div>
 
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
           <span class="readiness-label">Export readiness</span>
           <strong id="exportStatus">Ready</strong>
-          <p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. Native .mpp gets a guided XML conversion flow.</p>
+          <p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. MPP gets a local best-effort converter with an XML fallback guide.</p>
         </aside>
       </section>
 
@@ -104,9 +104,10 @@
             <input id="importXmlInput" type="file" accept=".xml,text/xml,application/xml" />
           </label>
           <label class="file-button mpp-button">
-            Open MPP guide
+            Convert MPP locally
             <input id="importMppInput" type="file" accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" />
           </label>
+          <a class="standalone-converter-link" href="mpp-local-converter.html">Standalone converter</a>
         </div>
       </section>
 
@@ -115,7 +116,7 @@
       <div id="fileDropOverlay" class="file-drop-overlay" hidden>
         <div>
           <strong>Drop your file</strong>
-          <span>XML imports directly. MPP opens the conversion guide.</span>
+          <span>XML imports directly. MPP is read locally in this browser.</span>
         </div>
       </div>
 
@@ -144,7 +145,7 @@
     </main>
 
     <footer class="app-footer">
-      <span>Compatibility target: Microsoft Project XML / MSPDI. For .mpp, convert to XML first for a reliable static website flow.</span>
+      <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
       <span id="saveStatus">Saved locally</span>
     </footer>
   </div>
@@ -207,6 +208,7 @@
     </section>
   </div>
 
+  <script src="mpp-native-reader.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

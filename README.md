@@ -1,40 +1,46 @@
 # Chris's Discount Project Maker
 
-A lightweight Microsoft Project XML-compatible scheduling app that runs as a simple static website. It is designed for GitHub Pages: no backend, no accounts, no upload, no build system.
+A lightweight Microsoft Project XML-compatible planner with a browser-only local MPP conversion attempt.
 
 ## What it does
 
-- Edit task data and Gantt bars on the same row
+- Create and edit task schedules
+- Show a polished unified Gantt/grid like a lightweight Microsoft Project sheet
 - Drag task bars to move dates
-- Drag task edges to change duration
-- Reveal dependency pull strings on hover
-- Link tasks as FS, SS, FF, or SF
-- Review downstream changes before moving linked tasks
-- Resize columns, date cells, and the data/chart splitter by dragging
-- Import Microsoft Project XML / MSPDI files
-- Export Microsoft Project XML / MSPDI files that can be opened by Microsoft Project Desktop
+- Resize durations from the bar edges
+- Connect tasks with hover-reveal pull strings
+- Support FS, SS, FF, and SF dependency links
+- Review downstream cascade changes before moving linked tasks
+- Import/export Microsoft Project XML / MSPDI
 - Export CSV
 - Save automatically in browser localStorage
+- Try to read `.mpp` files locally in the browser without upload or backend
 
-## Great static-site MPP workflow
+## Local web MPP converter
 
-Native `.mpp` parsing is not implemented in the hosted static website. Instead, the app has a polished **MPP → Project XML guide**:
+The `Convert MPP locally` button reads `.mpp` bytes directly in the browser. Nothing is uploaded.
 
-1. Click **Open MPP guide** or drag an `.mpp` file onto the page.
-2. The app explains the safest conversion path.
-3. Open the `.mpp` file in Microsoft Project Desktop.
-4. Save/export it as Project XML / XML Data.
-5. Drag the `.xml` file back into this app or click **Import XML**.
+The converter does the best practical static-web approach:
 
-That gives you the reliable compatibility path while keeping the website simple enough to host on GitHub Pages.
+1. Reads the native OLE/compound-file container used by many `.mpp` files.
+2. Searches internal streams for embedded Microsoft Project XML / MSPDI.
+3. If XML is found, imports the schedule directly.
+4. If no XML is found, mines the binary streams for likely task names and creates a best-effort draft schedule.
+5. Lets you download diagnostics, recovered text, or draft XML.
 
-## Why XML instead of direct MPP?
+## Honest limitation
 
-Project XML / MSPDI is the professional static-web target because it is text-based and round-trippable in the browser. Native `.mpp` is a private binary project format and full-fidelity parsing requires a real converter library or backend. This app keeps the website honest and dependable instead of pretending a partial browser-only parser is full MPP support.
+This is not full Microsoft Project native `.mpp` parity. Native `.mpp` files can store schedule data in private binary tables that browser JavaScript cannot reliably decode yet. MPXJ is the proven open-source reader for real `.mpp` compatibility, but it is Java-based and normally needs a local app or backend.
+
+So the reliable interchange format remains:
+
+```text
+Microsoft Project XML / MSPDI
+```
 
 ## How to run locally
 
-Because this is a static app, you can open `index.html` directly in a browser.
+You can open `index.html` directly in a browser. You can also open `mpp-local-converter.html` as a standalone local converter page.
 
 For a cleaner local server:
 
@@ -49,13 +55,7 @@ Then open:
 http://localhost:5173
 ```
 
-## How to publish on GitHub Pages
-
-Push these files to your repository, then enable:
-
-```text
-Settings → Pages → Deploy from branch → main → /root
-```
+No Node, Java, backend, or upload is required for the static app.
 
 ## How to test with Microsoft Project
 
@@ -68,12 +68,12 @@ Settings → Pages → Deploy from branch → main → /root
 
 ## Known limitations
 
-This MVP intentionally keeps the model focused. It does not yet support:
+This MVP intentionally keeps the model small. It does not yet fully support:
 
+- Native `.mpp` parity for every file
 - Resource pools
 - Assignment units/costs
 - Baselines
-- Complex calendars
-- Constraint types beyond simple date editing
-- Full critical path calculation
-- Native `.mpp` import/export in the static hosted website
+- Complex constraints
+- Calendars beyond a simple 8-hour day
+- Critical path calculation
