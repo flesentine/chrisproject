@@ -14,7 +14,7 @@
           <img src="chris-avatar.png" alt="" />
         </div>
         <div>
-          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.17.0</span></div>
+          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.18.0</span></div>
           <h1>Chris's Discount Project Maker</h1>
         </div>
       </div>
@@ -75,6 +75,7 @@
           <button id="newProjectBtn" type="button">New</button>
           <button id="sampleBtn" type="button">Load sample</button>
           <button id="addTaskBtn" type="button" class="primary">+ Add task</button>
+          <button id="addResourceBtn" type="button">+ Resource</button>
           <button id="taskInfoBtn" type="button">Task info</button>
           <button id="indentTaskBtn" type="button" title="Indent selected task">Indent →</button>
           <button id="outdentTaskBtn" type="button" title="Outdent selected task">← Outdent</button>
@@ -85,6 +86,10 @@
         </div>
         <div class="command-group layout-tools" aria-label="View controls">
           <span class="group-label">View</span>
+          <div class="view-switcher" role="group" aria-label="Switch views">
+            <button id="scheduleViewBtn" type="button" class="is-active">Gantt Chart</button>
+            <button id="resourceViewBtn" type="button">Resource Sheet</button>
+          </div>
           <div class="drag-help">
             <strong>Drag to resize</strong>
             <small>Column edges, date headers, or the big splitter. Pull the splitter left to hide data columns.</small>
@@ -145,11 +150,41 @@
           </div>
         </article>
       </section>
+
+      <section id="resourceWorkspace" class="workspace resource-workspace" hidden>
+        <article class="work-card resource-card" aria-label="Resource Sheet">
+          <div class="card-header">
+            <div>
+              <h2>Resource Sheet</h2>
+              <p>MS Project-style list of people, equipment, materials, and cost resources. Assigning these to tasks is the next build.</p>
+            </div>
+            <span class="card-badge" id="resourceCount">0 resources</span>
+          </div>
+
+          <div class="resource-sheet-shell">
+            <div class="resource-grid resource-grid-heading" aria-hidden="true">
+              <span>ID</span>
+              <span>i</span>
+              <span>Resource Name</span>
+              <span>Type</span>
+              <span>Initials</span>
+              <span>Max Units</span>
+              <span>Std Rate</span>
+              <span>Ovt Rate</span>
+              <span>Cost/Use</span>
+              <span>Base Calendar</span>
+              <span>Notes</span>
+              <span>Actions</span>
+            </div>
+            <div id="resourceBody" class="resource-body"></div>
+          </div>
+        </article>
+      </section>
     </main>
 
     <footer class="app-footer">
       <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-      <span class="footer-status"><span id="appVersionFooter">v0.17.0</span><span id="saveStatus">Saved locally</span></span>
+      <span class="footer-status"><span id="appVersionFooter">v0.18.0</span><span id="saveStatus">Saved locally</span></span>
     </footer>
   </div>
 

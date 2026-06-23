@@ -3824,3 +3824,124 @@ body.has-cascade-suggestion .gantt-ghost-bar {
   }
   .task-info-tabs { top: 76px; }
 }
+
+
+/* Resource Sheet v0.18.0 */
+.view-switcher {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.view-switcher button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.view-switcher button.is-active {
+  color: #fff;
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.resource-workspace[hidden],
+#workspace[hidden] { display: none !important; }
+
+.resource-card { overflow: hidden; }
+
+.resource-sheet-shell {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.resource-grid,
+.resource-row {
+  display: grid;
+  grid-template-columns: 52px 54px minmax(260px, 1.8fr) 130px 92px 112px 116px 116px 116px 150px minmax(220px, 1.2fr) 92px;
+  min-width: 1420px;
+}
+
+.resource-grid-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: var(--muted);
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  border-bottom: 1px solid var(--line-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.resource-grid-heading span,
+.resource-cell {
+  min-width: 0;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+}
+
+.resource-grid-heading span:last-child,
+.resource-cell:last-child { border-right: 0; }
+
+.resource-row {
+  min-height: 54px;
+  border-bottom: 1px solid var(--line);
+  align-items: stretch;
+}
+
+.resource-row:nth-child(even) { background: rgba(248, 250, 252, 0.82); }
+.resource-row:hover { background: #f3f8ff; }
+.resource-row:last-child { border-bottom: 0; }
+
+.resource-cell {
+  display: flex;
+  align-items: center;
+}
+
+.resource-cell input,
+.resource-cell select {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 8px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.resource-id,
+.resource-indicator {
+  justify-content: center;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.resource-indicator { font-size: 16px; }
+
+.resource-actions .delete-btn {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.resource-empty {
+  display: grid;
+  gap: 6px;
+  padding: 24px;
+  color: var(--muted);
+}
+
+.resource-empty strong {
+  color: var(--text-strong);
+  font-size: 15px;
+}
+
+@media (max-width: 820px) {
+  .view-switcher { width: 100%; }
+  .view-switcher button { flex: 1 1 0; }
+}

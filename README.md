@@ -142,7 +142,7 @@ Positive values are lag. Negative values are lead. Auto Schedule and cascade sch
 
 ## Compact Entry view and Task Information dialog
 
-Version `v0.17.0` makes the main grid closer to Microsoft Project's default Entry/Gantt Chart pattern: keep the common schedule fields visible and move the less-common fields into Task Information.
+Version `v0.18.0` makes the main grid closer to Microsoft Project's default Entry/Gantt Chart pattern: keep the common schedule fields visible and move the less-common fields into Task Information.
 
 The visible row now focuses on:
 
@@ -170,3 +170,14 @@ Open Task Information by selecting a row and clicking **Task info**, clicking th
 Summary tasks keep their rollup fields read-only in the dialog. Their start, finish, duration, and percent complete still come from their child tasks.
 
 Task notes still round-trip through Project XML using `<Notes>` when present.
+
+
+## v0.18.0 — Resource Sheet
+
+- Added a Resource Sheet view alongside the compact Gantt Chart view.
+- Added editable resources with name, type, initials, max units, standard rate, overtime rate, cost/use, base calendar, and notes.
+- Added sample resources for the demo project.
+- Added Project XML resource import/export support.
+- CSV export now includes a resources section after the task table.
+
+This adds the resource master list. The next roadmap item is the assignment model that connects resources to tasks.

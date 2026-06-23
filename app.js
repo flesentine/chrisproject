@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v3-compact";
-const APP_VERSION = "v0.17.0";
-const APP_VERSION_NAME = "MS Project-style compact rows";
+const APP_VERSION = "v0.18.0";
+const APP_VERSION_NAME = "Resource Sheet";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
@@ -28,6 +28,7 @@ const CONSTRAINT_LABELS = {
 const CONSTRAINT_TO_PROJECT = { ASAP: 0, ALAP: 1, MSO: 2, MFO: 3, SNET: 4, SNLT: 5, FNET: 6, FNLT: 7 };
 const PROJECT_TO_CONSTRAINT = { 0: "ASAP", 1: "ALAP", 2: "MSO", 3: "MFO", 4: "SNET", 5: "SNLT", 6: "FNET", 7: "FNLT" };
 const CONSTRAINTS_REQUIRING_DATE = new Set(["MSO", "MFO", "SNET", "SNLT", "FNET", "FNLT"]);
+const RESOURCE_TYPES = ["Work", "Material", "Cost"];
 
 const DAY_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAME_TO_INDEX = new Map(DAY_SHORT_NAMES.map((name, index) => [name.toLowerCase(), index]));
@@ -68,6 +69,9 @@ const els = {
   newProjectBtn: document.getElementById("newProjectBtn"),
   sampleBtn: document.getElementById("sampleBtn"),
   addTaskBtn: document.getElementById("addTaskBtn"),
+  addResourceBtn: document.getElementById("addResourceBtn"),
+  scheduleViewBtn: document.getElementById("scheduleViewBtn"),
+  resourceViewBtn: document.getElementById("resourceViewBtn"),
   taskInfoBtn: document.getElementById("taskInfoBtn"),
   indentTaskBtn: document.getElementById("indentTaskBtn"),
   outdentTaskBtn: document.getElementById("outdentTaskBtn"),
@@ -89,6 +93,9 @@ const els = {
   compatChip: document.getElementById("compatChip"),
   readinessCard: document.getElementById("readinessCard"),
   workspace: document.getElementById("workspace"),
+  resourceWorkspace: document.getElementById("resourceWorkspace"),
+  resourceBody: document.getElementById("resourceBody"),
+  resourceCount: document.getElementById("resourceCount"),
   chartWidthControl: document.getElementById("chartWidthControl"),
   dayWidthControl: document.getElementById("dayWidthControl"),
   rowHeightControl: document.getElementById("rowHeightControl"),
@@ -140,8 +147,11 @@ let state = {
   projectName: "New Project",
   projectStart: today,
   nextUid: 2,
+  nextResourceUid: 1,
+  activeView: "schedule",
   calendar: { ...STANDARD_CALENDAR },
   tasks: [],
+  resources: [],
 };
 
 const DEFAULT_UI_PREFS = {
@@ -518,6 +528,66 @@ function normalizePercent(value) {
 function normalizeDateValue(value) {
   const d = dateOnly(value);
   return d ? toDateInputValue(d) : "";
+}
+
+
+function normalizeResourceType(value) {
+  const text = String(value || "Work").trim().toLowerCase();
+  const found = RESOURCE_TYPES.find((type) => type.toLowerCase() === text);
+  return found || "Work";
+}
+
+function parseRateValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const n = Number(text.replace(/[^0-9.-]+/g, ""));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function formatMoney(value) {
+  const n = parseRateValue(value);
+  return n ? `$${n.toFixed(n % 1 ? 2 : 0)}` : "$0";
+}
+
+function normalizeMaxUnits(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return 100;
+  const n = Number(text.replace("%", ""));
+  return Number.isFinite(n) ? Math.min(1000, Math.max(0, Math.round(n))) : 100;
+}
+
+function normalizeResource(resource = {}, index = 0) {
+  const name = String(resource.name || resource.resourceName || "").trim() || `Resource ${index + 1}`;
+  const type = normalizeResourceType(resource.type);
+  const initials = String(resource.initials || name.split(/\s+/).map((part) => part[0]).join("").slice(0, 4).toUpperCase() || "R").trim().slice(0, 8);
+  return {
+    uid: Number.isInteger(Number(resource.uid)) && Number(resource.uid) > 0 ? Number(resource.uid) : index + 1,
+    id: index + 1,
+    name,
+    type,
+    initials,
+    maxUnits: normalizeMaxUnits(resource.maxUnits ?? resource.max_units ?? 100),
+    standardRate: parseRateValue(resource.standardRate ?? resource.standard_rate ?? 0),
+    overtimeRate: parseRateValue(resource.overtimeRate ?? resource.overtime_rate ?? 0),
+    costPerUse: parseRateValue(resource.costPerUse ?? resource.cost_per_use ?? 0),
+    baseCalendar: String(resource.baseCalendar || resource.calendar || "Standard").trim() || "Standard",
+    notes: String(resource.notes || ""),
+  };
+}
+
+function ensureResources() {
+  state.resources = Array.isArray(state.resources) ? state.resources.map(normalizeResource) : [];
+  const maxUid = state.resources.reduce((max, resource) => Math.max(max, Number(resource.uid) || 0), 0);
+  state.nextResourceUid = Math.max(Number(state.nextResourceUid) || 1, maxUid + 1);
+}
+
+function makeSampleResource(uid, name, type = "Work", initials = "", maxUnits = 100, standardRate = 0, overtimeRate = 0, costPerUse = 0, notes = "") {
+  return normalizeResource({ uid, name, type, initials, maxUnits, standardRate, overtimeRate, costPerUse, baseCalendar: "Standard", notes }, uid - 1);
+}
+
+function resourceTypeOptions(selected) {
+  const normalized = normalizeResourceType(selected);
+  return RESOURCE_TYPES.map((type) => `<option value="${type}"${type === normalized ? " selected" : ""}>${type}</option>`).join("");
 }
 
 function normalizeConstraintType(value) {
@@ -1013,6 +1083,7 @@ function outdentSelectedTask() {
 
 function save() {
   ensureDecorations();
+  ensureResources();
   rollupSummaryTasks();
   ensureDecorations();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1031,9 +1102,13 @@ function load() {
       projectName: parsed.projectName || "New Project",
       projectStart: parsed.projectStart || today,
       nextUid: parsed.nextUid || 2,
+      nextResourceUid: parsed.nextResourceUid || 1,
+      activeView: parsed.activeView || "schedule",
       calendar: normalizeCalendar(parsed.calendar),
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      resources: Array.isArray(parsed.resources) ? parsed.resources : [],
     };
+    ensureResources();
   } catch {
     loadSample(false);
   }
@@ -1043,6 +1118,7 @@ function render() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
+  ensureResources();
   applyUiPrefs();
   refreshCalendarControls();
   els.projectName.value = state.projectName;
@@ -1052,6 +1128,8 @@ function render() {
   renderSummary();
   renderVersion();
   renderValidation();
+  renderResourceSheet();
+  updateActiveView();
   renderScheduleLinkSuggestion();
   renderCascadeImpactSuggestion();
   refreshTaskInfoPanel();
@@ -1101,6 +1179,79 @@ function renderVersion() {
   if (els.appVersionFooter) {
     els.appVersionFooter.textContent = `${text} · Build ${APP_BUILD_DATE}`;
   }
+}
+
+
+function setActiveView(view) {
+  state.activeView = view === "resources" ? "resources" : "schedule";
+  updateActiveView();
+  save();
+}
+
+function updateActiveView() {
+  const view = state.activeView === "resources" ? "resources" : "schedule";
+  if (els.workspace) els.workspace.hidden = view !== "schedule";
+  if (els.resourceWorkspace) els.resourceWorkspace.hidden = view !== "resources";
+  els.scheduleViewBtn?.classList.toggle("is-active", view === "schedule");
+  els.resourceViewBtn?.classList.toggle("is-active", view === "resources");
+}
+
+function renderResourceSheet() {
+  ensureResources();
+  if (els.resourceCount) els.resourceCount.textContent = `${state.resources.length} resource${state.resources.length === 1 ? "" : "s"}`;
+  if (!els.resourceBody) return;
+  if (!state.resources.length) {
+    els.resourceBody.innerHTML = `
+      <div class="resource-empty">
+        <strong>No resources yet.</strong>
+        <span>Add people, teams, equipment, materials, or fixed-cost placeholders here. Assignments come next.</span>
+      </div>`;
+    return;
+  }
+  els.resourceBody.innerHTML = state.resources.map((resource, index) => `
+    <div class="resource-row" data-resource-index="${index}">
+      <div class="resource-cell resource-id">${resource.id}</div>
+      <div class="resource-cell resource-indicator" title="${resource.type} resource">${resource.type === "Work" ? "👤" : resource.type === "Material" ? "📦" : "💵"}</div>
+      <div class="resource-cell"><input data-resource-index="${index}" data-resource-field="name" type="text" value="${escapeXml(resource.name)}" /></div>
+      <div class="resource-cell"><select data-resource-index="${index}" data-resource-field="type">${resourceTypeOptions(resource.type)}</select></div>
+      <div class="resource-cell"><input data-resource-index="${index}" data-resource-field="initials" type="text" value="${escapeXml(resource.initials)}" /></div>
+      <div class="resource-cell unit-cell"><input data-resource-index="${index}" data-resource-field="maxUnits" type="text" value="${resource.maxUnits}%" /></div>
+      <div class="resource-cell rate-cell"><input data-resource-index="${index}" data-resource-field="standardRate" type="text" value="${escapeXml(formatMoney(resource.standardRate))}" /></div>
+      <div class="resource-cell rate-cell"><input data-resource-index="${index}" data-resource-field="overtimeRate" type="text" value="${escapeXml(formatMoney(resource.overtimeRate))}" /></div>
+      <div class="resource-cell rate-cell"><input data-resource-index="${index}" data-resource-field="costPerUse" type="text" value="${escapeXml(formatMoney(resource.costPerUse))}" /></div>
+      <div class="resource-cell"><input data-resource-index="${index}" data-resource-field="baseCalendar" type="text" value="${escapeXml(resource.baseCalendar)}" /></div>
+      <div class="resource-cell"><input data-resource-index="${index}" data-resource-field="notes" type="text" value="${escapeXml(resource.notes)}" placeholder="notes" /></div>
+      <div class="resource-cell resource-actions"><button type="button" class="delete-btn" data-resource-action="delete" data-resource-index="${index}">Delete</button></div>
+    </div>`).join("");
+}
+
+function addResource() {
+  ensureResources();
+  const index = state.resources.length;
+  state.resources.push(makeSampleResource(state.nextResourceUid++, `Resource ${index + 1}`, "Work", `R${index + 1}`, 100, 0, 0, 0));
+  state.activeView = "resources";
+  render();
+}
+
+function updateResource(index, field, value) {
+  ensureResources();
+  const resource = state.resources[index];
+  if (!resource) return;
+  if (field === "type") resource.type = normalizeResourceType(value);
+  else if (field === "maxUnits") resource.maxUnits = normalizeMaxUnits(value);
+  else if (["standardRate", "overtimeRate", "costPerUse"].includes(field)) resource[field] = parseRateValue(value);
+  else if (field === "initials") resource.initials = String(value || "").trim().slice(0, 8);
+  else if (field === "baseCalendar") resource.baseCalendar = String(value || "Standard").trim() || "Standard";
+  else if (field === "notes") resource.notes = String(value || "");
+  else if (field === "name") resource.name = String(value || "").trim() || `Resource ${index + 1}`;
+  state.resources[index] = normalizeResource(resource, index);
+  render();
+}
+
+function deleteResource(index) {
+  ensureResources();
+  state.resources.splice(index, 1);
+  render();
 }
 
 function renderTaskTable() {
@@ -1807,6 +1958,26 @@ function buildProjectXml() {
       <Manual>1</Manual>
     </Task>`;
 
+  ensureResources();
+  const resourcesXml = state.resources.map((resource) => `
+    <Resource>
+      <UID>${resource.uid}</UID>
+      <ID>${resource.id}</ID>
+      <Name>${escapeXml(resource.name)}</Name>
+      <Type>${resource.type === "Material" ? 1 : resource.type === "Cost" ? 2 : 0}</Type>
+      <IsNull>0</IsNull>
+      <Initials>${escapeXml(resource.initials)}</Initials>
+      <MaxUnits>${(resource.maxUnits / 100).toFixed(2)}</MaxUnits>
+      <StandardRate>${resource.standardRate}</StandardRate>
+      <StandardRateFormat>2</StandardRateFormat>
+      <OvertimeRate>${resource.overtimeRate}</OvertimeRate>
+      <OvertimeRateFormat>2</OvertimeRateFormat>
+      <CostPerUse>${resource.costPerUse}</CostPerUse>
+      <AccrueAt>3</AccrueAt>
+      <BaseCalendarUID>1</BaseCalendarUID>${resource.notes ? `
+      <Notes>${escapeXml(resource.notes)}</Notes>` : ""}
+    </Resource>`).join("");
+
   const taskXml = state.tasks.map((task) => {
     const durationMinutes = normalizeDurationMinutes(task.durationMinutes, (task.durationDays || workDaysBetween(task.start, task.finish)) * getCalendar().minutesPerDay);
     const predecessors = getTaskLinks(task).map((link) => {
@@ -1912,6 +2083,8 @@ function buildProjectXml() {
   ${buildCalendarsXml()}
   <Tasks>${rootTask}${taskXml}
   </Tasks>
+  <Resources>${resourcesXml}
+  </Resources>
 </Project>`;
 }
 
@@ -1991,13 +2164,43 @@ function importProjectXml(text) {
 
   if (!rawTasks.length) throw new Error("No usable tasks were found in that Project XML file.");
 
+  const resourceNodes = [...xml.getElementsByTagName("Resource")];
+  const importedResources = [];
+  resourceNodes.forEach((node) => {
+    const id = Number(childText(node, "ID"));
+    const uid = Number(childText(node, "UID"));
+    const isNull = childText(node, "IsNull") === "1";
+    const name = childText(node, "Name");
+    if (isNull || id === 0 || !name) return;
+    const typeCode = Number(childText(node, "Type"));
+    const type = typeCode === 1 ? "Material" : typeCode === 2 ? "Cost" : "Work";
+    const maxUnitsRaw = childText(node, "MaxUnits");
+    const maxUnits = maxUnitsRaw ? Math.round(Number(maxUnitsRaw) * 100) : 100;
+    importedResources.push(normalizeResource({
+      uid: Number.isFinite(uid) && uid > 0 ? uid : importedResources.length + 1,
+      name,
+      type,
+      initials: childText(node, "Initials"),
+      maxUnits,
+      standardRate: childText(node, "StandardRate"),
+      overtimeRate: childText(node, "OvertimeRate"),
+      costPerUse: childText(node, "CostPerUse"),
+      baseCalendar: "Standard",
+      notes: childText(node, "Notes"),
+    }, importedResources.length));
+  });
+
   const maxUid = Math.max(...rawTasks.map((task) => task.uid), 1);
+  const maxResourceUid = importedResources.length ? Math.max(...importedResources.map((resource) => resource.uid), 0) : 0;
   state = {
     projectName: importedProjectName,
     projectStart: importedStart,
     nextUid: maxUid + 1,
+    nextResourceUid: maxResourceUid + 1,
+    activeView: "schedule",
     calendar: importCalendarsFromXml(projectNode),
     tasks: rawTasks,
+    resources: importedResources,
   };
   render();
 }
@@ -2334,6 +2537,13 @@ function exportCsv() {
       task.rollupLeafCount || 0,
     ]);
   });
+  rows.push([]);
+  rows.push(["Resources"]);
+  rows.push(["ID", "Name", "Type", "Initials", "MaxUnits", "StandardRate", "OvertimeRate", "CostPerUse", "BaseCalendar", "Notes"]);
+  ensureResources();
+  state.resources.forEach((resource) => {
+    rows.push([resource.id, resource.name, resource.type, resource.initials, `${resource.maxUnits}%`, resource.standardRate, resource.overtimeRate, resource.costPerUse, resource.baseCalendar, resource.notes]);
+  });
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
   downloadText(csv, `${safeFileName(state.projectName)}.csv`, "text/csv");
 }
@@ -2388,7 +2598,15 @@ function loadSample(shouldRender = true) {
     projectName: "Chris Discount Launch Plan",
     projectStart: start,
     nextUid: 8,
+    nextResourceUid: 5,
+    activeView: state.activeView || "schedule",
     calendar: normalizeCalendar(state.calendar),
+    resources: [
+      makeSampleResource(1, "Project Manager", "Work", "PM", 100, 95, 120, 0, "Owns schedule, status, and stakeholder follow-up."),
+      makeSampleResource(2, "Engineer", "Work", "ENG", 100, 120, 160, 0, "Build and integration work."),
+      makeSampleResource(3, "QA Tester", "Work", "QA", 100, 85, 110, 0, "Validation and regression testing."),
+      makeSampleResource(4, "Cloud lab", "Cost", "LAB", 0, 0, 0, 250, "Fixed environment cost placeholder."),
+    ],
     tasks: [
       makeSampleTask(1, "Finalize requirements", 0, 2, 100),
       makeSampleTask(2, "Build import/export MVP", 2, 4, 70, [{ id: 1, type: "FS" }]),
@@ -3443,6 +3661,19 @@ els.taskBody.addEventListener("click", (event) => {
 
 
 
+
+els.resourceBody?.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+  updateResource(Number(target.dataset.resourceIndex), target.dataset.resourceField, target.value);
+});
+
+els.resourceBody?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-resource-action='delete']");
+  if (!button) return;
+  deleteResource(Number(button.dataset.resourceIndex));
+});
+
 els.workingDaysInput?.addEventListener("change", () => {
   const days = parseWorkingDaysInput(els.workingDaysInput.value);
   state.calendar = normalizeCalendar({ ...getCalendar(), workingDays: days.length ? days : STANDARD_CALENDAR.workingDays });
@@ -3472,12 +3703,15 @@ els.projectStart.addEventListener("change", () => {
 });
 
 els.newProjectBtn.addEventListener("click", () => {
-  state = { projectName: "New Project", projectStart: today, nextUid: 1, calendar: normalizeCalendar(state.calendar), tasks: [] };
+  state = { projectName: "New Project", projectStart: today, nextUid: 1, nextResourceUid: 1, activeView: "schedule", calendar: normalizeCalendar(state.calendar), tasks: [], resources: [] };
   addTask();
 });
 
 els.sampleBtn.addEventListener("click", () => loadSample(true));
 els.addTaskBtn.addEventListener("click", addTask);
+els.addResourceBtn?.addEventListener("click", addResource);
+els.scheduleViewBtn?.addEventListener("click", () => setActiveView("schedule"));
+els.resourceViewBtn?.addEventListener("click", () => setActiveView("resources"));
 els.taskInfoBtn?.addEventListener("click", () => openTaskInfo());
 els.indentTaskBtn?.addEventListener("click", indentSelectedTask);
 els.outdentTaskBtn?.addEventListener("click", outdentSelectedTask);
