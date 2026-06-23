@@ -1,0 +1,19 @@
+/* v0.25.1 Stitch canvas hotfixes. */
+.stitch-gantt-row {
+  position: absolute;
+  left: 0;
+}
+
+.stitch-gantt-bar {
+  pointer-events: none;
+}
+
+.stitch-detail-popover {
+  right: 18px;
+}
+
+.projecthub-stitch-theme .pane-splitter,
+.projecthub-stitch-theme .column-resize-handle,
+.projecthub-stitch-theme .date-resize-handle {
+  display: none !important;
+}
