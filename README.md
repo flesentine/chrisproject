@@ -1,6 +1,14 @@
-# Chris's Discount Project Maker — v0.24.0
+# Chris's Discount Project Maker — v0.24.1
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
+
+## v0.24.1 changes
+
+- Polished the Stitch / ProjectHub visual refresh after reviewing the live app screenshot.
+- Docked the selected-task detail card into the right side of the schedule card instead of letting it float over rows and tooltips.
+- Docked the Project Health card into the page header grid instead of absolutely floating over the canvas.
+- Tightened the default task-list split and task-name column so the Gantt chart appears beside the list instead of being pushed offscreen.
+- Added a cache-busted polish stylesheet so existing GitHub Pages visitors pick up the layout fix.
 
 ## v0.24.0 changes
 
