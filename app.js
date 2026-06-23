@@ -389,6 +389,19 @@ function subtractWorkingDays(value, workDays) {
   return date;
 }
 
+function subtractWorkingDaysBefore(value, workDays = 1) {
+  const first = previousWorkingDay(value, false);
+  return subtractWorkingDays(first, workDays);
+}
+
+function applyLagToWorkingDate(value, lagMinutes = 0) {
+  const base = nextWorkingDay(value, true);
+  const minutes = normalizeLagMinutes(lagMinutes);
+  if (!minutes) return base;
+  const workDays = durationMinutesToWorkingDays(Math.abs(minutes));
+  return minutes > 0 ? addWorkingDaysAfter(base, workDays) : subtractWorkingDaysBefore(base, workDays);
+}
+
 function workDaysBetween(start, finish) {
   const s = dateOnly(start);
   const f = dateOnly(finish);
@@ -468,20 +481,47 @@ function normalizeLinkType(value) {
   return LINK_TYPES.includes(text) ? text : "FS";
 }
 
+function normalizeLagMinutes(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+function parseLagExpression(value) {
+  const raw = String(value || "").replace(/\s+/g, "");
+  if (!raw) return 0;
+  const sign = raw.startsWith("-") ? -1 : 1;
+  let body = raw.replace(/^[+-]/, "");
+  if (!body) return 0;
+  if (/^\d+(?:\.\d+)?$/.test(body)) body = `${body}d`;
+  return sign * durationToMinutes(body, getCalendar().minutesPerDay);
+}
+
+function formatLag(lagMinutes) {
+  const minutes = normalizeLagMinutes(lagMinutes);
+  if (!minutes) return "";
+  const sign = minutes > 0 ? "+" : "-";
+  return `${sign}${formatDuration(Math.abs(minutes))}`;
+}
+
+function formatLink(link) {
+  return `${link.id}${normalizeLinkType(link.type)}${formatLag(link.lagMinutes)}`;
+}
+
 function normalizeTaskLinks(task) {
   const rawLinks = Array.isArray(task.links) && task.links.length
     ? task.links
-    : (task.predecessors || []).map((id) => ({ id, type: "FS" }));
+    : (task.predecessors || []).map((id) => ({ id, type: "FS", lagMinutes: 0 }));
   const seen = new Set();
   const normalized = [];
 
   rawLinks.forEach((link) => {
     const id = Number(typeof link === "object" ? (link.id ?? link.predId ?? link.predecessorId) : link);
     const type = normalizeLinkType(typeof link === "object" ? link.type : "FS");
+    const lagMinutes = normalizeLagMinutes(typeof link === "object" ? (link.lagMinutes ?? link.lag ?? link.linkLagMinutes ?? 0) : 0);
     const key = `${id}:${type}`;
     if (!Number.isInteger(id) || id <= 0 || seen.has(key)) return;
     seen.add(key);
-    normalized.push({ id, type });
+    normalized.push({ id, type, lagMinutes });
   });
 
   return normalized;
@@ -492,7 +532,7 @@ function getTaskLinks(task) {
 }
 
 function formatLinks(links) {
-  return getTaskLinks({ links }).map((link) => `${link.id}${link.type}`).join(",");
+  return getTaskLinks({ links }).map(formatLink).join(",");
 }
 
 function getSuccessorLinks(taskId) {
@@ -501,14 +541,14 @@ function getSuccessorLinks(taskId) {
   const successors = [];
   state.tasks.forEach((candidate) => {
     getTaskLinks(candidate).forEach((link) => {
-      if (link.id === id) successors.push({ id: candidate.id, type: link.type });
+      if (link.id === id) successors.push({ id: candidate.id, type: link.type, lagMinutes: link.lagMinutes });
     });
   });
-  return successors.sort((a, b) => a.id - b.id || LINK_TYPES.indexOf(a.type) - LINK_TYPES.indexOf(b.type));
+  return successors.sort((a, b) => a.id - b.id || LINK_TYPES.indexOf(a.type) - LINK_TYPES.indexOf(b.type) || normalizeLagMinutes(a.lagMinutes) - normalizeLagMinutes(b.lagMinutes));
 }
 
 function formatSuccessorLinks(taskId) {
-  return getSuccessorLinks(taskId).map((link) => `${link.id}${link.type}`).join(",");
+  return getSuccessorLinks(taskId).map(formatLink).join(",");
 }
 
 function parseLinksInput(value, selfId) {
@@ -516,22 +556,24 @@ function parseLinksInput(value, selfId) {
   if (!text) return [];
   const links = [];
   const seen = new Set();
-  const matches = text.matchAll(/(\d+)\s*[:\-]?\s*(FS|SS|FF|SF)?/gi);
+  const linkPattern = /(\d+)\s*[:\-]?\s*(FS|SS|FF|SF)?\s*([+-]\s*\d*(?:\.\d+)?\s*(?:w(?:eeks?|ks?)?|d(?:ays?)?|h(?:ours?|rs?)?|m(?:in(?:ute)?s?)?)?)?/gi;
+  let match;
 
-  for (const match of matches) {
+  while ((match = linkPattern.exec(text)) !== null) {
     const id = Number(match[1]);
     const type = normalizeLinkType(match[2] || "FS");
+    const lagMinutes = parseLagExpression(match[3] || "");
     const key = `${id}:${type}`;
     if (!Number.isInteger(id) || id <= 0 || id === selfId || seen.has(key)) continue;
     seen.add(key);
-    links.push({ id, type });
+    links.push({ id, type, lagMinutes });
   }
 
   return links;
 }
 
 function describeLink(link) {
-  return `${link.id}${link.type}`;
+  return formatLink(link);
 }
 
 function normalizeDurationMinutes(value, fallback = getCalendar().minutesPerDay) {
@@ -983,7 +1025,7 @@ function renderGantt() {
               <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
             </div>
           </div>
-          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="none" title="Predecessors: tasks this row waits for. Type 1FS, 2SS, 3FF, or 4SF, or use the pull strings on the Gantt bars." /></div>
+          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="none" title="Predecessors: tasks this row waits for. Type 1FS, 2SS, 3FF, 4SF, or add lag/lead like 1FS+2d or 2SS-4h. Pull strings on the Gantt bars for quick links." /></div>
           <div class="planner-cell"><input class="readonly-link-field" value="${escapeXml(successorText)}" placeholder="none" readonly aria-readonly="true" title="Successors: calculated from other rows that list this task as a predecessor. Edit those rows' Pred fields to change this." /></div>
           <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
@@ -1030,21 +1072,21 @@ function validateProject() {
         const predFinish = dateOnly(pred.finish);
         const taskStart = dateOnly(task.start);
         const taskFinish = dateOnly(task.finish);
-        const requiredFsStart = addWorkingDaysAfter(predFinish, 1);
-        const requiredSsStart = nextWorkingDay(predStart, true);
-        const requiredFfFinish = previousWorkingDay(predFinish, true);
-        const requiredSfFinish = previousWorkingDay(predStart, true);
+        const requiredFsStart = applyLagToWorkingDate(addWorkingDaysAfter(predFinish, 1), link.lagMinutes);
+        const requiredSsStart = applyLagToWorkingDate(predStart, link.lagMinutes);
+        const requiredFfFinish = applyLagToWorkingDate(predFinish, link.lagMinutes);
+        const requiredSfFinish = applyLagToWorkingDate(predStart, link.lagMinutes);
         if (link.type === "FS" && taskStart < requiredFsStart) {
-          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before the next working day after task ${predId} finishes. Use Auto schedule or adjust dates.`);
+          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before ${formatFriendlyDate(requiredFsStart)}. Use Auto schedule or adjust dates.`);
         }
         if (link.type === "SS" && taskStart < requiredSsStart) {
-          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before task ${predId} starts.`);
+          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before ${formatFriendlyDate(requiredSsStart)}.`);
         }
         if (link.type === "FF" && taskFinish < requiredFfFinish) {
-          issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before task ${predId} finishes.`);
+          issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before ${formatFriendlyDate(requiredFfFinish)}.`);
         }
         if (link.type === "SF" && taskFinish < requiredSfFinish) {
-          issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before task ${predId} starts.`);
+          issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before ${formatFriendlyDate(requiredSfFinish)}.`);
         }
       }
       if (predId >= task.id) {
@@ -1087,14 +1129,14 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, percent complete, WBS, outline level, predecessors, calculated successors, and project calendar.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, and project calendar.</p></div></div>`;
     return;
   }
 
   els.validationPanel.innerHTML = `
     <div class="validation-card warn">
       <div>
-        <p><strong>${issues.length} thing${issues.length === 1 ? "" : "s"} to fix before export.</strong> Auto Schedule can fix most dependency timing issues.</p>
+        <p><strong>${issues.length} thing${issues.length === 1 ? "" : "s"} to fix before export.</strong> Auto Schedule can fix most dependency timing issues, including lag/lead.</p>
         <ul>${issues.slice(0, 8).map((issue) => `<li>${escapeXml(issue)}</li>`).join("")}</ul>
       </div>
     </div>`;
@@ -1262,6 +1304,18 @@ function importCalendarsFromXml(projectNode) {
   });
 }
 
+function projectLinkLagValue(lagMinutes) {
+  return Math.round(normalizeLagMinutes(lagMinutes) * 10);
+}
+
+function parseProjectLinkLag(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  // MSPDI stores LinkLag in tenths of minutes. Older exports with tiny values
+  // are treated as minutes so we do not turn a user-entered 2 into 0.2 minutes.
+  return Math.round(Math.abs(n) > 50 ? n / 10 : n);
+}
+
 function buildProjectXml() {
   ensureDecorations();
   rollupSummaryTasks();
@@ -1305,7 +1359,7 @@ function buildProjectXml() {
         <PredecessorUID>${pred.uid}</PredecessorUID>
         <Type>${LINK_TYPE_TO_PROJECT[link.type] ?? 1}</Type>
         <CrossProject>0</CrossProject>
-        <LinkLag>0</LinkLag>
+        <LinkLag>${projectLinkLagValue(link.lagMinutes)}</LinkLag>
         <LagFormat>7</LagFormat>
       </PredecessorLink>`;
     }).join("");
@@ -1458,6 +1512,7 @@ function importProjectXml(text) {
       .map((link) => ({
         id: uidToImportedId.get(Number(childText(link, "PredecessorUID"))),
         type: normalizeLinkType(childText(link, "Type") || "1"),
+        lagMinutes: parseProjectLinkLag(childText(link, "LinkLag")),
       }))
       .filter((link) => Number.isInteger(link.id) && link.id > 0 && link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
@@ -1858,7 +1913,7 @@ function loadSample(shouldRender = true) {
     tasks: [
       makeSampleTask(1, "Finalize requirements", 0, 2, 100),
       makeSampleTask(2, "Build import/export MVP", 2, 4, 70, [{ id: 1, type: "FS" }]),
-      makeSampleTask(3, "Validate Microsoft Project XML", 6, 2, 25, [{ id: 2, type: "FS" }]),
+      makeSampleTask(3, "Validate Microsoft Project XML", 6, 2, 25, [{ id: 2, type: "FS", lagMinutes: getCalendar().minutesPerDay }]),
       makeSampleTask(4, "Add real calendar engine", 8, 3, 0, [{ id: 3, type: "FS" }]),
       makeSampleTask(5, "User acceptance test", 11, 2, 0, [{ id: 4, type: "FS" }]),
       makeSampleTask(6, "Prepare release notes", 11, 2, 0, [{ id: 4, type: "SS" }]),
@@ -1991,7 +2046,10 @@ function formatFriendlyDate(value) {
   return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
-function calculateLinkAlignedDates(predecessor, successor, type) {
+function calculateLinkAlignedDates(predecessor, successor, linkOrType) {
+  const link = typeof linkOrType === "object" ? linkOrType : { type: linkOrType, lagMinutes: 0 };
+  const type = normalizeLinkType(link.type);
+  const lagMinutes = normalizeLagMinutes(link.lagMinutes);
   const durationMinutes = normalizeDurationMinutes(successor.durationMinutes, workingSpanMinutes(successor.start, successor.finish));
   const durationDays = durationMinutesToWorkingDays(durationMinutes);
   const predStart = dateOnly(predecessor.start);
@@ -2002,19 +2060,19 @@ function calculateLinkAlignedDates(predecessor, successor, type) {
   let finish;
 
   if (type === "FS") {
-    start = addWorkingDaysAfter(predFinish, 1);
+    start = applyLagToWorkingDate(addWorkingDaysAfter(predFinish, 1), lagMinutes);
     finish = finishFromStartByDuration(start, durationMinutes);
   } else if (type === "SS") {
-    start = nextWorkingDay(predStart, true);
+    start = applyLagToWorkingDate(predStart, lagMinutes);
     finish = finishFromStartByDuration(start, durationMinutes);
   } else if (type === "FF") {
-    finish = previousWorkingDay(predFinish, true);
+    finish = applyLagToWorkingDate(predFinish, lagMinutes);
     start = startFromFinishByDuration(finish, durationMinutes);
   } else if (type === "SF") {
-    finish = previousWorkingDay(predStart, true);
+    finish = applyLagToWorkingDate(predStart, lagMinutes);
     start = startFromFinishByDuration(finish, durationMinutes);
   } else {
-    start = addWorkingDaysAfter(predFinish, 1);
+    start = applyLagToWorkingDate(addWorkingDaysAfter(predFinish, 1), lagMinutes);
     finish = finishFromStartByDuration(start, durationMinutes);
   }
 
@@ -2052,10 +2110,10 @@ function calculateTaskDatesFromLinks(task, byId) {
     const predFinish = dateOnly(pred.finish);
     if (!predStart || !predFinish) return;
 
-    if (link.type === "FS") startRequirements.push(addWorkingDaysAfter(predFinish, 1));
-    else if (link.type === "SS") startRequirements.push(nextWorkingDay(predStart, true));
-    else if (link.type === "FF") finishRequirements.push(predFinish);
-    else if (link.type === "SF") finishRequirements.push(predStart);
+    if (link.type === "FS") startRequirements.push(applyLagToWorkingDate(addWorkingDaysAfter(predFinish, 1), link.lagMinutes));
+    else if (link.type === "SS") startRequirements.push(applyLagToWorkingDate(predStart, link.lagMinutes));
+    else if (link.type === "FF") finishRequirements.push(applyLagToWorkingDate(predFinish, link.lagMinutes));
+    else if (link.type === "SF") finishRequirements.push(applyLagToWorkingDate(predStart, link.lagMinutes));
   });
 
   const latestStartRequirement = latestDate(startRequirements);
@@ -2462,8 +2520,9 @@ function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
     durationMinutes: successor.durationMinutes,
   };
 
+  const newLink = { id: predecessor.id, type, lagMinutes: 0 };
   successor.links = previousLinks.filter((link) => link.id !== predecessor.id);
-  successor.links.push({ id: predecessor.id, type });
+  successor.links.push(newLink);
   successor.predecessors = successor.links.map((link) => link.id);
 
   const cycles = detectCycles();
@@ -2474,7 +2533,7 @@ function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
     return false;
   }
 
-  const proposedDates = calculateLinkAlignedDates(predecessor, successor, type);
+  const proposedDates = calculateLinkAlignedDates(predecessor, successor, newLink);
   if (!proposedDates || datesAlreadyMatch(successor, proposedDates)) {
     render();
     return true;

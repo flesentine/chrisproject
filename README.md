@@ -10,6 +10,8 @@ A lightweight Microsoft Project XML-compatible planner with a browser-only local
 - Resize durations from the bar edges
 - Connect tasks with hover-reveal pull strings
 - Support FS, SS, FF, and SF dependency links
+- Support dependency lag and lead, such as `1FS+2d` or `2SS-4h`
+- Detect dependency loops before scheduling
 - Review downstream cascade changes before moving linked tasks
 - Import/export Microsoft Project XML / MSPDI
 - Export CSV
@@ -82,6 +84,7 @@ This MVP intentionally keeps the model small. It does not yet fully support:
 - Assignment units/costs
 - Baselines
 - Complex constraints
+- Time-of-day accurate partial-day lag; lag/lead is stored in minutes but displayed on a day-granularity Gantt
 - Calendars beyond a simple 8-hour day
 - Critical path calculation
 
@@ -107,31 +110,32 @@ The task-name, predecessor, date, percent, and outline-level editors now expand 
 - **Succ** means successors: tasks that depend on the current row. This column is calculated automatically from the Pred column on other rows, so it is read-only.
 - Empty dependency fields now show `none` instead of the old confusing `connect` placeholder.
 
-## Editable duration engine
 
-This version adds the next scheduling layer after the working-day calendar.
+## Dependency engine v2
 
-What changed:
-
-- The **Dur** field is now editable instead of just a pill.
-- Accepted duration examples:
-  - `0d` for a milestone
-  - `4h` for a half-day task on an 8-hour calendar
-  - `3d` for three working days
-  - `1w` for one working week based on the project calendar
-  - `90m` for minute-level duration storage
-- Changing **Start** keeps the task duration and recalculates Finish.
-- Changing **Finish** recalculates the duration.
-- Changing **Dur** recalculates Finish from Start.
-- Milestones render as a diamond on the Gantt.
-- XML export now writes real hour/minute duration values and milestone flags.
-- CSV export includes both friendly Duration and raw DurationMinutes.
-
-Acceptance tests:
+The Pred column now understands Microsoft Project-style relationship syntax:
 
 ```text
-Task starts Monday, Dur = 5d, finishes Friday.
-Task starts Friday, Dur = 5d, skips the weekend.
-Task Dur = 0d, start and finish match, and the Gantt shows a milestone diamond.
-Task Dur = 4h, XML exports PT4H0M0S.
+1FS
+1FS+2d
+2SS-4h
+3FF+1w
+4SF-1d
+1FS+2d, 2SS
 ```
+
+Supported relationship types:
+
+- `FS` = finish-to-start
+- `SS` = start-to-start
+- `FF` = finish-to-finish
+- `SF` = start-to-finish
+
+Supported lag/lead units:
+
+- `m` minutes
+- `h` hours
+- `d` working days
+- `w` working weeks
+
+Positive values are lag. Negative values are lead. Auto Schedule and cascade scheduling both honor lag/lead and still use the project calendar, so weekends and holidays are skipped. The successor column is calculated from the predecessor links and includes lag/lead too.
