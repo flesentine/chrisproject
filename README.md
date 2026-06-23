@@ -106,3 +106,31 @@ The task-name, predecessor, date, percent, and outline-level editors now expand 
 - **Pred** means predecessors: tasks that must happen before the current row. Example: `3FS` means this task starts after task 3 finishes.
 - **Succ** means successors: tasks that depend on the current row. This column is calculated automatically from the Pred column on other rows, so it is read-only.
 - Empty dependency fields now show `none` instead of the old confusing `connect` placeholder.
+
+## Real calendar engine
+
+This version adds a real working-day calendar instead of treating every calendar day as work.
+
+What changed:
+
+- Standard calendar defaults to **Monday–Friday**.
+- Tasks skip weekends when calculating finish dates from duration.
+- Holidays/non-working exceptions can be entered as comma-separated `YYYY-MM-DD` dates.
+- The Gantt header and rows shade non-working days.
+- New tasks start on the next working day.
+- FS/SS/FF/SF scheduling uses working days.
+- Summary-task duration rolls up by working days.
+- Exported Project XML now includes a Standard calendar with weekdays and holiday exceptions.
+
+Acceptance test:
+
+```text
+A 5-day task starting Friday should finish next Thursday, not Tuesday.
+```
+
+Use the Calendar controls near the top of the app:
+
+```text
+Workdays: Mon,Tue,Wed,Thu,Fri
+Holidays: 2026-07-04,2026-12-25
+```

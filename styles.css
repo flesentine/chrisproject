@@ -3117,3 +3117,86 @@ body.has-cascade-suggestion .gantt-ghost-bar {
 .field-heading-cell[data-column-key="wbs"] > span {
   text-overflow: clip;
 }
+
+/* Real calendar engine controls */
+.calendar-tools {
+  padding: 8px 10px;
+  border: 1px solid rgba(189, 203, 224, 0.7);
+  border-radius: 16px;
+  background: rgba(248, 251, 255, 0.78);
+}
+
+.mini-field {
+  display: grid;
+  gap: 3px;
+  color: #52627a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.mini-field input {
+  min-height: 34px;
+  width: 168px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 6px 9px;
+  background: #ffffff;
+  color: var(--text-strong);
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.mini-field.holiday-field input {
+  width: 220px;
+}
+
+.calendar-status {
+  max-width: 240px;
+  color: #52627a;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.planner-date-cell.is-nonworking {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.planner-date-cell.is-holiday {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.nonworking-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  background: rgba(148, 163, 184, 0.11);
+  border-left: 1px solid rgba(148, 163, 184, 0.08);
+  border-right: 1px solid rgba(148, 163, 184, 0.08);
+  pointer-events: none;
+}
+
+.gantt-row .gantt-bar,
+.gantt-row .gantt-ghost-bar {
+  z-index: 2;
+}
+
+@media (max-width: 980px) {
+  .mini-field input,
+  .mini-field.holiday-field input {
+    width: min(100%, 260px);
+  }
+
+  .calendar-tools {
+    align-items: flex-start;
+  }
+}
+
+.unified-card .gantt-row::before {
+  background-image: none;
+}

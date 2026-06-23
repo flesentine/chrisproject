@@ -80,6 +80,18 @@
           <span class="group-label">Schedule</span>
           <button id="autoScheduleBtn" type="button">Auto schedule</button>
         </div>
+        <div class="command-group calendar-tools" aria-label="Project calendar controls">
+          <span class="group-label">Calendar</span>
+          <label class="mini-field">
+            Workdays
+            <input id="workingDaysInput" type="text" value="Mon,Tue,Wed,Thu,Fri" aria-label="Working days, such as Mon,Tue,Wed,Thu,Fri" />
+          </label>
+          <label class="mini-field holiday-field">
+            Holidays
+            <input id="holidayInput" type="text" placeholder="2026-07-04,2026-12-25" aria-label="Holiday dates separated by commas" />
+          </label>
+          <small id="calendarStatus" class="calendar-status">Mon–Fri · 8h/day</small>
+        </div>
         <div class="command-group layout-tools" aria-label="View controls">
           <span class="group-label">View</span>
           <div class="drag-help">
@@ -145,7 +157,7 @@
     </main>
 
     <footer class="app-footer">
-      <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
+      <span>Compatibility target: Microsoft Project XML / MSPDI. Standard calendar skips non-working days. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
       <span id="saveStatus">Saved locally</span>
     </footer>
   </div>

@@ -12,6 +12,17 @@ const LINK_TYPE_LABELS = {
 const LINK_TYPE_TO_PROJECT = { FF: 0, FS: 1, SS: 2, SF: 3 };
 const PROJECT_TO_LINK_TYPE = { 0: "FF", 1: "FS", 2: "SS", 3: "SF" };
 
+const DAY_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAME_TO_INDEX = new Map(DAY_SHORT_NAMES.map((name, index) => [name.toLowerCase(), index]));
+const STANDARD_CALENDAR = {
+  name: "Standard",
+  workingDays: [1, 2, 3, 4, 5],
+  exceptions: [],
+  minutesPerDay: 480,
+  defaultStartTime: "08:00:00",
+  defaultFinishTime: "17:00:00",
+};
+
 const FIELD_COLUMNS = [
   { key: "id", label: "ID", defaultWidth: 48, min: 40, max: 76 },
   { key: "wbs", label: "WBS", defaultWidth: 72, min: 48, max: 180 },
@@ -40,6 +51,9 @@ const els = {
   sampleBtn: document.getElementById("sampleBtn"),
   addTaskBtn: document.getElementById("addTaskBtn"),
   autoScheduleBtn: document.getElementById("autoScheduleBtn"),
+  workingDaysInput: document.getElementById("workingDaysInput"),
+  holidayInput: document.getElementById("holidayInput"),
+  calendarStatus: document.getElementById("calendarStatus"),
   exportXmlBtn: document.getElementById("exportXmlBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   importXmlInput: document.getElementById("importXmlInput"),
@@ -81,6 +95,7 @@ let state = {
   projectName: "New Project",
   projectStart: today,
   nextUid: 2,
+  calendar: { ...STANDARD_CALENDAR },
   tasks: [],
 };
 
@@ -243,6 +258,183 @@ function toProjectDate(value, endOfDay = false) {
   return `${day}T${endOfDay ? "17:00:00" : "08:00:00"}`;
 }
 
+function uniqueSortedNumbers(values) {
+  return [...new Set((values || []).map(Number).filter((n) => Number.isInteger(n)))].sort((a, b) => a - b);
+}
+
+function normalizeCalendar(calendar = {}) {
+  const rawWorkingDays = Array.isArray(calendar.workingDays) && calendar.workingDays.length
+    ? calendar.workingDays
+    : STANDARD_CALENDAR.workingDays;
+  const workingDays = uniqueSortedNumbers(rawWorkingDays).filter((day) => day >= 0 && day <= 6);
+  const exceptions = uniqueSortedNumbers([]); // no-op to keep the helper warm for old browsers
+  const holidayDates = Array.isArray(calendar.exceptions)
+    ? calendar.exceptions.map((value) => {
+        const text = String(value || "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+        const parsed = dateOnly(text);
+        return parsed ? toDateInputValue(parsed) : null;
+      }).filter(Boolean)
+    : [];
+  return {
+    name: calendar.name || STANDARD_CALENDAR.name,
+    workingDays: workingDays.length ? workingDays : [...STANDARD_CALENDAR.workingDays],
+    exceptions: [...new Set(holidayDates)].sort(),
+    minutesPerDay: Math.max(1, Number(calendar.minutesPerDay) || STANDARD_CALENDAR.minutesPerDay),
+    defaultStartTime: calendar.defaultStartTime || STANDARD_CALENDAR.defaultStartTime,
+    defaultFinishTime: calendar.defaultFinishTime || STANDARD_CALENDAR.defaultFinishTime,
+  };
+}
+
+function getCalendar() {
+  state.calendar = normalizeCalendar(state.calendar);
+  return state.calendar;
+}
+
+function parseWorkingDaysInput(value) {
+  const text = String(value || "").trim();
+  if (!text) return [...STANDARD_CALENDAR.workingDays];
+  const tokens = text.split(/[\s,;/]+/).map((token) => token.trim().toLowerCase()).filter(Boolean);
+  const days = [];
+  tokens.forEach((token) => {
+    if (/^\d+$/.test(token)) {
+      const n = Number(token);
+      if (n >= 0 && n <= 6) days.push(n);
+      return;
+    }
+    const match = [...DAY_NAME_TO_INDEX.keys()].find((name) => name.startsWith(token) || token.startsWith(name));
+    if (match) days.push(DAY_NAME_TO_INDEX.get(match));
+  });
+  return uniqueSortedNumbers(days).filter((day) => day >= 0 && day <= 6);
+}
+
+function formatWorkingDays(days = getCalendar().workingDays) {
+  return uniqueSortedNumbers(days).map((day) => DAY_SHORT_NAMES[day]).join(",");
+}
+
+function parseExceptionDatesInput(value) {
+  return [...new Set(String(value || "")
+    .split(/[\s,;]+/)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(token)) return token;
+      const parsed = dateOnly(token);
+      return parsed ? toDateInputValue(parsed) : null;
+    })
+    .filter(Boolean))].sort();
+}
+
+function isCalendarException(value, calendar = getCalendar()) {
+  const day = toDateInputValue(value);
+  return calendar.exceptions.includes(day);
+}
+
+function isWorkingDay(value, calendar = getCalendar()) {
+  const date = dateOnly(value);
+  if (!date) return false;
+  return calendar.workingDays.includes(date.getDay()) && !isCalendarException(date, calendar);
+}
+
+function nextWorkingDay(value, includeCurrent = true) {
+  let date = dateOnly(value) || dateOnly(state.projectStart) || dateOnly(today);
+  if (!includeCurrent) date = addDays(date, 1);
+  let guard = 0;
+  while (!isWorkingDay(date) && guard < 370) {
+    date = addDays(date, 1);
+    guard += 1;
+  }
+  return date;
+}
+
+function previousWorkingDay(value, includeCurrent = true) {
+  let date = dateOnly(value) || dateOnly(state.projectStart) || dateOnly(today);
+  if (!includeCurrent) date = addDays(date, -1);
+  let guard = 0;
+  while (!isWorkingDay(date) && guard < 370) {
+    date = addDays(date, -1);
+    guard += 1;
+  }
+  return date;
+}
+
+function addWorkingDays(value, workDays) {
+  const count = Math.max(1, Math.round(Number(workDays) || 1));
+  let date = nextWorkingDay(value, true);
+  let remaining = count - 1;
+  let guard = 0;
+  while (remaining > 0 && guard < count + 740) {
+    date = addDays(date, 1);
+    if (isWorkingDay(date)) remaining -= 1;
+    guard += 1;
+  }
+  return date;
+}
+
+function addWorkingDaysAfter(value, workDays = 1) {
+  const first = nextWorkingDay(value, false);
+  return addWorkingDays(first, workDays);
+}
+
+function subtractWorkingDays(value, workDays) {
+  const count = Math.max(1, Math.round(Number(workDays) || 1));
+  let date = previousWorkingDay(value, true);
+  let remaining = count - 1;
+  let guard = 0;
+  while (remaining > 0 && guard < count + 740) {
+    date = addDays(date, -1);
+    if (isWorkingDay(date)) remaining -= 1;
+    guard += 1;
+  }
+  return date;
+}
+
+function workDaysBetween(start, finish) {
+  const s = dateOnly(start);
+  const f = dateOnly(finish);
+  if (!s || !f) return 1;
+  const forward = s <= f;
+  let date = forward ? s : f;
+  const end = forward ? f : s;
+  let count = 0;
+  let guard = 0;
+  while (date <= end && guard < 4000) {
+    if (isWorkingDay(date)) count += 1;
+    date = addDays(date, 1);
+    guard += 1;
+  }
+  return Math.max(1, count);
+}
+
+function setTaskStartKeepDuration(task, start, duration = task?.durationDays || 1) {
+  if (!task) return;
+  const snappedStart = nextWorkingDay(start || state.projectStart || today, true);
+  const finish = addWorkingDays(snappedStart, duration);
+  task.start = toDateInputValue(snappedStart);
+  task.finish = toDateInputValue(finish);
+  task.durationDays = workDaysBetween(task.start, task.finish);
+}
+
+function setTaskFinishKeepDuration(task, finish, duration = task?.durationDays || 1) {
+  if (!task) return;
+  const snappedFinish = previousWorkingDay(finish || task.finish || task.start || state.projectStart || today, true);
+  const start = subtractWorkingDays(snappedFinish, duration);
+  task.start = toDateInputValue(start);
+  task.finish = toDateInputValue(snappedFinish);
+  task.durationDays = workDaysBetween(task.start, task.finish);
+}
+
+function refreshCalendarControls() {
+  const calendar = getCalendar();
+  if (els.workingDaysInput) els.workingDaysInput.value = formatWorkingDays(calendar.workingDays);
+  if (els.holidayInput) els.holidayInput.value = calendar.exceptions.join(",");
+  if (els.calendarStatus) {
+    const holidayText = calendar.exceptions.length ? `${calendar.exceptions.length} holiday${calendar.exceptions.length === 1 ? "" : "s"}` : "no holidays";
+    els.calendarStatus.textContent = `${formatWorkingDays(calendar.workingDays).replaceAll(",", ", ")} · ${calendar.minutesPerDay / 60}h/day · ${holidayText}`;
+  }
+}
+
+
 function escapeXml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -372,11 +564,11 @@ function ensureDecorations() {
     task.outlineLevel = normalizeLevel(task.outlineLevel);
     task.name = task.name || `Task ${index + 1}`;
     task.start = task.start || state.projectStart || today;
-    task.finish = task.finish || toDateInputValue(addDays(task.start, Math.max(1, task.durationDays || 1) - 1));
+    task.finish = task.finish || toDateInputValue(addWorkingDays(task.start, Math.max(1, task.durationDays || 1)));
     task.percent = normalizePercent(task.percent);
     task.isSummary = Boolean(task.isSummary);
     task.expanded = task.expanded !== false;
-    task.durationDays = daysBetween(task.start, task.finish);
+    task.durationDays = workDaysBetween(task.start, task.finish);
     task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
 
@@ -453,10 +645,10 @@ function rollupSummaryTasks() {
       const finish = new Date(Math.max(...finishes.map(Number)));
       task.start = toDateInputValue(start);
       task.finish = toDateInputValue(finish);
-      task.durationDays = daysBetween(task.start, task.finish);
+      task.durationDays = workDaysBetween(task.start, task.finish);
     }
     const weighted = children
-      .map((child) => ({ percent: normalizePercent(child.percent), duration: Math.max(1, child.durationDays || daysBetween(child.start, child.finish)) }))
+      .map((child) => ({ percent: normalizePercent(child.percent), duration: Math.max(1, child.durationDays || workDaysBetween(child.start, child.finish)) }))
       .filter((item) => Number.isFinite(item.duration));
     const totalDuration = weighted.reduce((sum, item) => sum + item.duration, 0);
     if (totalDuration > 0) {
@@ -491,6 +683,7 @@ function load() {
       projectName: parsed.projectName || "New Project",
       projectStart: parsed.projectStart || today,
       nextUid: parsed.nextUid || 2,
+      calendar: normalizeCalendar(parsed.calendar),
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
     };
   } catch {
@@ -503,6 +696,7 @@ function render() {
   rollupSummaryTasks();
   ensureDecorations();
   applyUiPrefs();
+  refreshCalendarControls();
   els.projectName.value = state.projectName;
   els.projectStart.value = state.projectStart;
   renderTaskTable();
@@ -526,7 +720,7 @@ function renderSummary() {
   const finishes = tasks.map((t) => dateOnly(t.finish)).filter(Boolean);
   const min = starts.length ? new Date(Math.min(...starts.map(Number))) : null;
   const max = finishes.length ? new Date(Math.max(...finishes.map(Number))) : null;
-  const duration = min && max ? daysBetween(min, max) : 0;
+  const duration = min && max ? workDaysBetween(min, max) : 0;
   const leafTasks = tasks.filter((task, index) => !isSummaryIndex(index));
   const percentTasks = leafTasks.length ? leafTasks : tasks;
   const averagePercent = percentTasks.length
@@ -605,6 +799,8 @@ function renderGantt() {
     const d = addDays(min, i);
     const classes = ["planner-date-cell"];
     if ([0, 6].includes(d.getDay())) classes.push("is-weekend");
+    if (!isWorkingDay(d)) classes.push("is-nonworking");
+    if (isCalendarException(d)) classes.push("is-holiday");
     if (toDateInputValue(d) === today) classes.push("is-today");
     if (dayWidth <= 50) classes.push("is-vertical");
     else if (dayWidth <= 64) classes.push("is-skinny");
@@ -625,6 +821,15 @@ function renderGantt() {
     <div class="planner-dates-heading" style="width:${chartWidthPx}px;grid-template-columns:repeat(${totalDays}, ${dayWidth}px)">${dateCells.join("")}</div>`;
 
   els.gantt.style.width = `${totalWidth}px`;
+  const nonWorkingBands = [];
+  for (let i = 0; i < totalDays; i += 1) {
+    const d = addDays(min, i);
+    if (!isWorkingDay(d)) {
+      const title = isCalendarException(d) ? `Holiday / non-working day: ${toDateInputValue(d)}` : `Non-working day: ${toDateInputValue(d)}`;
+      nonWorkingBands.push(`<i class="nonworking-band" style="left:${i * dayWidth}px;width:${dayWidth}px" title="${escapeXml(title)}" aria-hidden="true"></i>`);
+    }
+  }
+  const nonWorkingMarkup = nonWorkingBands.join("");
   const visibleRows = getVisibleTaskRows();
   els.taskBody.innerHTML = visibleRows.map(({ task, index }) => {
     const startOffset = Math.max(0, daysBetween(min, task.start) - 1);
@@ -685,6 +890,7 @@ function renderGantt() {
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
+          ${nonWorkingMarkup}
           ${ghostMarkup}
           <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
             <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
@@ -708,6 +914,10 @@ function validateProject() {
     if (!dateOnly(task.start)) issues.push(`Task ${task.id} has an invalid start date.`);
     if (!dateOnly(task.finish)) issues.push(`Task ${task.id} has an invalid finish date.`);
     if (dateOnly(task.finish) < dateOnly(task.start)) issues.push(`Task ${task.id} finishes before it starts.`);
+    if (!isSummaryIndex(task.id - 1)) {
+      if (dateOnly(task.start) && !isWorkingDay(task.start)) issues.push(`Task ${task.id} starts on a non-working day. The calendar engine will snap new edits to working days.`);
+      if (dateOnly(task.finish) && !isWorkingDay(task.finish)) issues.push(`Task ${task.id} finishes on a non-working day. The calendar engine will snap new edits to working days.`);
+    }
 
     task.links.forEach((link) => {
       const predId = link.id;
@@ -721,16 +931,20 @@ function validateProject() {
         const predFinish = dateOnly(pred.finish);
         const taskStart = dateOnly(task.start);
         const taskFinish = dateOnly(task.finish);
-        if (link.type === "FS" && taskStart <= predFinish) {
-          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before task ${predId} has clearly finished. Use Auto schedule or adjust dates.`);
+        const requiredFsStart = addWorkingDaysAfter(predFinish, 1);
+        const requiredSsStart = nextWorkingDay(predStart, true);
+        const requiredFfFinish = previousWorkingDay(predFinish, true);
+        const requiredSfFinish = previousWorkingDay(predStart, true);
+        if (link.type === "FS" && taskStart < requiredFsStart) {
+          issues.push(`Task ${task.id} has ${describeLink(link)} but starts before the next working day after task ${predId} finishes. Use Auto schedule or adjust dates.`);
         }
-        if (link.type === "SS" && taskStart < predStart) {
+        if (link.type === "SS" && taskStart < requiredSsStart) {
           issues.push(`Task ${task.id} has ${describeLink(link)} but starts before task ${predId} starts.`);
         }
-        if (link.type === "FF" && taskFinish < predFinish) {
+        if (link.type === "FF" && taskFinish < requiredFfFinish) {
           issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before task ${predId} finishes.`);
         }
-        if (link.type === "SF" && taskFinish < predStart) {
+        if (link.type === "SF" && taskFinish < requiredSfFinish) {
           issues.push(`Task ${task.id} has ${describeLink(link)} but finishes before task ${predId} starts.`);
         }
       }
@@ -774,7 +988,7 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, dates, duration, percent complete, WBS, outline level, predecessors, and calculated successors.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, percent complete, WBS, outline level, predecessors, calculated successors, and project calendar.</p></div></div>`;
     return;
   }
 
@@ -802,12 +1016,12 @@ function updateTask(index, field, value) {
     task.links = parseLinksInput(value, task.id);
     task.predecessors = task.links.map((link) => link.id);
   } else if (field === "start") {
-    const oldDuration = task.durationDays || daysBetween(task.start, task.finish);
-    task.start = value || state.projectStart;
-    task.finish = toDateInputValue(addDays(task.start, oldDuration - 1));
+    const oldDuration = task.durationDays || workDaysBetween(task.start, task.finish);
+    setTaskStartKeepDuration(task, value || state.projectStart, oldDuration);
   } else if (field === "finish") {
-    task.finish = value || task.start;
-    if (dateOnly(task.finish) < dateOnly(task.start)) task.finish = task.start;
+    const finish = previousWorkingDay(value || task.start, true);
+    task.finish = toDateInputValue(dateOnly(finish) < dateOnly(task.start) ? task.start : finish);
+    task.durationDays = workDaysBetween(task.start, task.finish);
   } else {
     task[field] = value;
   }
@@ -816,12 +1030,12 @@ function updateTask(index, field, value) {
 
 function addTask() {
   const last = state.tasks[state.tasks.length - 1];
-  const start = last ? toDateInputValue(addDays(last.finish, 1)) : state.projectStart;
+  const start = toDateInputValue(last ? addWorkingDaysAfter(last.finish, 1) : nextWorkingDay(state.projectStart, true));
   state.tasks.push({
     uid: state.nextUid++,
     name: `New Task ${state.tasks.length + 1}`,
     start,
-    finish: toDateInputValue(addDays(start, 2)),
+    finish: toDateInputValue(addWorkingDays(start, 3)),
     durationDays: 3,
     percent: 0,
     predecessors: last ? [last.id] : [],
@@ -849,13 +1063,108 @@ function autoSchedule(options = {}) {
   return scheduleAllLinkedTasks(options);
 }
 
+
+function buildCalendarsXml() {
+  const calendar = getCalendar();
+  const weekDays = DAY_SHORT_NAMES.map((name, day) => {
+    const working = calendar.workingDays.includes(day) ? 1 : 0;
+    const times = working ? `
+          <WorkingTimes>
+            <WorkingTime>
+              <FromTime>${escapeXml(calendar.defaultStartTime)}</FromTime>
+              <ToTime>12:00:00</ToTime>
+            </WorkingTime>
+            <WorkingTime>
+              <FromTime>13:00:00</FromTime>
+              <ToTime>${escapeXml(calendar.defaultFinishTime)}</ToTime>
+            </WorkingTime>
+          </WorkingTimes>` : "";
+    return `
+        <WeekDay>
+          <DayType>${day + 1}</DayType>
+          <DayWorking>${working}</DayWorking>${times}
+        </WeekDay>`;
+  }).join("");
+
+  const exceptions = calendar.exceptions.map((date, index) => `
+        <Exception>
+          <EnteredByOccurrences>0</EnteredByOccurrences>
+          <TimePeriod>
+            <FromDate>${escapeXml(date)}T00:00:00</FromDate>
+            <ToDate>${escapeXml(date)}T23:59:00</ToDate>
+          </TimePeriod>
+          <Occurrences>1</Occurrences>
+          <Name>Holiday ${index + 1}</Name>
+          <Type>1</Type>
+          <DayWorking>0</DayWorking>
+        </Exception>`).join("");
+
+  return `<Calendars>
+    <Calendar>
+      <UID>1</UID>
+      <Name>${escapeXml(calendar.name || "Standard")}</Name>
+      <IsBaseCalendar>1</IsBaseCalendar>
+      <BaseCalendarUID>-1</BaseCalendarUID>
+      <WeekDays>${weekDays}
+      </WeekDays>${exceptions ? `
+      <Exceptions>${exceptions}
+      </Exceptions>` : ""}
+    </Calendar>
+  </Calendars>`;
+}
+
+function importCalendarsFromXml(projectNode) {
+  const fallback = normalizeCalendar(state.calendar || STANDARD_CALENDAR);
+  const calendarsNode = childrenByName(projectNode, "Calendars")[0];
+  const calendarNode = calendarsNode ? childrenByName(calendarsNode, "Calendar")[0] : null;
+  if (!calendarNode) return fallback;
+
+  const workingDays = [];
+  const weekDaysNode = childrenByName(calendarNode, "WeekDays")[0];
+  childrenByName(weekDaysNode || calendarNode, "WeekDay").forEach((weekDayNode) => {
+    const dayType = Number(childText(weekDayNode, "DayType"));
+    const isWorking = childText(weekDayNode, "DayWorking") === "1";
+    if (dayType >= 1 && dayType <= 7 && isWorking) workingDays.push(dayType - 1);
+  });
+
+  const exceptions = [];
+  const exceptionsNode = childrenByName(calendarNode, "Exceptions")[0];
+  childrenByName(exceptionsNode || calendarNode, "Exception").forEach((exceptionNode) => {
+    const dayWorking = childText(exceptionNode, "DayWorking");
+    if (dayWorking && dayWorking !== "0") return;
+    const period = childrenByName(exceptionNode, "TimePeriod")[0];
+    const from = childText(period || exceptionNode, "FromDate").slice(0, 10);
+    const to = childText(period || exceptionNode, "ToDate").slice(0, 10) || from;
+    const start = dateOnly(from);
+    const finish = dateOnly(to);
+    if (!start || !finish) return;
+    let date = start;
+    let guard = 0;
+    while (date <= finish && guard < 370) {
+      exceptions.push(toDateInputValue(date));
+      date = addDays(date, 1);
+      guard += 1;
+    }
+  });
+
+  return normalizeCalendar({
+    name: childText(calendarNode, "Name") || fallback.name,
+    workingDays: workingDays.length ? workingDays : fallback.workingDays,
+    exceptions,
+    minutesPerDay: Number(childText(projectNode, "MinutesPerDay")) || fallback.minutesPerDay,
+    defaultStartTime: childText(projectNode, "DefaultStartTime") || fallback.defaultStartTime,
+    defaultFinishTime: childText(projectNode, "DefaultFinishTime") || fallback.defaultFinishTime,
+  });
+}
+
 function buildProjectXml() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
   const created = new Date().toISOString().replace(/\.\d{3}Z$/, "");
   const projectStart = toProjectDate(state.projectStart);
-  const projectFinish = toProjectDate(state.tasks.at(-1)?.finish || state.projectStart, true);
+  const projectFinishValue = state.tasks.length ? new Date(Math.max(...state.tasks.map((task) => dateOnly(task.finish)).filter(Boolean).map(Number))) : dateOnly(state.projectStart);
+  const projectFinish = toProjectDate(projectFinishValue || state.projectStart, true);
   const projectName = escapeXml(state.projectName || "ProjectXML Planner Export");
   const taskById = new Map(state.tasks.map((task) => [task.id, task]));
 
@@ -871,9 +1180,10 @@ function buildProjectXml() {
       <OutlineNumber>0</OutlineNumber>
       <OutlineLevel>0</OutlineLevel>
       <Priority>500</Priority>
+      <CalendarUID>1</CalendarUID>
       <Start>${projectStart}</Start>
       <Finish>${projectFinish}</Finish>
-      <Duration>${daysToProjectDuration(Math.max(1, daysBetween(state.projectStart, state.tasks.at(-1)?.finish || state.projectStart)))}</Duration>
+      <Duration>${daysToProjectDuration(Math.max(1, workDaysBetween(state.projectStart, projectFinishValue || state.projectStart)))}</Duration>
       <DurationFormat>7</DurationFormat>
       <Work>PT0H0M0S</Work>
       <Summary>1</Summary>
@@ -881,7 +1191,7 @@ function buildProjectXml() {
     </Task>`;
 
   const taskXml = state.tasks.map((task) => {
-    const duration = task.durationDays || daysBetween(task.start, task.finish);
+    const duration = task.durationDays || workDaysBetween(task.start, task.finish);
     const predecessors = getTaskLinks(task).map((link) => {
       const pred = taskById.get(link.id);
       if (!pred) return "";
@@ -907,6 +1217,7 @@ function buildProjectXml() {
       <OutlineNumber>${escapeXml(task.wbs)}</OutlineNumber>
       <OutlineLevel>${task.outlineLevel}</OutlineLevel>
       <Priority>500</Priority>
+      <CalendarUID>1</CalendarUID>
       <Start>${toProjectDate(task.start)}</Start>
       <Finish>${toProjectDate(task.finish, true)}</Finish>
       <Duration>${daysToProjectDuration(duration)}</Duration>
@@ -976,6 +1287,7 @@ function buildProjectXml() {
   <ActualsInSync>0</ActualsInSync>
   <RemoveFileProperties>0</RemoveFileProperties>
   <AdminProject>0</AdminProject>
+  ${buildCalendarsXml()}
   <Tasks>${rootTask}${taskXml}
   </Tasks>
 </Project>`;
@@ -1002,7 +1314,7 @@ function importProjectXml(text) {
 
     const start = childText(node, "Start").slice(0, 10) || importedStart;
     const durationDays = durationToDays(childText(node, "Duration"));
-    const finish = childText(node, "Finish").slice(0, 10) || toDateInputValue(addDays(start, durationDays - 1));
+    const finish = childText(node, "Finish").slice(0, 10) || toDateInputValue(addWorkingDays(start, durationDays));
     const outlineLevel = normalizeLevel(childText(node, "OutlineLevel") || 1);
     const percent = normalizePercent(childText(node, "PercentComplete") || 0);
     const isSummary = childText(node, "Summary") === "1";
@@ -1015,7 +1327,7 @@ function importProjectXml(text) {
       name,
       start,
       finish,
-      durationDays: daysBetween(start, finish),
+      durationDays: workDaysBetween(start, finish),
       percent,
       predecessors: [],
       links: [],
@@ -1051,6 +1363,7 @@ function importProjectXml(text) {
     projectName: importedProjectName,
     projectStart: importedStart,
     nextUid: maxUid + 1,
+    calendar: importCalendarsFromXml(projectNode),
     tasks: rawTasks,
   };
   render();
@@ -1238,10 +1551,10 @@ function buildMppRecoveredSnapshot() {
   const draft = lastMppResult?.draftProject;
   if (!draft?.tasks?.length) return null;
 
-  const start = draft.start && dateOnly(draft.start) ? draft.start : (state.projectStart || today);
+  const start = toDateInputValue(nextWorkingDay(draft.start && dateOnly(draft.start) ? draft.start : (state.projectStart || today), true));
   const tasks = draft.tasks.slice(0, 100).map((task, index) => {
-    const taskStart = toDateInputValue(addDays(start, index * 2));
-    const taskFinish = toDateInputValue(addDays(taskStart, 1));
+    const taskStart = toDateInputValue(addWorkingDays(start, index * 2 + 1));
+    const taskFinish = toDateInputValue(addWorkingDays(taskStart, 2));
     return {
       uid: index + 1,
       name: task.name || `Recovered task ${index + 1}`,
@@ -1261,6 +1574,7 @@ function buildMppRecoveredSnapshot() {
     projectName: `${draft.name || lastMppResult.fileName || "Recovered MPP"} — recovered draft`,
     projectStart: start,
     nextUid: tasks.length + 1,
+    calendar: normalizeCalendar(state.calendar),
     tasks,
   };
 }
@@ -1403,20 +1717,38 @@ function safeFileName(name) {
     .toLowerCase() || "project";
 }
 
+function makeSampleTask(uid, name, startOffset, durationDays, percent, links = [], outlineLevel = 1) {
+  const projectStart = toDateInputValue(nextWorkingDay(state.projectStart || today, true));
+  const start = toDateInputValue(addWorkingDays(projectStart, startOffset + 1));
+  const finish = toDateInputValue(addWorkingDays(start, durationDays));
+  return {
+    uid,
+    name,
+    start,
+    finish,
+    durationDays,
+    percent,
+    predecessors: links.map((link) => link.id),
+    links,
+    outlineLevel,
+  };
+}
+
 function loadSample(shouldRender = true) {
-  const start = state.projectStart || today;
+  const start = toDateInputValue(nextWorkingDay(state.projectStart || today, true));
   state = {
     projectName: "Chris Discount Launch Plan",
     projectStart: start,
     nextUid: 8,
+    calendar: normalizeCalendar(state.calendar),
     tasks: [
-      { uid: 1, name: "Finalize requirements", start, finish: toDateInputValue(addDays(start, 1)), percent: 100, predecessors: [], links: [], outlineLevel: 1 },
-      { uid: 2, name: "Build import/export MVP", start: toDateInputValue(addDays(start, 2)), finish: toDateInputValue(addDays(start, 5)), percent: 70, predecessors: [1], links: [{ id: 1, type: "FS" }], outlineLevel: 1 },
-      { uid: 3, name: "Validate Microsoft Project XML", start: toDateInputValue(addDays(start, 6)), finish: toDateInputValue(addDays(start, 7)), percent: 25, predecessors: [2], links: [{ id: 2, type: "FS" }], outlineLevel: 1 },
-      { uid: 4, name: "Add schedule polish", start: toDateInputValue(addDays(start, 8)), finish: toDateInputValue(addDays(start, 10)), percent: 0, predecessors: [3], links: [{ id: 3, type: "FS" }], outlineLevel: 1 },
-      { uid: 5, name: "User acceptance test", start: toDateInputValue(addDays(start, 11)), finish: toDateInputValue(addDays(start, 12)), percent: 0, predecessors: [4], links: [{ id: 4, type: "FS" }], outlineLevel: 1 },
-      { uid: 6, name: "Prepare release notes", start: toDateInputValue(addDays(start, 11)), finish: toDateInputValue(addDays(start, 12)), percent: 0, predecessors: [4], links: [{ id: 4, type: "SS" }], outlineLevel: 1 },
-      { uid: 7, name: "Submit build", start: toDateInputValue(addDays(start, 13)), finish: toDateInputValue(addDays(start, 13)), percent: 0, predecessors: [5, 6], links: [{ id: 5, type: "FS" }, { id: 6, type: "FF" }], outlineLevel: 1 },
+      makeSampleTask(1, "Finalize requirements", 0, 2, 100),
+      makeSampleTask(2, "Build import/export MVP", 2, 4, 70, [{ id: 1, type: "FS" }]),
+      makeSampleTask(3, "Validate Microsoft Project XML", 6, 2, 25, [{ id: 2, type: "FS" }]),
+      makeSampleTask(4, "Add real calendar engine", 8, 3, 0, [{ id: 3, type: "FS" }]),
+      makeSampleTask(5, "User acceptance test", 11, 2, 0, [{ id: 4, type: "FS" }]),
+      makeSampleTask(6, "Prepare release notes", 11, 2, 0, [{ id: 4, type: "SS" }]),
+      makeSampleTask(7, "Submit build", 13, 1, 0, [{ id: 5, type: "FS" }, { id: 6, type: "FF" }]),
     ],
   };
   if (shouldRender) render();
@@ -1546,7 +1878,7 @@ function formatFriendlyDate(value) {
 }
 
 function calculateLinkAlignedDates(predecessor, successor, type) {
-  const duration = Math.max(1, successor.durationDays || daysBetween(successor.start, successor.finish));
+  const duration = Math.max(1, successor.durationDays || workDaysBetween(successor.start, successor.finish));
   const predStart = dateOnly(predecessor.start);
   const predFinish = dateOnly(predecessor.finish);
   if (!predStart || !predFinish) return null;
@@ -1555,20 +1887,20 @@ function calculateLinkAlignedDates(predecessor, successor, type) {
   let finish;
 
   if (type === "FS") {
-    start = addDays(predFinish, 1);
-    finish = addDays(start, duration - 1);
+    start = addWorkingDaysAfter(predFinish, 1);
+    finish = addWorkingDays(start, duration);
   } else if (type === "SS") {
-    start = predStart;
-    finish = addDays(start, duration - 1);
+    start = nextWorkingDay(predStart, true);
+    finish = addWorkingDays(start, duration);
   } else if (type === "FF") {
-    finish = predFinish;
-    start = addDays(finish, 1 - duration);
+    finish = previousWorkingDay(predFinish, true);
+    start = subtractWorkingDays(finish, duration);
   } else if (type === "SF") {
-    finish = predStart;
-    start = addDays(finish, 1 - duration);
+    finish = previousWorkingDay(predStart, true);
+    start = subtractWorkingDays(finish, duration);
   } else {
-    start = addDays(predFinish, 1);
-    finish = addDays(start, duration - 1);
+    start = addWorkingDaysAfter(predFinish, 1);
+    finish = addWorkingDays(start, duration);
   }
 
   return {
@@ -1593,7 +1925,7 @@ function calculateTaskDatesFromLinks(task, byId) {
   const links = getTaskLinks(task);
   if (!links.length) return null;
 
-  const duration = Math.max(1, task.durationDays || daysBetween(task.start, task.finish));
+  const duration = Math.max(1, task.durationDays || workDaysBetween(task.start, task.finish));
   const startRequirements = [];
   const finishRequirements = [];
 
@@ -1604,8 +1936,8 @@ function calculateTaskDatesFromLinks(task, byId) {
     const predFinish = dateOnly(pred.finish);
     if (!predStart || !predFinish) return;
 
-    if (link.type === "FS") startRequirements.push(addDays(predFinish, 1));
-    else if (link.type === "SS") startRequirements.push(predStart);
+    if (link.type === "FS") startRequirements.push(addWorkingDaysAfter(predFinish, 1));
+    else if (link.type === "SS") startRequirements.push(nextWorkingDay(predStart, true));
     else if (link.type === "FF") finishRequirements.push(predFinish);
     else if (link.type === "SF") finishRequirements.push(predStart);
   });
@@ -1614,9 +1946,9 @@ function calculateTaskDatesFromLinks(task, byId) {
   const latestFinishRequirement = latestDate(finishRequirements);
   if (!latestStartRequirement && !latestFinishRequirement) return null;
 
-  const finishDrivenStart = latestFinishRequirement ? addDays(latestFinishRequirement, 1 - duration) : null;
+  const finishDrivenStart = latestFinishRequirement ? subtractWorkingDays(latestFinishRequirement, duration) : null;
   const desiredStart = latestDate([latestStartRequirement, finishDrivenStart]) || dateOnly(task.start) || dateOnly(state.projectStart) || dateOnly(today);
-  const desiredFinish = addDays(desiredStart, duration - 1);
+  const desiredFinish = addWorkingDays(desiredStart, duration);
 
   return {
     start: toDateInputValue(desiredStart),
@@ -2144,6 +2476,7 @@ function beginGanttDrag(event) {
     currentY: event.clientY,
     originalStart: startDate,
     originalFinish: finishDate,
+    originalWorkDuration: workDaysBetween(startDate, finishDate),
     linkTargetIndex: null,
   };
 
@@ -2162,19 +2495,21 @@ function updateGanttDrag(event) {
   if (!task) return;
 
   if (activeBarDrag.mode === "move") {
-    task.start = toDateInputValue(addDays(activeBarDrag.originalStart, deltaDays));
-    task.finish = toDateInputValue(addDays(activeBarDrag.originalFinish, deltaDays));
+    const duration = activeBarDrag.originalWorkDuration || workDaysBetween(activeBarDrag.originalStart, activeBarDrag.originalFinish);
+    const proposedStart = nextWorkingDay(addDays(activeBarDrag.originalStart, deltaDays), true);
+    task.start = toDateInputValue(proposedStart);
+    task.finish = toDateInputValue(addWorkingDays(proposedStart, duration));
   } else if (activeBarDrag.mode === "resize-finish") {
-    const finish = addDays(activeBarDrag.originalFinish, deltaDays);
+    const finish = previousWorkingDay(addDays(activeBarDrag.originalFinish, deltaDays), true);
     task.start = toDateInputValue(activeBarDrag.originalStart);
     task.finish = toDateInputValue(dateOnly(finish) < activeBarDrag.originalStart ? activeBarDrag.originalStart : finish);
   } else if (activeBarDrag.mode === "resize-start") {
-    const start = addDays(activeBarDrag.originalStart, deltaDays);
+    const start = nextWorkingDay(addDays(activeBarDrag.originalStart, deltaDays), true);
     task.start = toDateInputValue(dateOnly(start) > activeBarDrag.originalFinish ? activeBarDrag.originalFinish : start);
     task.finish = toDateInputValue(activeBarDrag.originalFinish);
   }
 
-  task.durationDays = daysBetween(task.start, task.finish);
+  task.durationDays = workDaysBetween(task.start, task.finish);
   pendingCascadeChoice = null;
   renderGantt();
   renderSummary();
@@ -2189,7 +2524,7 @@ function endGanttDrag() {
   const originalDates = drag.originalStart && drag.originalFinish ? {
     start: toDateInputValue(drag.originalStart),
     finish: toDateInputValue(drag.originalFinish),
-    durationDays: daysBetween(drag.originalStart, drag.originalFinish),
+    durationDays: workDaysBetween(drag.originalStart, drag.originalFinish),
   } : null;
 
   activeBarDrag = null;
@@ -2345,13 +2680,28 @@ els.taskBody.addEventListener("click", (event) => {
   deleteTask(Number(button.dataset.index));
 });
 
+
+
+els.workingDaysInput?.addEventListener("change", () => {
+  const days = parseWorkingDaysInput(els.workingDaysInput.value);
+  state.calendar = normalizeCalendar({ ...getCalendar(), workingDays: days.length ? days : STANDARD_CALENDAR.workingDays });
+  scheduleAllLinkedTasks({ silent: true, render: false });
+  render();
+});
+
+els.holidayInput?.addEventListener("change", () => {
+  state.calendar = normalizeCalendar({ ...getCalendar(), exceptions: parseExceptionDatesInput(els.holidayInput.value) });
+  scheduleAllLinkedTasks({ silent: true, render: false });
+  render();
+});
+
 els.projectName.addEventListener("change", () => {
   state.projectName = els.projectName.value.trim() || "New Project";
   render();
 });
 
 els.projectStart.addEventListener("change", () => {
-  state.projectStart = els.projectStart.value || today;
+  state.projectStart = toDateInputValue(nextWorkingDay(els.projectStart.value || today, true));
   if (!state.tasks.length) render();
   else {
     const firstStart = state.tasks[0]?.start;
@@ -2361,7 +2711,7 @@ els.projectStart.addEventListener("change", () => {
 });
 
 els.newProjectBtn.addEventListener("click", () => {
-  state = { projectName: "New Project", projectStart: today, nextUid: 1, tasks: [] };
+  state = { projectName: "New Project", projectStart: today, nextUid: 1, calendar: normalizeCalendar(state.calendar), tasks: [] };
   addTask();
 });
 
