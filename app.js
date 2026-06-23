@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v3-compact";
-const APP_VERSION = "v0.19.0";
-const APP_VERSION_NAME = "Assignment model";
+const APP_VERSION = "v0.20.0";
+const APP_VERSION_NAME = "MS Project-style ribbon header";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";

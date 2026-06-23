@@ -4050,3 +4050,313 @@ body.has-cascade-suggestion .gantt-ghost-bar {
     margin-bottom: 10px;
   }
 }
+
+/* v0.20.0 MS Project-style ribbon header ------------------------------- */
+.project-ribbon-shell {
+  position: sticky;
+  top: 0;
+  z-index: 75;
+  overflow: hidden;
+  margin: -6px 0 14px;
+  border: 1px solid #b7c5d8;
+  border-radius: 10px 10px 14px 14px;
+  background: #f7f9fc;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
+}
+
+.project-titlebar {
+  display: grid;
+  grid-template-columns: minmax(150px, 240px) minmax(320px, 1fr) minmax(190px, 260px);
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 4px 10px;
+  color: #ffffff;
+  background: linear-gradient(90deg, #0b5e34 0%, #107c41 48%, #0f6f3b 100%);
+}
+
+.quick-access {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-app-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  font-weight: 900;
+  font-size: 16px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.quick-command {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.90);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.quick-command:hover { background: rgba(255, 255, 255, 0.12); }
+
+.project-titlebar-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title-project-name-label,
+.title-project-start {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.title-project-name-label span,
+.title-project-start span { white-space: nowrap; }
+
+.title-project-name,
+.title-project-start input {
+  min-height: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #102033;
+  padding: 3px 8px;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.title-project-name { width: min(32vw, 360px); }
+.title-project-start { justify-self: end; }
+.title-project-start input { width: 138px; }
+
+.title-product-name {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.project-titlebar .version-badge {
+  flex: 0 0 auto;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.ribbon-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid #c7d1df;
+  background: #f7f9fc;
+}
+
+.ribbon-tab {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #1f2937;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.ribbon-tab:hover {
+  transform: none;
+  background: #edf2f8;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ribbon-tab.is-active {
+  background: #ffffff;
+  border: 1px solid #c7d1df;
+  border-bottom-color: #ffffff;
+  margin-bottom: -1px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.ribbon-tab.file-tab {
+  margin-right: 6px;
+  color: #ffffff;
+  background: #0f6f3b;
+  font-weight: 800;
+}
+
+.ribbon-tab.file-tab:hover { background: #0b5e34; }
+
+.office-ribbon.command-bar {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0 8px 7px;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.office-ribbon .command-group {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 5px;
+  min-height: 86px;
+  padding: 10px 12px 23px;
+  border-right: 1px solid #d8e0eb;
+}
+
+.office-ribbon .command-group.push-right {
+  margin-left: 0;
+  border-right: 0;
+}
+
+.office-ribbon .group-label {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 5px;
+  padding: 0;
+  color: #667085;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.office-ribbon button,
+.office-ribbon .file-button,
+.office-ribbon .standalone-converter-link {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.office-ribbon button:hover,
+.office-ribbon .file-button:hover,
+.office-ribbon .standalone-converter-link:hover {
+  transform: none;
+  background: #eef4fb;
+  box-shadow: none;
+}
+
+.office-ribbon button.primary,
+.office-ribbon button.success,
+.office-ribbon .command-group button#taskInfoBtn {
+  background: #f8fafc;
+  border-color: #bcc7d6;
+  color: #102033;
+  box-shadow: none;
+}
+
+.office-ribbon button.primary:hover,
+.office-ribbon button.success:hover,
+.office-ribbon .command-group button#taskInfoBtn:hover {
+  background: #eaf3ff;
+  border-color: #7aa7de;
+}
+
+.office-ribbon #addTaskBtn::before { content: "＋ "; color: #107c41; font-weight: 900; }
+.office-ribbon #addResourceBtn::before { content: "👤 "; }
+.office-ribbon #taskInfoBtn::before { content: "ⓘ "; }
+.office-ribbon #autoScheduleBtn::before { content: "↦ "; color: #107c41; font-weight: 900; }
+.office-ribbon #exportXmlBtn::before { content: "⇩ "; color: #107c41; font-weight: 900; }
+.office-ribbon #exportCsvBtn::before { content: "▦ "; }
+
+.office-ribbon .layout-tools {
+  min-width: 430px;
+}
+
+.office-ribbon .view-switcher {
+  border-radius: 4px;
+  padding: 2px;
+  background: #f1f5f9;
+}
+
+.office-ribbon .view-switcher button {
+  min-height: 28px;
+  border-radius: 3px;
+  padding: 4px 8px;
+}
+
+.office-ribbon .view-switcher button.is-active {
+  color: #ffffff;
+  background: #107c41;
+  border-color: #107c41;
+}
+
+.office-ribbon .drag-help {
+  max-width: 180px;
+  margin: 0 4px;
+  color: #5b6677;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.office-ribbon .drag-help strong { display: block; color: #344054; }
+.office-ribbon .drag-help small { display: block; }
+
+.office-ribbon .compact-range {
+  width: 108px;
+  min-width: 108px;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.office-ribbon .compact-range input {
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .project-titlebar {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 7px 10px;
+  }
+  .quick-access,
+  .project-titlebar-main,
+  .title-project-start { justify-self: stretch; justify-content: flex-start; }
+  .title-project-name { width: 100%; }
+  .ribbon-tabs { overflow-x: auto; }
+  .office-ribbon.command-bar { padding-bottom: 8px; }
+  .office-ribbon .command-group { min-width: max-content; }
+}

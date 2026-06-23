@@ -1,4 +1,4 @@
-# Chris's Discount Project Maker
+# Chris's Discount Project Maker — MS Project-style ribbon header
 
 A lightweight Microsoft Project XML-compatible planner with a browser-only local MPP decoder for the Microsoft Project table-cache layout found in modern `.mpp` files.
 
@@ -189,6 +189,13 @@ This adds the resource master list. The next roadmap item is the assignment mode
 
 ## Build version
 
-`v0.19.0 · Assignment model`
+`v0.20.0 · MS Project-style ribbon header`
 
-This build adds the real task-to-resource assignment model. Tasks can now hold assignment records that connect Resource Sheet resources to task work/cost. This is the foundation for later fixed-units/fixed-work scheduling, resource usage views, cost rollups, and leveling.
+This build keeps the assignment model and adds a Microsoft Project-style ribbon header so the app feels more like desktop Project while keeping the rows compact.
+
+## v0.20.0 — MS Project-style ribbon header
+
+- Reworked the top app chrome into a Microsoft Project-style ribbon: green title bar, File/Task/Resource/Report/Project/View/Format/Help tabs, and grouped command bands.
+- Kept the real controls wired with the same element IDs, so New, Load Sample, Add Task, Resource Sheet, Import/Export, Auto Schedule, Task Info, and MPP conversion still work.
+- Moved the visible app version into the title/ribbon area so it is obvious which build is live.
+- This is a visual reference implementation, not a Microsoft copy: it uses the same interaction pattern without Microsoft branding.

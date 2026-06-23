@@ -1,397 +1,380 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chris's Discount Project Maker</title>
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Chris's Discount Project Maker</title>
+<link href="styles.css" rel="stylesheet"/>
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-lockup">
-        <div class="brand-photo" aria-hidden="true">
-          <img src="chris-avatar.png" alt="" />
-        </div>
-        <div>
-          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.19.0</span></div>
-          <h1>Chris's Discount Project Maker</h1>
-        </div>
-      </div>
-
-      <div class="project-fields" aria-label="Project details">
-        <label>
-          Project name
-          <input id="projectName" type="text" value="New Project" />
-        </label>
-        <label>
-          Project start
-          <input id="projectStart" type="date" />
-        </label>
-      </div>
-    </header>
-
-    <main>
-      <section class="hero-board" aria-label="Project overview">
-        <div class="hero-copy">
-          <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
-          <h2>MS Project energy, discount price.</h2>
-          <p>Edit task data and Gantt bars on the same row. Drag bars to move dates, resize duration from the edges, and connect tasks with hover-reveal pull strings. For .mpp files, the site tries a local browser-only conversion first. When the file has embedded Project XML it imports cleanly; otherwise it recovers a best-effort draft and gives you diagnostics.</p>
-        </div>
-
-        <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
-          <span class="readiness-label">Export readiness</span>
-          <strong id="exportStatus">Ready</strong>
-          <p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. MPP gets a local best-effort converter with an XML fallback guide.</p>
-        </aside>
-      </section>
-
-      <section class="summary-grid" aria-label="Project summary">
-        <article class="summary-card">
-          <span class="summary-label">Tasks</span>
-          <strong id="taskCount">0</strong>
-          <small>Active rows</small>
-        </article>
-        <article class="summary-card">
-          <span class="summary-label">Duration</span>
-          <strong id="durationCount">0d</strong>
-          <small id="dateRange">No date range</small>
-        </article>
-        <article class="summary-card">
-          <span class="summary-label">Completion</span>
-          <strong id="completeCount">0%</strong>
-          <small>Average progress</small>
-        </article>
-        <article class="summary-card status-summary">
-          <span class="summary-label">Format</span>
-          <strong>MSPDI</strong>
-          <small>Project XML target</small>
-        </article>
-      </section>
-
-      <section class="command-bar" aria-label="Project actions">
-        <div class="command-group">
-          <span class="group-label">Plan</span>
-          <button id="newProjectBtn" type="button">New</button>
-          <button id="sampleBtn" type="button">Load sample</button>
-          <button id="addTaskBtn" type="button" class="primary">+ Add task</button>
-          <button id="addResourceBtn" type="button">+ Resource</button>
-          <button id="taskInfoBtn" type="button">Task info</button>
-          <button id="indentTaskBtn" type="button" title="Indent selected task">Indent →</button>
-          <button id="outdentTaskBtn" type="button" title="Outdent selected task">← Outdent</button>
-        </div>
-        <div class="command-group">
-          <span class="group-label">Schedule</span>
-          <button id="autoScheduleBtn" type="button">Auto schedule</button>
-        </div>
-        <div class="command-group layout-tools" aria-label="View controls">
-          <span class="group-label">View</span>
-          <div class="view-switcher" role="group" aria-label="Switch views">
-            <button id="scheduleViewBtn" type="button" class="is-active">Gantt Chart</button>
-            <button id="resourceViewBtn" type="button">Resource Sheet</button>
-          </div>
-          <div class="drag-help">
-            <strong>Drag to resize</strong>
-            <small>Column edges, date headers, or the big splitter. Pull the splitter left to hide data columns.</small>
-          </div>
-          <label class="range-control compact-range">
+<div class="app-shell">
+<header aria-label="Project command ribbon" class="project-ribbon-shell">
+<div class="project-titlebar">
+<div aria-label="Quick access toolbar" class="quick-access">
+<span aria-hidden="true" class="project-app-icon">P</span>
+<span aria-hidden="true" class="quick-command">↶</span>
+<span aria-hidden="true" class="quick-command">↷</span>
+<span aria-hidden="true" class="quick-command">💾</span>
+</div>
+<div class="project-titlebar-main">
+<label class="title-project-name-label">
+<span>Project name</span>
+<input class="title-project-name" id="projectName" type="text" value="New Project"/>
+</label>
+<span class="title-product-name">Chris's Discount Project Maker</span>
+<span class="version-badge" id="appVersionBadge">v0.20.0</span>
+</div>
+<label class="title-project-start">
+<span>Project start</span>
+<input id="projectStart" type="date"/>
+</label>
+</div>
+<nav aria-label="Ribbon tabs" class="ribbon-tabs">
+<button class="ribbon-tab file-tab" type="button">File</button>
+<button class="ribbon-tab is-active" type="button">Task</button>
+<button class="ribbon-tab" type="button">Resource</button>
+<button class="ribbon-tab" type="button">Report</button>
+<button class="ribbon-tab" type="button">Project</button>
+<button class="ribbon-tab" type="button">View</button>
+<button class="ribbon-tab" type="button">Format</button>
+<button class="ribbon-tab" type="button">Help</button>
+</nav>
+<section aria-label="Project actions" class="command-bar office-ribbon">
+<div class="command-group">
+<span class="group-label">Plan</span>
+<button id="newProjectBtn" type="button">New</button>
+<button id="sampleBtn" type="button">Load sample</button>
+<button class="primary" id="addTaskBtn" type="button">+ Add task</button>
+<button id="addResourceBtn" type="button">+ Resource</button>
+<button id="taskInfoBtn" type="button">Task info</button>
+<button id="indentTaskBtn" title="Indent selected task" type="button">Indent →</button>
+<button id="outdentTaskBtn" title="Outdent selected task" type="button">← Outdent</button>
+</div>
+<div class="command-group">
+<span class="group-label">Schedule</span>
+<button id="autoScheduleBtn" type="button">Auto schedule</button>
+</div>
+<div aria-label="View controls" class="command-group layout-tools">
+<span class="group-label">View</span>
+<div aria-label="Switch views" class="view-switcher" role="group">
+<button class="is-active" id="scheduleViewBtn" type="button">Gantt Chart</button>
+<button id="resourceViewBtn" type="button">Resource Sheet</button>
+</div>
+<div class="drag-help">
+<strong>Drag to resize</strong>
+<small>Column edges, date headers, or the big splitter. Pull the splitter left to hide data columns.</small>
+</div>
+<label class="range-control compact-range">
             Day cells <strong id="dayWidthValue">Standard</strong>
-            <input id="dayWidthControl" type="range" min="36" max="120" step="2" />
-          </label>
-          <label class="range-control compact-range">
+<input id="dayWidthControl" max="120" min="36" step="2" type="range"/>
+</label>
+<label class="range-control compact-range">
             Row height <strong id="rowHeightValue">Standard</strong>
-            <input id="rowHeightControl" type="range" min="44" max="88" step="2" />
-          </label>
-        </div>
-        <div class="command-group push-right">
-          <span class="group-label">Exchange</span>
-          <button id="exportXmlBtn" type="button" class="success">Export XML</button>
-          <button id="exportCsvBtn" type="button">Export CSV</button>
-          <label class="file-button">
+<input id="rowHeightControl" max="88" min="44" step="2" type="range"/>
+</label>
+</div>
+<div class="command-group push-right">
+<span class="group-label">Exchange</span>
+<button class="success" id="exportXmlBtn" type="button">Export XML</button>
+<button id="exportCsvBtn" type="button">Export CSV</button>
+<label class="file-button">
             Import XML
-            <input id="importXmlInput" type="file" accept=".xml,text/xml,application/xml" />
-          </label>
-          <label class="file-button mpp-button">
+            <input accept=".xml,text/xml,application/xml" id="importXmlInput" type="file"/>
+</label>
+<label class="file-button mpp-button">
             Convert MPP locally
-            <input id="importMppInput" type="file" accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" />
-          </label>
-          <a class="standalone-converter-link" href="mpp-local-converter.html">Standalone converter</a>
-        </div>
-      </section>
+            <input accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" id="importMppInput" type="file"/>
+</label>
+<a class="standalone-converter-link" href="mpp-local-converter.html">Standalone converter</a>
+</div>
+</section></header>
+<main>
+<section aria-label="Project overview" class="hero-board">
+<div class="hero-copy">
+<div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
+<h2>MS Project energy, discount price.</h2>
+<p>Edit task data and Gantt bars on the same row. Drag bars to move dates, resize duration from the edges, and connect tasks with hover-reveal pull strings. For .mpp files, the site tries a local browser-only conversion first. When the file has embedded Project XML it imports cleanly; otherwise it recovers a best-effort draft and gives you diagnostics.</p>
+</div>
+<aside aria-label="Export readiness" class="readiness-card" id="readinessCard">
+<span class="readiness-label">Export readiness</span>
+<strong id="exportStatus">Ready</strong>
+<p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. MPP gets a local best-effort converter with an XML fallback guide.</p>
+</aside>
+</section>
+<section aria-label="Project summary" class="summary-grid">
+<article class="summary-card">
+<span class="summary-label">Tasks</span>
+<strong id="taskCount">0</strong>
+<small>Active rows</small>
+</article>
+<article class="summary-card">
+<span class="summary-label">Duration</span>
+<strong id="durationCount">0d</strong>
+<small id="dateRange">No date range</small>
+</article>
+<article class="summary-card">
+<span class="summary-label">Completion</span>
+<strong id="completeCount">0%</strong>
+<small>Average progress</small>
+</article>
+<article class="summary-card status-summary">
+<span class="summary-label">Format</span>
+<strong>MSPDI</strong>
+<small>Project XML target</small>
+</article>
+</section>
 
-      <section id="mppPanel" class="mpp-panel" aria-live="polite" hidden></section>
-
-      <div id="fileDropOverlay" class="file-drop-overlay" hidden>
-        <div>
-          <strong>Drop your file</strong>
-          <span>XML imports directly. MPP is read locally in this browser.</span>
-        </div>
-      </div>
-
-      <section id="validationPanel" class="validation-panel" aria-live="polite"></section>
-
-      <section id="workspace" class="workspace unified-workspace">
-        <article class="work-card unified-card" aria-label="Unified task grid and Gantt chart">
-          <div class="card-header">
-            <div>
-              <h2>Schedule grid</h2>
-              <p>Compact Entry-style task sheet on the left, full details in Task Information, Gantt bars on the right.</p>
-            </div>
-            <span class="card-badge">Compact Entry view</span>
-          </div>
-
-          <div class="planner-shell" aria-label="Task grid with Gantt chart">
-            <div class="planner-scroll">
-              <div id="timeline" class="planner-timeline"></div>
-              <div id="gantt" class="planner-body">
-                <div id="taskBody" class="planner-rows"></div>
-              </div>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section id="resourceWorkspace" class="workspace resource-workspace" hidden>
-        <article class="work-card resource-card" aria-label="Resource Sheet">
-          <div class="card-header">
-            <div>
-              <h2>Resource Sheet</h2>
-              <p>MS Project-style list of people, equipment, materials, and cost resources. Assigned task/work/cost totals update from task assignments.</p>
-            </div>
-            <span class="card-badge" id="resourceCount">0 resources</span>
-          </div>
-
-          <div class="resource-sheet-shell">
-            <div class="resource-grid resource-grid-heading" aria-hidden="true">
-              <span>ID</span>
-              <span>i</span>
-              <span>Resource Name</span>
-              <span>Type</span>
-              <span>Initials</span>
-              <span>Max Units</span>
-              <span>Std Rate</span>
-              <span>Ovt Rate</span>
-              <span>Cost/Use</span>
-              <span>Assigned</span>
-              <span>Work</span>
-              <span>Cost</span>
-              <span>Base Calendar</span>
-              <span>Notes</span>
-              <span>Actions</span>
-            </div>
-            <div id="resourceBody" class="resource-body"></div>
-          </div>
-        </article>
-      </section>
-    </main>
-
-    <footer class="app-footer">
-      <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-      <span class="footer-status"><span id="appVersionFooter">v0.19.0</span><span id="saveStatus">Saved locally</span></span>
-    </footer>
-  </div>
-
-  <svg id="linkDragLayer" class="link-drag-layer" width="100%" height="100%" aria-hidden="true">
-    <path id="linkDragPath" class="link-drag-path" d="" />
-    <circle id="linkDragDot" class="link-drag-dot" cx="0" cy="0" r="5" />
-    <text id="linkDragLabel" class="link-drag-label" x="0" y="0"></text>
-  </svg>
-
-  <div id="dependencyModal" class="dependency-modal" hidden>
-    <div class="dependency-backdrop" data-link-choice="cancel"></div>
-    <section class="dependency-dialog" role="dialog" aria-modal="true" aria-labelledby="dependencyModalTitle" aria-describedby="dependencyModalCopy">
-      <button id="dependencyCloseBtn" class="dependency-close" type="button" data-link-choice="cancel" aria-label="Cancel dependency link">×</button>
-      <p class="eyebrow">Choose dependency</p>
-      <h2 id="dependencyModalTitle">Link these tasks</h2>
-      <p id="dependencyModalCopy" class="dependency-copy">Drag from a start/end connector to another connector. The link type is chosen automatically from the endpoints.</p>
-      <div class="dependency-options" role="group" aria-label="Dependency type">
-        <button type="button" data-link-choice="FS">
-          <strong>FS</strong>
-          <span>Finish → Start</span>
-          <small>Target starts after source finishes. Most common.</small>
-        </button>
-        <button type="button" data-link-choice="SS">
-          <strong>SS</strong>
-          <span>Start → Start</span>
-          <small>Target starts when source starts.</small>
-        </button>
-        <button type="button" data-link-choice="FF">
-          <strong>FF</strong>
-          <span>Finish → Finish</span>
-          <small>Target finishes when source finishes.</small>
-        </button>
-        <button type="button" data-link-choice="SF">
-          <strong>SF</strong>
-          <span>Start → Finish</span>
-          <small>Target finishes after source starts. Rare, but supported.</small>
-        </button>
-      </div>
-      <p class="dependency-tip">No typing needed. Connector-to-connector dragging chooses FS, SS, FF, or SF for you.</p>
-    </section>
-  </div>
-
-
-  <div id="taskInfoModal" class="task-info-modal" hidden>
-    <div class="task-info-backdrop" data-task-info-action="close"></div>
-    <section class="task-info-panel" role="dialog" aria-modal="true" aria-labelledby="taskInfoTitle" aria-describedby="taskInfoMeta">
-      <header class="task-info-header">
-        <div>
-          <p class="eyebrow">Task Information</p>
-          <h2 id="taskInfoTitle">Task</h2>
-          <p id="taskInfoMeta" class="task-info-meta">Select a task to inspect details.</p>
-        </div>
-        <button id="taskInfoCloseBtn" class="dependency-close" type="button" data-task-info-action="close" aria-label="Close task information">×</button>
-      </header>
-
-      <form id="taskInfoForm" class="task-info-form">
-        <p id="tiRollupNotice" class="task-info-notice" hidden></p>
-
-        <nav class="task-info-tabs" aria-label="Task Information sections">
-          <button type="button" class="task-info-tab is-active" data-task-info-tab="general">General</button>
-          <button type="button" class="task-info-tab" data-task-info-tab="resources">Resources</button>
-          <button type="button" class="task-info-tab" data-task-info-tab="predecessors">Predecessors</button>
-          <button type="button" class="task-info-tab" data-task-info-tab="advanced">Advanced</button>
-          <button type="button" class="task-info-tab" data-task-info-tab="notes">Notes</button>
-          <button type="button" class="task-info-tab" data-task-info-tab="structure">Structure</button>
-        </nav>
-
-        <fieldset class="task-info-page is-active" data-task-info-page="general">
-          <legend>General</legend>
-          <label class="wide-field">
+<section aria-live="polite" class="mpp-panel" hidden="" id="mppPanel"></section>
+<div class="file-drop-overlay" hidden="" id="fileDropOverlay">
+<div>
+<strong>Drop your file</strong>
+<span>XML imports directly. MPP is read locally in this browser.</span>
+</div>
+</div>
+<section aria-live="polite" class="validation-panel" id="validationPanel"></section>
+<section class="workspace unified-workspace" id="workspace">
+<article aria-label="Unified task grid and Gantt chart" class="work-card unified-card">
+<div class="card-header">
+<div>
+<h2>Schedule grid</h2>
+<p>Compact Entry-style task sheet on the left, full details in Task Information, Gantt bars on the right.</p>
+</div>
+<span class="card-badge">Compact Entry view</span>
+</div>
+<div aria-label="Task grid with Gantt chart" class="planner-shell">
+<div class="planner-scroll">
+<div class="planner-timeline" id="timeline"></div>
+<div class="planner-body" id="gantt">
+<div class="planner-rows" id="taskBody"></div>
+</div>
+</div>
+</div>
+</article>
+</section>
+<section class="workspace resource-workspace" hidden="" id="resourceWorkspace">
+<article aria-label="Resource Sheet" class="work-card resource-card">
+<div class="card-header">
+<div>
+<h2>Resource Sheet</h2>
+<p>MS Project-style list of people, equipment, materials, and cost resources. Assigned task/work/cost totals update from task assignments.</p>
+</div>
+<span class="card-badge" id="resourceCount">0 resources</span>
+</div>
+<div class="resource-sheet-shell">
+<div aria-hidden="true" class="resource-grid resource-grid-heading">
+<span>ID</span>
+<span>i</span>
+<span>Resource Name</span>
+<span>Type</span>
+<span>Initials</span>
+<span>Max Units</span>
+<span>Std Rate</span>
+<span>Ovt Rate</span>
+<span>Cost/Use</span>
+<span>Assigned</span>
+<span>Work</span>
+<span>Cost</span>
+<span>Base Calendar</span>
+<span>Notes</span>
+<span>Actions</span>
+</div>
+<div class="resource-body" id="resourceBody"></div>
+</div>
+</article>
+</section>
+</main>
+<footer class="app-footer">
+<span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
+<span class="footer-status"><span id="appVersionFooter">v0.20.0</span><span id="saveStatus">Saved locally</span></span>
+</footer>
+</div>
+<svg aria-hidden="true" class="link-drag-layer" height="100%" id="linkDragLayer" width="100%">
+<path class="link-drag-path" d="" id="linkDragPath"></path>
+<circle class="link-drag-dot" cx="0" cy="0" id="linkDragDot" r="5"></circle>
+<text class="link-drag-label" id="linkDragLabel" x="0" y="0"></text>
+</svg>
+<div class="dependency-modal" hidden="" id="dependencyModal">
+<div class="dependency-backdrop" data-link-choice="cancel"></div>
+<section aria-describedby="dependencyModalCopy" aria-labelledby="dependencyModalTitle" aria-modal="true" class="dependency-dialog" role="dialog">
+<button aria-label="Cancel dependency link" class="dependency-close" data-link-choice="cancel" id="dependencyCloseBtn" type="button">×</button>
+<p class="eyebrow">Choose dependency</p>
+<h2 id="dependencyModalTitle">Link these tasks</h2>
+<p class="dependency-copy" id="dependencyModalCopy">Drag from a start/end connector to another connector. The link type is chosen automatically from the endpoints.</p>
+<div aria-label="Dependency type" class="dependency-options" role="group">
+<button data-link-choice="FS" type="button">
+<strong>FS</strong>
+<span>Finish → Start</span>
+<small>Target starts after source finishes. Most common.</small>
+</button>
+<button data-link-choice="SS" type="button">
+<strong>SS</strong>
+<span>Start → Start</span>
+<small>Target starts when source starts.</small>
+</button>
+<button data-link-choice="FF" type="button">
+<strong>FF</strong>
+<span>Finish → Finish</span>
+<small>Target finishes when source finishes.</small>
+</button>
+<button data-link-choice="SF" type="button">
+<strong>SF</strong>
+<span>Start → Finish</span>
+<small>Target finishes after source starts. Rare, but supported.</small>
+</button>
+</div>
+<p class="dependency-tip">No typing needed. Connector-to-connector dragging chooses FS, SS, FF, or SF for you.</p>
+</section>
+</div>
+<div class="task-info-modal" hidden="" id="taskInfoModal">
+<div class="task-info-backdrop" data-task-info-action="close"></div>
+<section aria-describedby="taskInfoMeta" aria-labelledby="taskInfoTitle" aria-modal="true" class="task-info-panel" role="dialog">
+<header class="task-info-header">
+<div>
+<p class="eyebrow">Task Information</p>
+<h2 id="taskInfoTitle">Task</h2>
+<p class="task-info-meta" id="taskInfoMeta">Select a task to inspect details.</p>
+</div>
+<button aria-label="Close task information" class="dependency-close" data-task-info-action="close" id="taskInfoCloseBtn" type="button">×</button>
+</header>
+<form class="task-info-form" id="taskInfoForm">
+<p class="task-info-notice" hidden="" id="tiRollupNotice"></p>
+<nav aria-label="Task Information sections" class="task-info-tabs">
+<button class="task-info-tab is-active" data-task-info-tab="general" type="button">General</button>
+<button class="task-info-tab" data-task-info-tab="resources" type="button">Resources</button>
+<button class="task-info-tab" data-task-info-tab="predecessors" type="button">Predecessors</button>
+<button class="task-info-tab" data-task-info-tab="advanced" type="button">Advanced</button>
+<button class="task-info-tab" data-task-info-tab="notes" type="button">Notes</button>
+<button class="task-info-tab" data-task-info-tab="structure" type="button">Structure</button>
+</nav>
+<fieldset class="task-info-page is-active" data-task-info-page="general">
+<legend>General</legend>
+<label class="wide-field">
             Task name
-            <input id="tiName" type="text" />
-          </label>
-          <div class="task-info-grid">
-            <label>
+            <input id="tiName" type="text"/>
+</label>
+<div class="task-info-grid">
+<label>
               Start
-              <input id="tiStart" type="date" />
-            </label>
-            <label>
+              <input id="tiStart" type="date"/>
+</label>
+<label>
               Finish
-              <input id="tiFinish" type="date" />
-            </label>
-            <label>
+              <input id="tiFinish" type="date"/>
+</label>
+<label>
               Duration
-              <input id="tiDuration" type="text" placeholder="3d, 4h, 1w, 0d" />
-            </label>
-            <label>
+              <input id="tiDuration" placeholder="3d, 4h, 1w, 0d" type="text"/>
+</label>
+<label>
               % Complete
-              <input id="tiPercent" type="number" min="0" max="100" />
-            </label>
-          </div>
-          <label class="checkbox-line">
-            <input id="tiMilestone" type="checkbox" />
+              <input id="tiPercent" max="100" min="0" type="number"/>
+</label>
+</div>
+<label class="checkbox-line">
+<input id="tiMilestone" type="checkbox"/>
             Milestone / zero-duration task
           </label>
-        </fieldset>
-
-        <fieldset class="task-info-page" data-task-info-page="resources">
-          <legend>Resources / assignments</legend>
-          <div class="assignment-summary-bar">
-            <span id="tiAssignmentSummary">No resources assigned yet.</span>
-            <button id="tiAddAssignmentBtn" type="button" class="primary small-primary" data-assignment-action="add">+ Add assignment</button>
-          </div>
-          <div class="assignment-grid-heading" aria-hidden="true">
-            <span>Resource</span>
-            <span>Units</span>
-            <span>Work</span>
-            <span>Actual</span>
-            <span>Cost</span>
-            <span>Action</span>
-          </div>
-          <div id="tiAssignmentBody" class="assignment-body"></div>
-          <p class="task-info-help">This is the real MS Project-style bridge between task rows and Resource Sheet rows. Duration/work scheduling math comes later; for now assignments store resource, units, work, actual work, remaining work, and calculated cost.</p>
-        </fieldset>
-
-        <fieldset class="task-info-page" data-task-info-page="notes">
-          <legend>Notes</legend>
-          <label class="wide-field">
+</fieldset>
+<fieldset class="task-info-page" data-task-info-page="resources">
+<legend>Resources / assignments</legend>
+<div class="assignment-summary-bar">
+<span id="tiAssignmentSummary">No resources assigned yet.</span>
+<button class="primary small-primary" data-assignment-action="add" id="tiAddAssignmentBtn" type="button">+ Add assignment</button>
+</div>
+<div aria-hidden="true" class="assignment-grid-heading">
+<span>Resource</span>
+<span>Units</span>
+<span>Work</span>
+<span>Actual</span>
+<span>Cost</span>
+<span>Action</span>
+</div>
+<div class="assignment-body" id="tiAssignmentBody"></div>
+<p class="task-info-help">This is the real MS Project-style bridge between task rows and Resource Sheet rows. Duration/work scheduling math comes later; for now assignments store resource, units, work, actual work, remaining work, and calculated cost.</p>
+</fieldset>
+<fieldset class="task-info-page" data-task-info-page="notes">
+<legend>Notes</legend>
+<label class="wide-field">
             Task notes
-            <textarea id="tiNotes" rows="8" placeholder="Task notes, assumptions, handoff details, risks..."></textarea>
-          </label>
-        </fieldset>
-
-        <fieldset class="task-info-page" data-task-info-page="predecessors">
-          <legend>Predecessors / Successors</legend>
-          <label class="wide-field">
+            <textarea id="tiNotes" placeholder="Task notes, assumptions, handoff details, risks..." rows="8"></textarea>
+</label>
+</fieldset>
+<fieldset class="task-info-page" data-task-info-page="predecessors">
+<legend>Predecessors / Successors</legend>
+<label class="wide-field">
             Predecessors
-            <input id="tiPredecessors" type="text" placeholder="1FS, 2SS+2d, 3FF-4h" />
-          </label>
-          <label class="wide-field">
+            <input id="tiPredecessors" placeholder="1FS, 2SS+2d, 3FF-4h" type="text"/>
+</label>
+<label class="wide-field">
             Successors
-            <input id="tiSuccessors" type="text" readonly aria-readonly="true" placeholder="none" />
-          </label>
-          <p class="task-info-help">Predecessors are editable here. Successors are calculated from other tasks that point to this one.</p>
-        </fieldset>
-
-        <fieldset class="task-info-page" data-task-info-page="advanced">
-          <legend>Advanced scheduling</legend>
-          <div class="task-info-grid">
-            <label>
+            <input aria-readonly="true" id="tiSuccessors" placeholder="none" readonly="" type="text"/>
+</label>
+<p class="task-info-help">Predecessors are editable here. Successors are calculated from other tasks that point to this one.</p>
+</fieldset>
+<fieldset class="task-info-page" data-task-info-page="advanced">
+<legend>Advanced scheduling</legend>
+<div class="task-info-grid">
+<label>
               Constraint
               <select id="tiConstraintType"></select>
-            </label>
-            <label>
+</label>
+<label>
               Constraint date
-              <input id="tiConstraintDate" type="date" />
-            </label>
-            <label>
+              <input id="tiConstraintDate" type="date"/>
+</label>
+<label>
               Deadline
-              <input id="tiDeadline" type="date" />
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset class="task-info-page" data-task-info-page="structure">
-          <legend>Structure</legend>
-          <div class="task-info-grid">
-            <label>
+              <input id="tiDeadline" type="date"/>
+</label>
+</div>
+</fieldset>
+<fieldset class="task-info-page" data-task-info-page="structure">
+<legend>Structure</legend>
+<div class="task-info-grid">
+<label>
               WBS
-              <input id="tiWbs" type="text" readonly aria-readonly="true" />
-            </label>
-            <label>
+              <input aria-readonly="true" id="tiWbs" readonly="" type="text"/>
+</label>
+<label>
               Outline level
-              <input id="tiOutlineLevel" type="number" readonly aria-readonly="true" />
-            </label>
-            <label class="wide-field">
+              <input aria-readonly="true" id="tiOutlineLevel" readonly="" type="number"/>
+</label>
+<label class="wide-field">
               Parent
-              <input id="tiParent" type="text" readonly aria-readonly="true" />
-            </label>
-            <label class="wide-field">
+              <input aria-readonly="true" id="tiParent" readonly="" type="text"/>
+</label>
+<label class="wide-field">
               Summary / rollup
-              <input id="tiSummary" type="text" readonly aria-readonly="true" />
-            </label>
-          </div>
-        </fieldset>
-
-        <div class="task-info-actions">
-          <button id="taskInfoCancelBtn" type="button" data-task-info-action="close">Cancel</button>
-          <button id="taskInfoSaveBtn" type="submit" class="primary" data-task-info-action="save">Save task info</button>
-        </div>
-      </form>
-    </section>
-  </div>
-
-  <div id="linkSuggestion" class="link-suggestion" hidden aria-live="polite"></div>
-
-  <div id="scheduleLinkModal" class="dependency-modal schedule-link-modal" hidden>
-    <div class="dependency-backdrop" data-schedule-action="cancel"></div>
-    <section class="dependency-dialog schedule-dialog" role="dialog" aria-modal="true" aria-labelledby="scheduleLinkTitle" aria-describedby="scheduleLinkCopy">
-      <button class="dependency-close" type="button" data-schedule-action="cancel" aria-label="Cancel dependency scheduling">×</button>
-      <p class="eyebrow">Schedule this link?</p>
-      <h2 id="scheduleLinkTitle">Move the linked task?</h2>
-      <p id="scheduleLinkCopy" class="dependency-copy">This dependency can update the task dates now, or you can keep the current dates and only save the relationship.</p>
-      <div id="scheduleLinkPreview" class="schedule-preview" aria-live="polite"></div>
-      <div class="schedule-actions">
-        <button type="button" class="primary" data-schedule-action="move">Move task now</button>
-        <button type="button" data-schedule-action="keep">Keep dates, just link</button>
-        <button type="button" data-schedule-action="cancel">Cancel link</button>
-      </div>
-      <p class="dependency-tip">Tip: FS, SS, FF, and SF are chosen automatically from the start/finish strings you connect.</p>
-    </section>
-  </div>
-
-  <script src="mpp-native-reader.js"></script>
-  <script src="app.js"></script>
+              <input aria-readonly="true" id="tiSummary" readonly="" type="text"/>
+</label>
+</div>
+</fieldset>
+<div class="task-info-actions">
+<button data-task-info-action="close" id="taskInfoCancelBtn" type="button">Cancel</button>
+<button class="primary" data-task-info-action="save" id="taskInfoSaveBtn" type="submit">Save task info</button>
+</div>
+</form>
+</section>
+</div>
+<div aria-live="polite" class="link-suggestion" hidden="" id="linkSuggestion"></div>
+<div class="dependency-modal schedule-link-modal" hidden="" id="scheduleLinkModal">
+<div class="dependency-backdrop" data-schedule-action="cancel"></div>
+<section aria-describedby="scheduleLinkCopy" aria-labelledby="scheduleLinkTitle" aria-modal="true" class="dependency-dialog schedule-dialog" role="dialog">
+<button aria-label="Cancel dependency scheduling" class="dependency-close" data-schedule-action="cancel" type="button">×</button>
+<p class="eyebrow">Schedule this link?</p>
+<h2 id="scheduleLinkTitle">Move the linked task?</h2>
+<p class="dependency-copy" id="scheduleLinkCopy">This dependency can update the task dates now, or you can keep the current dates and only save the relationship.</p>
+<div aria-live="polite" class="schedule-preview" id="scheduleLinkPreview"></div>
+<div class="schedule-actions">
+<button class="primary" data-schedule-action="move" type="button">Move task now</button>
+<button data-schedule-action="keep" type="button">Keep dates, just link</button>
+<button data-schedule-action="cancel" type="button">Cancel link</button>
+</div>
+<p class="dependency-tip">Tip: FS, SS, FF, and SF are chosen automatically from the start/finish strings you connect.</p>
+</section>
+</div>
+<script src="mpp-native-reader.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
