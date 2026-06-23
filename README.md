@@ -26,18 +26,13 @@ The converter does the best practical static-web approach:
 2. Searches internal streams for embedded Microsoft Project XML / MSPDI.
 3. If XML is found, imports the schedule directly.
 4. If no XML is found, tries a real native table-cache decode:
-   - `TBkndTask/VarMeta`
-   - `TBkndTask/Var2Data`
-   - `TBkndCons/FixedData`
-5. Probes additional Project table-cache streams learned from the MPXJ stress files:
-   - `TBkndRsc` resources
-   - `TBkndAssn` assignments
-   - `TBkndCal` calendars
-   - `TBkndOutlCode` outline codes
-6. Detects MPXJ-style stress profiles such as task fields, relations, baselines, split tasks, resources, and assignments.
-7. Converts recovered tasks, dates, percent complete, duration hints, cost hints, and FS/SS/FF/SF links into Project XML and imports it.
-8. If that table-cache decode is not available, falls back to recovered text / draft XML.
-9. Lets you download diagnostics, recovered text, or converted XML.
+   - `TBkndTask/FixedMeta` / `FixedData`
+   - `TBkndTask/Fixed2Meta` / `Fixed2Data` for the visible task order
+   - `TBkndTask/VarMeta` / `Var2Data` for names and display fields
+   - `TBkndCons/FixedData` for dependency links
+5. Converts recovered tasks, dates, FS/SS/FF/SF links, summary rows, and outline levels into Project XML and imports it.
+6. If that table-cache decode is not available, falls back to recovered text / draft XML.
+7. Lets you download diagnostics, recovered text, or converted XML.
 
 ## Honest limitation
 
@@ -82,24 +77,21 @@ No Node, Java, backend, or upload is required for the static app.
 This MVP intentionally keeps the model small. It does not yet fully support:
 
 - Native `.mpp` parity for every file
+- Perfect outline reconstruction for every private MPP variant
 - Resource pools
-- Full assignment units/cost import, although assignment rows are now probed in diagnostics
-- Full baseline import, although baseline stress files are now recognized
-- Complex constraints, although constraint/date/cost/duration hints are recovered when visible
-- Calendars beyond a simple 8-hour day, although calendar stream presence is now reported
+- Assignment units/costs
+- Baselines
+- Complex constraints
+- Calendars beyond a simple 8-hour day
 - Critical path calculation
 
 
-## MPXJ stress files this decoder is now aware of
+## Summary task behavior
 
-The reader has built-in feature probes for these public MPXJ test files:
+The app now supports project nesting:
 
-- `mpp14task.mpp` — task field-map coverage
-- `mpp14relations.mpp` — predecessor/dependency coverage
-- `mpp14baseline.mpp` — baseline/actuals/hierarchy coverage
-- `mpp14splittask.mpp` — split task coverage
-- `mpp14resource.mpp` — resource/assignment/outline-code coverage
-- `mpp14assignmentcustom.mpp` — assignment custom/baseline fields
-- `mpp14assignmentfields.mpp` — assignment field coverage
-
-These probes do not magically make the app MPXJ, but they make failures more useful: diagnostics now show which table-cache families were found and what values were recovered.
+- Summary tasks have a collapse/expand caret.
+- Child rows hide when the parent is collapsed.
+- Summary start, finish, duration, and percent complete roll up from child tasks.
+- Imported Project XML preserves `<Summary>`, `<Expanded>`, and `<OutlineLevel>` fields.
+- Native `.mpp` decoding now uses the MPP task-order table where available, then infers outline groups from summary rows.

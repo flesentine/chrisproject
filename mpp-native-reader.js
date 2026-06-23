@@ -1,5 +1,5 @@
 /*
-  NativeMppReader v0.6
+  NativeMppReader v0.5
   Browser-only Microsoft Project .mpp reader foundation.
 
   What this does:
@@ -8,7 +8,7 @@
   - Reads summary metadata and stream inventory.
   - Detects embedded MSPDI/XML and imports it when present.
   - Adds a stronger recovery layer: stream scoring, UTF-16/ANSI/length-prefixed string mining,
-    date hint discovery, diagnostics JSON, stream-bucket ordering, compressed XML sniffing, MPXJ stress-file feature probes, and a best-effort draft task-name import.
+    date hint discovery, diagnostics JSON, stream-bucket ordering, compressed XML sniffing, and a best-effort draft task-name import.
 
   What this still does not fully do:
   - Decode every private Microsoft Project binary table the way MPXJ does.
@@ -522,7 +522,7 @@
     if (/^(Microsoft|MSProject|Root Entry|SummaryInformation|DocumentSummaryInformation|CompObj|Ole|Standard|Times New Roman|Arial|Calibri|Tahoma|Windows|Project|Unknown|Default|Normal|English|United States|Page|Task Name|Start|Finish|Duration|Resource Names)$/i.test(text)) return true;
     if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i.test(text)) return true;
     if (/https?:\/\//i.test(text)) return true;
-    if (/�/.test(text)) return true;
+    if (/�|[\uE000-\uF8FF]/.test(text)) return true;
     if (/(.)\1{5,}/.test(text)) return true;
     if (/^[A-Z]{1,2}[0-9]{3,}$/i.test(text)) return true;
     if (/^(true|false|null|none|yes|no|ok|cancel|open|save|close|print)$/i.test(text)) return true;
@@ -836,10 +836,12 @@
 
 
   const TASK_FIELD_NAME_HINTS = [
-    0x0b408054,
     0x0b60805b,
+    0x0b408054,
+    0x0b40805d,
     0x0b408046,
     0x0b408049,
+    0x0b408045,
     0x0b40000e,
   ];
 
@@ -956,7 +958,10 @@
   function parseCurrencyValue(value) {
     const text = cleanCandidate(value);
     const match = /[$€£]?\s*(-?\d[\d,]*(?:\.\d+)?)/.exec(text);
-    if (!match || !/[$€£,]|\.\d{2}/.test(text)) return null;
+    const hasCurrency = /[$€£]/.test(text);
+    const hasMoneyDecimals = /\.\d{2}/.test(text);
+    const hasThousands = /\d{1,3}(,\d{3})+/.test(text);
+    if (!match || !(hasCurrency || hasMoneyDecimals || hasThousands)) return null;
     const n = Number(match[1].replace(/,/g, ""));
     return Number.isFinite(n) ? n : null;
   }
@@ -966,24 +971,20 @@
     return /^[0-9a-f]{4,}$/i.test(text);
   }
 
-  function decodeRawVarValue(raw) {
-    if (!raw || !raw.length) return "";
+  function readLengthPrefixedValue(bytes, offset) {
+    if (!bytes || offset == null || offset < 0 || offset + 4 > bytes.length) return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const length = readUInt32(view, offset);
+    if (!Number.isFinite(length) || length < 0 || length > bytes.length - offset - 4 || length > 1024 * 1024) return null;
+    const raw = bytes.slice(offset + 4, offset + 4 + length);
+    if (!raw.length) return "";
 
     if (raw.length % 2 === 0 && looksMostlyUtf16(raw)) {
-      return textDecoderUtf16.decode(raw).replace(/ +$/g, "").trim();
+      return textDecoderUtf16.decode(raw).replace(/\0+$/g, "").trim();
     }
 
     if (looksMostlyAnsi(raw)) {
-      return textDecoderUtf8.decode(raw).replace(/ +$/g, "").trim();
-    }
-
-    // Some Project table var values are stored as tiny scalar payloads. Keep them
-    // as text so the diagnostics can still prove we found the field.
-    if (raw.length === 2) {
-      const rawView = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-      const intValue = rawView.getInt16(0, true);
-      if (intValue === -1 || intValue === 0) return "";
-      return String(intValue);
+      return textDecoderUtf8.decode(raw).replace(/\0+$/g, "").trim();
     }
 
     if (raw.length === 4) {
@@ -999,52 +1000,9 @@
       if (Number.isFinite(maybeNumber) && Math.abs(maybeNumber) > 0.000001 && Math.abs(maybeNumber) < 1000000000) {
         return String(maybeNumber);
       }
-      const maybeDate = readFileTime(rawView.getUint32(0, true), rawView.getUint32(4, true));
-      if (isReasonableDate(maybeDate)) return dateToIsoLocal(maybeDate);
     }
 
     return "";
-  }
-
-  function findUtf16Terminator(bytes) {
-    for (let i = 0; i + 1 < bytes.length; i += 2) {
-      if (bytes[i] === 0 && bytes[i + 1] === 0) return i;
-    }
-    return -1;
-  }
-
-  function readLengthPrefixedValue(bytes, offset) {
-    if (!bytes || offset == null || offset < 0 || offset + 2 > bytes.length) return null;
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-    const attempts = [];
-    if (offset + 4 <= bytes.length) {
-      const length32 = readUInt32(view, offset);
-      if (Number.isFinite(length32) && length32 >= 0 && length32 <= bytes.length - offset - 4 && length32 <= 1024 * 1024) {
-        attempts.push(bytes.slice(offset + 4, offset + 4 + length32));
-      }
-    }
-
-    const length16 = readUInt16(view, offset);
-    if (Number.isFinite(length16) && length16 > 0 && length16 <= bytes.length - offset - 2 && length16 <= 65535) {
-      attempts.push(bytes.slice(offset + 2, offset + 2 + length16));
-    }
-
-    // Fallback for null-terminated UTF-16/ANSI strings when metadata points at
-    // the value body rather than at a length prefix.
-    const tail = bytes.slice(offset, Math.min(bytes.length, offset + 512));
-    const nul16 = findUtf16Terminator(tail);
-    if (nul16 > 2) attempts.push(tail.slice(0, nul16));
-    const nul8 = tail.indexOf(0);
-    if (nul8 > 2) attempts.push(tail.slice(0, nul8));
-
-    for (const raw of attempts) {
-      const decoded = decodeRawVarValue(raw);
-      if (decoded != null && String(decoded).trim()) return decoded;
-    }
-
-    if (attempts.length) return "";
-    return null;
   }
 
   function getEntryByPath(cfb, suffix) {
@@ -1052,9 +1010,9 @@
     return cfb.entries.find((entry) => entry.type === 2 && String(entry.path || "").toLowerCase().endsWith(normalizedSuffix)) || null;
   }
 
-  function parseVarTable(cfb, tableName) {
-    const varMetaEntry = getEntryByPath(cfb, `${tableName}/VarMeta`);
-    const var2DataEntry = getEntryByPath(cfb, `${tableName}/Var2Data`) || getEntryByPath(cfb, `${tableName}/VarData`);
+  function parseTaskVarTable(cfb) {
+    const varMetaEntry = getEntryByPath(cfb, "TBkndTask/VarMeta");
+    const var2DataEntry = getEntryByPath(cfb, "TBkndTask/Var2Data");
     if (!varMetaEntry || !var2DataEntry) return null;
 
     const varMeta = cfb.getStream(varMetaEntry);
@@ -1063,11 +1021,7 @@
 
     const view = new DataView(varMeta.buffer, varMeta.byteOffset, varMeta.byteLength);
     const rows = new Map();
-    const fieldCounts = new Map();
 
-    // MPP 12/14 table-cache var metadata is commonly 12-byte entries:
-    // field id, row id, value offset. The MPXJ stress files use this layout for
-    // Task/Resource/Assignment var values, so keep it generic by table name.
     for (let offset = 0x20; offset + 12 <= varMeta.length; offset += 12) {
       const fieldId = readUInt32(view, offset);
       const rowId = readUInt32(view, offset + 4);
@@ -1078,40 +1032,43 @@
       const row = rows.get(rowId) || { rowId, fields: new Map() };
       row.fields.set(fieldId, value);
       rows.set(rowId, row);
-      fieldCounts.set(fieldId, (fieldCounts.get(fieldId) || 0) + 1);
     }
 
     return {
-      tableName,
       rows,
       varMetaStream: varMetaEntry.path,
       var2DataStream: var2DataEntry.path,
       varMetaSize: varMeta.length,
       var2DataSize: var2Data.length,
-      fieldCounts,
     };
   }
 
-  function parseTaskVarTable(cfb) {
-    return parseVarTable(cfb, "TBkndTask");
+  function normalizeRecoveredTaskName(raw, options = {}) {
+    let text = cleanCandidate(raw);
+    if (!text) return "";
+    text = text
+      .replace(/^[-–—]+\s*/g, "")
+      .replace(/\s*[-–—]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text || isHexGarbage(text)) return "";
+    if (text.length < 2 || text.length > 140) return "";
+    if (!/[A-Za-z\p{L}]/u.test(text)) return "";
+    if (/^[0-9 .:\/\-]+$/.test(text)) return "";
+    if (/^(Loc|Asia|Late|Future|Finished|No Deadline|No Program Date|No Program Baseline Date|No Baseline|On-Time|On-Time \(Or Early\)|Standard|Calendar|Priority|Duration|Start|Finish|Task Name|Resource Names)$/i.test(text)) return "";
+    if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}\/\d{1,2}\/\d{2,4}/i.test(text)) return "";
+    if (/https?:\/\//i.test(text)) return "";
+    if (/�/.test(text)) return "";
+    const punctuation = (text.match(/[^\p{L}\p{N} ()/#&+.,'_:;\-]/gu) || []).length;
+    if (punctuation > Math.max(4, Math.floor(text.length / 3))) return "";
+    if (!options.allowShort && badCandidate(text) && text.length < 12) return "";
+    return text;
   }
 
-  function parseResourceVarTable(cfb) {
-    return parseVarTable(cfb, "TBkndRsc");
-  }
-
-  function parseAssignmentVarTable(cfb) {
-    return parseVarTable(cfb, "TBkndAssn");
-  }
-
-  function firstUsefulField(row, fieldIds) {
+  function firstUsefulField(row, fieldIds, options = {}) {
     for (const fieldId of fieldIds) {
-      const raw = row.fields.get(fieldId);
-      const text = cleanCandidate(raw);
-      if (!text || isHexGarbage(text)) continue;
-      if (/^(No Deadline|No Program Date|No Program Baseline Date|Late|Future|On-Time|On-Time \(Or Early\))$/i.test(text)) continue;
-      if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}\/\d{1,2}\/\d{2,4}$/i.test(text)) continue;
-      return text;
+      const text = normalizeRecoveredTaskName(row.fields.get(fieldId), options);
+      if (text) return text;
     }
     return "";
   }
@@ -1131,18 +1088,16 @@
     return dateToIsoLocal(date);
   }
 
-  function inferTaskNameFromRow(row) {
+  function inferTaskNameFromRow(row, options = {}) {
     const values = [...row.fields.values()]
-      .map(cleanCandidate)
+      .map((value) => normalizeRecoveredTaskName(value, options))
       .filter(Boolean)
       .filter((value) => !parseMppDisplayDate(value))
       .filter((value) => parsePercentValue(value) == null)
       .filter((value) => parseDurationDays(value) == null)
-      .filter((value) => parseCurrencyValue(value) == null)
-      .filter((value) => !badCandidate(value));
+      .filter((value) => parseCurrencyValue(value) == null);
 
-    // Prefer explicit task-like labels such as "Task #1", but allow normal work-package names.
-    const taskish = values.find((value) => /task|milestone|phase|review|design|build|test|deploy|launch|submit|approval|release|plan/i.test(value));
+    const taskish = values.find((value) => /task|milestone|phase|review|design|build|test|deploy|launch|submit|approval|release|plan|integration|development|media|rack|requirement/i.test(value));
     return taskish || values.sort((a, b) => b.length - a.length)[0] || "";
   }
 
@@ -1187,13 +1142,143 @@
     return candidates.length ? candidates[0] : null;
   }
 
+  function chooseFixedMetaItemSize(bytes, expectedCount, candidates) {
+    if (!bytes || bytes.length < 16) return candidates[0];
+    const available = bytes.length - 16;
+    const exact = candidates.find((size) => available % size === 0 && Math.floor(available / size) === expectedCount);
+    if (exact) return exact;
+    const clean = candidates.find((size) => available % size === 0);
+    return clean || candidates[0];
+  }
+
+  function parseFixedMetaItems(cfb, suffix, itemSize) {
+    const entry = getEntryByPath(cfb, suffix);
+    if (!entry) return { entry: null, items: [], bytes: null };
+    const bytes = cfb.getStream(entry);
+    if (bytes.length < 16) return { entry, items: [], bytes };
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (readUInt32(view, 0) !== 0xfadfadba) return { entry, items: [], bytes };
+    const count = Math.max(0, Math.floor((bytes.length - 16) / itemSize));
+    const items = [];
+    for (let i = 0; i < count; i += 1) {
+      items.push(bytes.slice(16 + i * itemSize, 16 + (i + 1) * itemSize));
+    }
+    return { entry, items, bytes };
+  }
+
+  function splitFixedDataItems(metaItems, dataBytes, maxExpectedSize = 0, minSize = 0) {
+    if (!dataBytes || !metaItems?.length) return [];
+    return metaItems.map((meta, index) => {
+      if (!meta || meta.length < 8) return new Uint8Array();
+      const metaView = new DataView(meta.buffer, meta.byteOffset, meta.byteLength);
+      const itemOffset = readInt32(metaView, 4);
+      if (itemOffset < 0 || itemOffset > dataBytes.length) return new Uint8Array();
+      let itemSize;
+      if (index + 1 === metaItems.length) {
+        itemSize = dataBytes.length - itemOffset;
+      } else {
+        const next = metaItems[index + 1];
+        const nextView = new DataView(next.buffer, next.byteOffset, next.byteLength);
+        itemSize = readInt32(nextView, 4) - itemOffset;
+      }
+      if (itemSize === 0) itemSize = minSize;
+      const available = dataBytes.length - itemOffset;
+      if (itemSize < 0 || itemSize > available) itemSize = maxExpectedSize ? Math.min(maxExpectedSize, available) : available;
+      if (maxExpectedSize && itemSize > maxExpectedSize) itemSize = maxExpectedSize;
+      if (itemSize <= 0) return new Uint8Array();
+      return dataBytes.slice(itemOffset, itemOffset + itemSize);
+    });
+  }
+
+  function readFloat64Safe(bytes, offset) {
+    if (!bytes || offset < 0 || offset + 8 > bytes.length) return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const value = view.getFloat64(offset, true);
+    return Number.isFinite(value) && Math.abs(value) < 1e12 ? value : null;
+  }
+
+  function parseTaskFixedTables(cfb) {
+    const fixedMeta = parseFixedMetaItems(cfb, "TBkndTask/FixedMeta", 47);
+    const fixedDataEntry = getEntryByPath(cfb, "TBkndTask/FixedData");
+    const fixed2MetaEntry = getEntryByPath(cfb, "TBkndTask/Fixed2Meta");
+    const fixed2DataEntry = getEntryByPath(cfb, "TBkndTask/Fixed2Data");
+    if (!fixedMeta.items.length || !fixedDataEntry) return null;
+
+    const fixedDataBytes = cfb.getStream(fixedDataEntry);
+    const fixedItems = splitFixedDataItems(fixedMeta.items, fixedDataBytes, 202, 0);
+    let fixed2Items = [];
+    let fixed2MetaItemSize = 0;
+    if (fixed2MetaEntry && fixed2DataEntry) {
+      const fixed2MetaBytes = cfb.getStream(fixed2MetaEntry);
+      fixed2MetaItemSize = chooseFixedMetaItemSize(fixed2MetaBytes, fixedItems.length, [92, 93, 94, 95, 96]);
+      const fixed2Meta = parseFixedMetaItems(cfb, "TBkndTask/Fixed2Meta", fixed2MetaItemSize);
+      fixed2Items = splitFixedDataItems(fixed2Meta.items, cfb.getStream(fixed2DataEntry), 0, 0);
+    }
+
+    const byRowId = new Map();
+    const byUniqueId = new Map();
+    const records = [];
+    fixedItems.forEach((item, index) => {
+      if (!item || item.length < 8) return;
+      const view = new DataView(item.buffer, item.byteOffset, item.byteLength);
+      const uniqueId = readUInt32(view, 0);
+      const rowId = readUInt32(view, 4);
+      const fixed2 = fixed2Items[index] || new Uint8Array();
+      const orderKey = readFloat64Safe(fixed2, 16);
+      const parentUniqueId = item.length >= 40 ? readUInt32(view, 36) : 0;
+      const outlineLevel = item.length >= 42 ? readUInt16(view, 40) : 0;
+      const percentFixed = item.length >= 92 ? Math.max(0, Math.min(100, readUInt16(view, 90))) : null;
+      const meta = fixedMeta.items[index] || new Uint8Array();
+      const expanded = !(meta.length > 12 && (meta[12] & 0x02));
+      const isSummary = item.length > 140 && item[140] === 1;
+      const info = {
+        fixedIndex: index,
+        uniqueId,
+        rowId,
+        parentUniqueId,
+        outlineLevel: outlineLevel > 0 && outlineLevel < 32 ? outlineLevel : 0,
+        isSummary,
+        expanded,
+        percentFixed,
+        orderKey,
+        fixedDataLength: item.length,
+      };
+      records.push(info);
+      if (rowId) byRowId.set(rowId, info);
+      byUniqueId.set(uniqueId, info);
+    });
+
+    return {
+      byRowId,
+      byUniqueId,
+      records,
+      fixedMetaStream: fixedMeta.entry?.path || "",
+      fixedDataStream: fixedDataEntry.path,
+      fixed2MetaStream: fixed2MetaEntry?.path || "",
+      fixed2DataStream: fixed2DataEntry?.path || "",
+      fixed2MetaItemSize,
+      summaryCount: records.filter((record) => record.isSummary).length,
+      orderedCount: records.filter((record) => record.orderKey != null).length,
+    };
+  }
+
+  function rowLooksSummary(row) {
+    const rollupText = cleanCandidate(row.fields.get(0x0b408044));
+    const summaryLabel = cleanCandidate(row.fields.get(0x0b408045));
+    const summaryTitle = cleanCandidate(row.fields.get(0x0b408049));
+    return /\(0d Var\)/i.test(rollupText) || /^[-–—]\s*\S/.test(summaryLabel) || /^[-–—]\s*\S.*[-–—]$/.test(summaryTitle);
+  }
+
   function parseNativeTaskRows(cfb) {
     const table = parseTaskVarTable(cfb);
     if (!table) return null;
+    const fixedTables = parseTaskFixedTables(cfb);
 
     const candidates = [];
     for (const row of [...table.rows.values()].sort((a, b) => a.rowId - b.rowId)) {
-      const name = firstUsefulField(row, TASK_FIELD_NAME_HINTS) || inferTaskNameFromRow(row);
+      const fixed = fixedTables?.byRowId.get(row.rowId) || null;
+      const isSummary = rowLooksSummary(row);
+      const name = firstUsefulField(row, TASK_FIELD_NAME_HINTS, { isSummary }) || inferTaskNameFromRow(row, { isSummary });
       const start = firstDateField(row, TASK_FIELD_START_HINTS) || inferFirstDateFromRow(row, "start");
       const finish = firstDateField(row, TASK_FIELD_FINISH_HINTS) || inferFirstDateFromRow(row, "finish", start);
       const durationDays = inferDurationFromRow(row);
@@ -1203,18 +1288,24 @@
       const computedFinish = finish || addIsoDays(start, Math.max(1, durationDays || 1) - 1);
       candidates.push({
         rowId: row.rowId,
+        uniqueId: fixed?.uniqueId ?? null,
+        fixedIndex: fixed?.fixedIndex ?? null,
+        orderKey: fixed?.orderKey ?? null,
+        parentUniqueId: fixed?.parentUniqueId ?? 0,
         name,
         start,
         finish: computedFinish < start ? start : computedFinish,
-        percent: percent ?? 0,
+        percent: percent ?? fixed?.percentFixed ?? 0,
         durationDays: durationDays || null,
         cost: cost ?? null,
-        outlineLevel: 1,
-        source: "TBkndTask VarMeta/Var2Data",
+        outlineLevel: fixed?.outlineLevel || 0,
+        isSummary,
+        expanded: fixed?.expanded !== false,
+        source: fixed ? "TBkndTask FixedMeta/FixedData + VarMeta/Var2Data" : "TBkndTask VarMeta/Var2Data",
       });
     }
 
-    return { ...table, candidates };
+    return { ...table, fixedTables, candidates };
   }
 
   function parseNativeDependencyRows(cfb) {
@@ -1223,44 +1314,26 @@
     const bytes = cfb.getStream(fixedDataEntry);
     if (bytes.length < 20) return [];
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-    const parseAtStride = (stride) => {
-      const found = [];
-      for (let offset = 0; offset + 20 <= bytes.length; offset += stride) {
-        const linkId = readUInt32(view, offset);
-        const predecessorRow = readUInt32(view, offset + 4);
-        const successorRow = readUInt32(view, offset + 8);
-        const typeCode = readUInt32(view, offset + 12);
-        const lagAndFormat = readUInt32(view, offset + 16);
-        if (!linkId || !predecessorRow || !successorRow || predecessorRow === successorRow) continue;
-        if (predecessorRow > 1000000 || successorRow > 1000000) continue;
-        if (typeCode > 3) continue;
-        found.push({
-          linkId,
-          predecessorRow,
-          successorRow,
-          typeCode,
-          type: LINK_TYPE_BY_PROJECT_CODE[typeCode] || "FS",
-          lagAndFormat,
-          source: fixedDataEntry.path,
-          stride,
-          offset,
-        });
-      }
-      return found;
-    };
-
-    // Your real MPP decoded cleanly at 20 bytes. The MPXJ relation stress files
-    // are useful because they expose whether Project saved a wider fixed row.
-    // Try common row widths and take the most plausible, de-duplicated set.
-    const candidates = [20, 24, 28, 32, 36, 40].map((stride) => parseAtStride(stride));
-    const best = candidates.sort((a, b) => b.length - a.length)[0] || [];
-    const unique = new Map();
-    best.forEach((link) => {
-      const key = `${link.predecessorRow}|${link.successorRow}|${link.typeCode}`;
-      if (!unique.has(key)) unique.set(key, link);
-    });
-    return [...unique.values()];
+    const links = [];
+    for (let offset = 0; offset + 20 <= bytes.length; offset += 20) {
+      const linkId = readUInt32(view, offset);
+      const predecessorRow = readUInt32(view, offset + 4);
+      const successorRow = readUInt32(view, offset + 8);
+      const typeCode = readUInt32(view, offset + 12);
+      const lagAndFormat = readUInt32(view, offset + 16);
+      if (!linkId || !predecessorRow || !successorRow || predecessorRow === successorRow) continue;
+      if (predecessorRow > 1000000 || successorRow > 1000000) continue;
+      links.push({
+        linkId,
+        predecessorRow,
+        successorRow,
+        typeCode,
+        type: LINK_TYPE_BY_PROJECT_CODE[typeCode] || "FS",
+        lagAndFormat,
+        source: fixedDataEntry.path,
+      });
+    }
+    return links;
   }
 
   function buildComponents(links, candidateRowIds) {
@@ -1291,8 +1364,87 @@
     return [...groups.values()].map((rows) => rows.sort((a, b) => a - b));
   }
 
+  function inferNativeOutlineLevels(tasks) {
+    const list = tasks.slice().sort((a, b) => {
+      const ao = a.orderKey == null ? Number.POSITIVE_INFINITY : a.orderKey;
+      const bo = b.orderKey == null ? Number.POSITIVE_INFINITY : b.orderKey;
+      return ao - bo || (a.rowId || 0) - (b.rowId || 0);
+    });
+
+    const byUnique = new Map(list.filter((task) => task.uniqueId != null).map((task) => [task.uniqueId, task]));
+    const hasParentLinks = list.some((task) => task.parentUniqueId && byUnique.has(task.parentUniqueId));
+    const hasExplicitOutline = list.filter((task) => Number(task.outlineLevel) > 1).length >= Math.max(2, Math.floor(list.length * 0.15));
+
+    if (hasParentLinks) {
+      const levelFor = (task, seen = new Set()) => {
+        if (!task || seen.has(task.uniqueId)) return 1;
+        if (Number(task.outlineLevel) > 0) return task.outlineLevel;
+        seen.add(task.uniqueId);
+        const parent = byUnique.get(task.parentUniqueId);
+        return parent ? Math.min(10, levelFor(parent, seen) + 1) : 1;
+      };
+      list.forEach((task) => { task.outlineLevel = levelFor(task); });
+    } else if (!hasExplicitOutline) {
+      let previous = null;
+      let topSummarySeen = false;
+      let activeSummaryLevel = 0;
+      let activeLevelTwoSummary = null;
+      for (const task of list) {
+        if (task.isSummary) {
+          if (!topSummarySeen) {
+            task.outlineLevel = 1;
+            topSummarySeen = true;
+          } else if (previous?.isSummary && Number(previous.outlineLevel) < 4) {
+            task.outlineLevel = Math.min(10, Number(previous.outlineLevel || 1) + 1);
+          } else if (activeLevelTwoSummary && /drop|build|release|media|content|integration|test/i.test(task.name) && /development|media|integration|test/i.test(activeLevelTwoSummary.name)) {
+            task.outlineLevel = Math.min(10, Number(activeLevelTwoSummary.outlineLevel || 2) + 1);
+          } else {
+            task.outlineLevel = topSummarySeen ? 2 : 1;
+          }
+          activeSummaryLevel = task.outlineLevel;
+          if (task.outlineLevel <= 2) activeLevelTwoSummary = task;
+        } else {
+          task.outlineLevel = Math.min(10, Math.max(1, activeSummaryLevel || 1) + 1);
+        }
+        previous = task;
+      }
+    } else {
+      list.forEach((task) => { task.outlineLevel = Math.max(1, Math.min(10, Number(task.outlineLevel) || 1)); });
+    }
+
+    for (let i = 0; i < list.length; i += 1) {
+      const level = Number(list[i].outlineLevel) || 1;
+      let hasChild = false;
+      for (let j = i + 1; j < list.length; j += 1) {
+        const childLevel = Number(list[j].outlineLevel) || 1;
+        if (childLevel <= level) break;
+        hasChild = true;
+        break;
+      }
+      if (hasChild) list[i].isSummary = true;
+      list[i].expanded = list[i].expanded !== false;
+    }
+    return list;
+  }
+
   function chooseActiveNativeTasks(candidates, links) {
     if (!candidates.length) return [];
+    const orderedCandidates = candidates.filter((task) => task.orderKey != null && task.uniqueId != null);
+    if (orderedCandidates.length >= Math.max(3, Math.floor(candidates.length * 0.45))) {
+      const latest = new Map();
+      for (const task of orderedCandidates) {
+        if (task.uniqueId === 0) continue;
+        const existing = latest.get(task.uniqueId);
+        if (!existing || Number(task.fixedIndex || 0) > Number(existing.fixedIndex || 0) || (!existing.name && task.name)) {
+          latest.set(task.uniqueId, task);
+        }
+      }
+      const selected = [...latest.values()]
+        .filter((task) => task.name && task.start && task.finish)
+        .sort((a, b) => a.orderKey - b.orderKey || (a.rowId || 0) - (b.rowId || 0));
+      if (selected.length) return inferNativeOutlineLevels(selected);
+    }
+
     const byRow = new Map(candidates.map((task) => [task.rowId, task]));
     const rowIds = new Set(byRow.keys());
     const components = buildComponents(links, rowIds);
@@ -1307,7 +1459,7 @@
         .sort((a, b) => b.maxFinish.localeCompare(a.maxFinish) || b.maxRow - a.maxRow || b.tasks.length - a.tasks.length);
       if (scored.length) {
         const activeMin = scored[0].minRow;
-        return candidates.filter((task) => task.rowId >= activeMin).sort((a, b) => a.rowId - b.rowId);
+        return inferNativeOutlineLevels(candidates.filter((task) => task.rowId >= activeMin).sort((a, b) => a.rowId - b.rowId));
       }
     }
 
@@ -1317,7 +1469,7 @@
       const existing = latest.get(key);
       if (!existing || task.rowId > existing.rowId) latest.set(key, task);
     }
-    return [...latest.values()].sort((a, b) => a.rowId - b.rowId);
+    return inferNativeOutlineLevels([...latest.values()].sort((a, b) => a.rowId - b.rowId));
   }
 
   function daysBetweenIso(startIso, finishIso) {
@@ -1341,6 +1493,14 @@
     const projectStart = tasks.reduce((min, task) => task.start < min ? task.start : min, tasks[0]?.start || new Date().toISOString().slice(0, 10));
     const projectFinish = tasks.reduce((max, task) => task.finish > max ? task.finish : max, tasks[0]?.finish || projectStart);
     const rowToTask = new Map(tasks.map((task, index) => [task.rowId, { ...task, id: index + 1, uid: index + 1 }]));
+    const outlineCounters = [];
+    const outlineNumbers = tasks.map((task) => {
+      const level = Math.max(1, Math.min(10, Number(task.outlineLevel) || 1));
+      outlineCounters.length = level;
+      for (let i = 0; i < level - 1; i += 1) if (!outlineCounters[i]) outlineCounters[i] = 1;
+      outlineCounters[level - 1] = (outlineCounters[level - 1] || 0) + 1;
+      return outlineCounters.join(".");
+    });
     const incomingLinks = new Map();
     links.forEach((link) => {
       const pred = rowToTask.get(link.predecessorRow);
@@ -1379,6 +1539,8 @@
       const id = index + 1;
       const uid = id;
       const duration = daysBetweenIso(task.start, task.finish);
+      const outlineNumber = outlineNumbers[index] || String(id);
+      const outlineLevel = Math.max(1, Math.min(10, Number(task.outlineLevel) || 1));
       const predecessors = (incomingLinks.get(id) || []).map((link) => `
       <PredecessorLink>
         <PredecessorUID>${link.predUid}</PredecessorUID>
@@ -1395,9 +1557,9 @@
       <Type>1</Type>
       <IsNull>0</IsNull>
       <CreateDate>${created}</CreateDate>
-      <WBS>${id}</WBS>
-      <OutlineNumber>${id}</OutlineNumber>
-      <OutlineLevel>${task.outlineLevel || 1}</OutlineLevel>
+      <WBS>${escapeXmlValue(outlineNumber)}</WBS>
+      <OutlineNumber>${escapeXmlValue(outlineNumber)}</OutlineNumber>
+      <OutlineLevel>${outlineLevel}</OutlineLevel>
       <Priority>500</Priority>
       <Start>${toProjectDate(task.start)}</Start>
       <Finish>${toProjectDate(task.finish, true)}</Finish>
@@ -1405,6 +1567,8 @@
       <DurationFormat>7</DurationFormat>
       <Work>${daysToProjectDuration(duration)}</Work>
       <PercentComplete>${task.percent || 0}</PercentComplete>
+      <Summary>${task.isSummary ? 1 : 0}</Summary>
+      <Expanded>${task.expanded === false ? 0 : 1}</Expanded>
       <Manual>1</Manual>${predecessors}
     </Task>`;
     }).join("");
@@ -1461,111 +1625,9 @@
 </Project>`;
   }
 
-  function valuesFromVarTable(table, limit = 250) {
-    if (!table) return [];
-    const values = [];
-    for (const row of [...table.rows.values()].sort((a, b) => a.rowId - b.rowId)) {
-      for (const [fieldId, value] of row.fields.entries()) {
-        const text = cleanCandidate(value);
-        if (!text || badCandidate(text)) continue;
-        values.push({ rowId: row.rowId, fieldId, value: text });
-        if (values.length >= limit) return values;
-      }
-    }
-    return values;
-  }
-
-  function likelyNameValues(values, kind = "task") {
-    const reject = /^(true|false|yes|no|none|null|standard|fixed|start|finish|duration|work|cost|% complete|% work complete|scheduled start|scheduled finish)$/i;
-    const scored = values
-      .map((item) => {
-        const value = cleanCandidate(item.value);
-        if (!value || reject.test(value)) return null;
-        if (parseMppDisplayDate(value) || parsePercentValue(value) != null || parseDurationDays(value) != null || parseCurrencyValue(value) != null) return null;
-        let score = 0;
-        if (/[A-Za-z]/.test(value)) score += 8;
-        if (kind === "resource" && /resource|person|team|engineer|developer|manager|labor|material|wade|davis/i.test(value)) score += 10;
-        if (kind === "task" && /task|phase|review|design|build|test|deploy|baseline|split|complete|milestone/i.test(value)) score += 10;
-        if (value.length >= 3 && value.length <= 80) score += 4;
-        if (/[@:;{}<>\\]/.test(value)) score -= 8;
-        if (/Microsoft Project|MSProject|Steelray Software|MSProc|Filter/i.test(value)) score -= 12;
-        return score > 0 ? { ...item, value, score } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.score - a.score || a.rowId - b.rowId);
-    const seen = new Set();
-    return scored.filter((item) => {
-      const key = item.value.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 50);
-  }
-
-  function detectMpxjStressProfile(fileName, metadata, values, streams) {
-    const haystack = [fileName, metadata?.title, metadata?.subject, metadata?.author, ...values.map((item) => item.value), ...streams.map((item) => item.path || item.name)].join("\n").toLowerCase();
-    const profiles = [
-      { id: "mpp14relations", label: "MPXJ Project 14 relations stress file", features: ["predecessor links", "relationship types", "native TBkndCons decoding"] },
-      { id: "mpp14resource", label: "MPXJ Project 14 resource stress file", features: ["resources", "resource notes", "assignments", "resource outline codes"] },
-      { id: "mpp14assignmentcustom", label: "MPXJ Project 14 assignment custom-field stress file", features: ["assignment baselines", "assignment custom text/number/date/duration/cost/flag fields"] },
-      { id: "mpp14assignmentfields", label: "MPXJ Project 14 assignment field stress file", features: ["assignment fields", "resource assignment links"] },
-      { id: "mpp14baseline", label: "MPXJ Project 14 baseline/actuals stress file", features: ["baselines", "actual dates", "summary hierarchy", "WBS/outline"] },
-      { id: "mpp14splittask", label: "MPXJ Project 14 split-task stress file", features: ["split task segments", "interrupted work periods"] },
-      { id: "mpp14task", label: "MPXJ Project 14 task field-map stress file", features: ["task dates", "duration", "cost", "percent complete", "constraints", "notes", "hyperlink", "custom fields"] },
-    ];
-    return profiles.find((profile) => haystack.includes(profile.id)) || null;
-  }
-
-  function extractNativeFeatureSignals(cfb, fileName, metadata = {}) {
-    const taskTable = parseTaskVarTable(cfb);
-    const resourceTable = parseResourceVarTable(cfb);
-    const assignmentTable = parseAssignmentVarTable(cfb);
-    const streams = cfb.listStreams();
-    const taskValues = valuesFromVarTable(taskTable, 350);
-    const resourceValues = valuesFromVarTable(resourceTable, 250);
-    const assignmentValues = valuesFromVarTable(assignmentTable, 250);
-    const allValues = [...taskValues, ...resourceValues, ...assignmentValues];
-    const profile = detectMpxjStressProfile(fileName, metadata, allValues, streams);
-    const links = parseNativeDependencyRows(cfb);
-    const streamSet = new Set(streams.map((item) => String(item.path || item.name || "").toLowerCase()));
-    const has = (suffix) => [...streamSet].some((name) => name.endsWith(suffix.toLowerCase()));
-    const dates = allValues.map((item) => parseMppDisplayDate(item.value)).filter(Boolean);
-    const percents = allValues.map((item) => parsePercentValue(item.value)).filter((value) => value != null);
-    const durations = allValues.map((item) => parseDurationDays(item.value)).filter((value) => value != null);
-    const costs = allValues.map((item) => parseCurrencyValue(item.value)).filter((value) => value != null);
-
-    return {
-      profile,
-      streams: {
-        task: Boolean(taskTable),
-        resource: Boolean(resourceTable),
-        assignment: Boolean(assignmentTable),
-        calendar: has("TBkndCal/FixedData") || has("TBkndCal/VarMeta"),
-        constraints: has("TBkndCons/FixedData"),
-        outlineCodes: has("TBkndOutlCode/FixedData") || has("TBkndOutlCode/VarMeta"),
-      },
-      rowCounts: {
-        taskVarRows: taskTable?.rows.size || 0,
-        resourceVarRows: resourceTable?.rows.size || 0,
-        assignmentVarRows: assignmentTable?.rows.size || 0,
-        dependencyRows: links.length,
-      },
-      recovered: {
-        likelyTaskNames: likelyNameValues(taskValues, "task").slice(0, 20),
-        likelyResourceNames: likelyNameValues(resourceValues, "resource").slice(0, 20),
-        dates: [...new Set(dates)].slice(0, 30),
-        percents: [...new Set(percents)].slice(0, 20),
-        durations: [...new Set(durations)].slice(0, 20),
-        costs: [...new Set(costs)].slice(0, 20),
-      },
-      expectedStressFeatures: profile?.features || [],
-    };
-  }
-
   function parseNativeMppTaskTables(cfb, fileName, metadata = {}) {
-    const featureSignals = extractNativeFeatureSignals(cfb, fileName, metadata);
     const taskTable = parseNativeTaskRows(cfb);
-    if (!taskTable || !taskTable.candidates.length) return featureSignals ? { featureSignalsOnly: true, featureSignals } : null;
+    if (!taskTable || !taskTable.candidates.length) return null;
 
     const links = parseNativeDependencyRows(cfb);
     const selectedTasks = chooseActiveNativeTasks(taskTable.candidates, links);
@@ -1588,6 +1650,11 @@
         percent: task.percent || 0,
         durationDays: task.durationDays || daysBetweenIso(task.start, task.finish),
         cost: task.cost ?? null,
+        outlineLevel: task.outlineLevel || 1,
+        isSummary: Boolean(task.isSummary),
+        expanded: task.expanded !== false,
+        uniqueId: task.uniqueId ?? null,
+        orderKey: task.orderKey ?? null,
       })),
       links: selectedLinks.map((link) => ({
         predecessorRow: link.predecessorRow,
@@ -1600,21 +1667,23 @@
     return {
       projectXml,
       project,
-      featureSignals,
       table: {
         strategy: "native-task-table-cache",
         taskCount: selectedTasks.length,
         linkCount: selectedLinks.length,
-        stressProfile: featureSignals.profile,
-        featureSignals,
-        resourceCount: featureSignals.rowCounts.resourceVarRows,
-        assignmentCount: featureSignals.rowCounts.assignmentVarRows,
         candidateTaskCount: taskTable.candidates.length,
         selectedRowStart: Math.min(...selectedTasks.map((task) => task.rowId)),
         selectedRowEnd: Math.max(...selectedTasks.map((task) => task.rowId)),
         taskVarMetaStream: taskTable.varMetaStream,
         taskVar2DataStream: taskTable.var2DataStream,
         dependencyStream: getEntryByPath(cfb, "TBkndCons/FixedData")?.path || "",
+        taskFixedMetaStream: taskTable.fixedTables?.fixedMetaStream || "",
+        taskFixedDataStream: taskTable.fixedTables?.fixedDataStream || "",
+        taskFixed2MetaStream: taskTable.fixedTables?.fixed2MetaStream || "",
+        taskFixed2DataStream: taskTable.fixedTables?.fixed2DataStream || "",
+        orderSource: selectedTasks.some((task) => task.orderKey != null) ? "TBkndTask Fixed2Data task-order key" : "row id fallback",
+        summaryCount: selectedTasks.filter((task) => task.isSummary).length,
+        collapsedCount: selectedTasks.filter((task) => task.expanded === false).length,
         confidence: selectedTasks.length >= 3 ? "medium-high for this Microsoft Project table-cache layout" : "low",
         fieldCoverage: {
           names: selectedTasks.filter((task) => task.name).length,
@@ -1623,6 +1692,8 @@
           percents: selectedTasks.filter((task) => Number(task.percent) > 0).length,
           costs: selectedTasks.filter((task) => task.cost != null).length,
           durations: selectedTasks.filter((task) => task.durationDays != null).length,
+          summaries: selectedTasks.filter((task) => task.isSummary).length,
+          orderedRows: selectedTasks.filter((task) => task.orderKey != null).length,
         },
       },
     };
@@ -1676,7 +1747,6 @@
       dateHints: (result.dateHints || []).slice(0, 40),
       draftProject: result.draftProject,
       nativeTable: result.nativeTable,
-      mppFeatureSignals: result.mppFeatureSignals,
       streamBuckets: result.draftProject?.streamBuckets || [],
       recoveryStats: result.recoveryStats,
       warnings: result.warnings,
@@ -1729,7 +1799,6 @@
       dateHints: [],
       draftProject: null,
       nativeTable: null,
-      mppFeatureSignals: null,
       warnings: [],
     };
 
@@ -1764,10 +1833,6 @@
     }
 
     const nativeTableHit = parseNativeMppTaskTables(cfb, fileName, result.metadata);
-    if (nativeTableHit?.featureSignals || nativeTableHit?.table?.featureSignals) {
-      result.mppFeatureSignals = nativeTableHit.featureSignals || nativeTableHit.table.featureSignals;
-    }
-
     if (nativeTableHit?.projectXml) {
       result.projectXml = nativeTableHit.projectXml;
       result.project = nativeTableHit.project;
@@ -1791,10 +1856,7 @@
       draftTaskCount: result.draftProject?.taskCount || 0,
     };
 
-    if (result.mppFeatureSignals?.profile) {
-      result.warnings.push(`Recognized ${result.mppFeatureSignals.profile.label}. The decoder captured feature signals (${result.mppFeatureSignals.expectedStressFeatures.join(", ")}) but could not build a complete task import from this file yet.`);
-    }
-    result.warnings.push("The browser parsed the native MPP compound-file container, but this reader did not find embedded Project XML or enough decoded task rows to build a faithful import. Diagnostics now include task/resource/assignment table probes.");
+    result.warnings.push("The browser parsed the native MPP compound-file container, but this reader did not find embedded Project XML. Full private binary task-table decoding is still not implemented.");
     if (result.draftProject?.taskCount) {
       result.warnings.push("A best-effort draft task list is available from recovered text strings. Treat it as a starting point, not a faithful MPP import.");
     }

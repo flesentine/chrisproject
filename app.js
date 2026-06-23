@@ -357,6 +357,8 @@ function ensureDecorations() {
     task.start = task.start || state.projectStart || today;
     task.finish = task.finish || toDateInputValue(addDays(task.start, Math.max(1, task.durationDays || 1) - 1));
     task.percent = normalizePercent(task.percent);
+    task.isSummary = Boolean(task.isSummary);
+    task.expanded = task.expanded !== false;
     task.durationDays = daysBetween(task.start, task.finish);
     task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
@@ -371,7 +373,90 @@ function ensureDecorations() {
   });
 }
 
+
+function getDescendantIndexes(parentIndex) {
+  const parent = state.tasks[parentIndex];
+  if (!parent) return [];
+  const level = normalizeLevel(parent.outlineLevel);
+  const indexes = [];
+  for (let i = parentIndex + 1; i < state.tasks.length; i += 1) {
+    const childLevel = normalizeLevel(state.tasks[i].outlineLevel);
+    if (childLevel <= level) break;
+    indexes.push(i);
+  }
+  return indexes;
+}
+
+function getDirectChildIndexes(parentIndex) {
+  const parent = state.tasks[parentIndex];
+  if (!parent) return [];
+  const level = normalizeLevel(parent.outlineLevel);
+  const direct = [];
+  for (let i = parentIndex + 1; i < state.tasks.length; i += 1) {
+    const childLevel = normalizeLevel(state.tasks[i].outlineLevel);
+    if (childLevel <= level) break;
+    if (childLevel === level + 1) direct.push(i);
+  }
+  return direct;
+}
+
+function isSummaryIndex(index) {
+  const task = state.tasks[index];
+  return Boolean(task?.isSummary) || getDescendantIndexes(index).length > 0;
+}
+
+function isHiddenByCollapsedParent(index) {
+  const level = normalizeLevel(state.tasks[index]?.outlineLevel || 1);
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const candidate = state.tasks[i];
+    const candidateLevel = normalizeLevel(candidate?.outlineLevel || 1);
+    if (candidateLevel >= level) continue;
+    return isSummaryIndex(i) && candidate.expanded === false;
+  }
+  return false;
+}
+
+function rollupSummaryTasks() {
+  for (let i = state.tasks.length - 1; i >= 0; i -= 1) {
+    const task = state.tasks[i];
+    const descendants = getDescendantIndexes(i);
+    const isSummary = Boolean(task.isSummary) || descendants.length > 0;
+    task.isSummary = isSummary;
+    if (!isSummary) {
+      task.expanded = true;
+      continue;
+    }
+    task.expanded = task.expanded !== false;
+    const childIndexes = getDirectChildIndexes(i).length ? getDirectChildIndexes(i) : descendants;
+    const children = childIndexes.map((index) => state.tasks[index]).filter(Boolean);
+    const starts = children.map((child) => dateOnly(child.start)).filter(Boolean);
+    const finishes = children.map((child) => dateOnly(child.finish)).filter(Boolean);
+    if (starts.length && finishes.length) {
+      const start = new Date(Math.min(...starts.map(Number)));
+      const finish = new Date(Math.max(...finishes.map(Number)));
+      task.start = toDateInputValue(start);
+      task.finish = toDateInputValue(finish);
+      task.durationDays = daysBetween(task.start, task.finish);
+    }
+    const weighted = children
+      .map((child) => ({ percent: normalizePercent(child.percent), duration: Math.max(1, child.durationDays || daysBetween(child.start, child.finish)) }))
+      .filter((item) => Number.isFinite(item.duration));
+    const totalDuration = weighted.reduce((sum, item) => sum + item.duration, 0);
+    if (totalDuration > 0) {
+      task.percent = Math.round(weighted.reduce((sum, item) => sum + item.percent * item.duration, 0) / totalDuration);
+    }
+  }
+}
+
+function getVisibleTaskRows() {
+  return state.tasks
+    .map((task, index) => ({ task, index }))
+    .filter((row) => !isHiddenByCollapsedParent(row.index));
+}
+
 function save() {
+  ensureDecorations();
+  rollupSummaryTasks();
   ensureDecorations();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   els.saveStatus.textContent = `Saved ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
@@ -398,6 +483,8 @@ function load() {
 
 function render() {
   ensureDecorations();
+  rollupSummaryTasks();
+  ensureDecorations();
   applyUiPrefs();
   els.projectName.value = state.projectName;
   els.projectStart.value = state.projectStart;
@@ -423,8 +510,10 @@ function renderSummary() {
   const min = starts.length ? new Date(Math.min(...starts.map(Number))) : null;
   const max = finishes.length ? new Date(Math.max(...finishes.map(Number))) : null;
   const duration = min && max ? daysBetween(min, max) : 0;
-  const averagePercent = tasks.length
-    ? Math.round(tasks.reduce((sum, task) => sum + normalizePercent(task.percent), 0) / tasks.length)
+  const leafTasks = tasks.filter((task, index) => !isSummaryIndex(index));
+  const percentTasks = leafTasks.length ? leafTasks : tasks;
+  const averagePercent = percentTasks.length
+    ? Math.round(percentTasks.reduce((sum, task) => sum + normalizePercent(task.percent), 0) / percentTasks.length)
     : 0;
   const issueCount = validateProject().length;
 
@@ -519,12 +608,21 @@ function renderGantt() {
     <div class="planner-dates-heading" style="width:${chartWidthPx}px;grid-template-columns:repeat(${totalDays}, ${dayWidth}px)">${dateCells.join("")}</div>`;
 
   els.gantt.style.width = `${totalWidth}px`;
-  els.taskBody.innerHTML = tasks.map((task, index) => {
+  const visibleRows = getVisibleTaskRows();
+  els.taskBody.innerHTML = visibleRows.map(({ task, index }) => {
     const startOffset = Math.max(0, daysBetween(min, task.start) - 1);
     const duration = Math.max(1, daysBetween(task.start, task.finish));
     const left = startOffset * dayWidth;
     const width = Math.max(32, duration * dayWidth - 8);
-    const barClass = task.percent === 100 ? "gantt-bar is-complete" : "gantt-bar";
+    const isSummary = isSummaryIndex(index);
+    const rowClasses = ["planner-row"];
+    if (task.percent === 100) rowClasses.push("is-complete");
+    if (isSummary) rowClasses.push("is-summary");
+    const barClasses = ["gantt-bar"];
+    if (task.percent === 100) barClasses.push("is-complete");
+    if (isSummary) barClasses.push("is-summary");
+    const barClass = barClasses.join(" ");
+    const summaryLocked = isSummary ? ' readonly aria-readonly="true"' : "";
     const linkText = task.links.length ? formatLinks(task.links) : "";
     const linkPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
     const primaryCascadeChange = pendingCascadeChoice?.changes?.[0] || null;
@@ -549,17 +647,17 @@ function renderGantt() {
     }
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `
-      <div class="planner-row ${task.percent === 100 ? "is-complete" : ""}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
+      <div class="${rowClasses.join(" ")}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
         <div class="planner-fields${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
           <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
           <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
-          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px"><input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
-          <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}" /></div>
-          <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}" /></div>
+          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
+          <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}"${summaryLocked} /></div>
+          <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}"${summaryLocked} /></div>
           <div class="planner-cell"><span class="duration-pill">${task.durationDays}d</span></div>
           <div class="planner-cell">
             <div class="percent-cell">
-              <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete" />
+              <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete"${summaryLocked} />
               <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
             </div>
           </div>
@@ -674,6 +772,11 @@ function updateTask(index, field, value) {
   const task = state.tasks[index];
   if (!task) return;
 
+  if (task.isSummary && ["start", "finish", "percent"].includes(field)) {
+    render();
+    return;
+  }
+
   if (field === "percent") task.percent = normalizePercent(value);
   else if (field === "outlineLevel") task.outlineLevel = normalizeLevel(value);
   else if (field === "predecessors") {
@@ -705,6 +808,8 @@ function addTask() {
     predecessors: last ? [last.id] : [],
     links: last ? [{ id: last.id, type: "FS" }] : [],
     outlineLevel: last ? last.outlineLevel : 1,
+    isSummary: false,
+    expanded: true,
   });
   render();
 }
@@ -726,6 +831,8 @@ function autoSchedule(options = {}) {
 }
 
 function buildProjectXml() {
+  ensureDecorations();
+  rollupSummaryTasks();
   ensureDecorations();
   const created = new Date().toISOString().replace(/\.\d{3}Z$/, "");
   const projectStart = toProjectDate(state.projectStart);
@@ -787,6 +894,8 @@ function buildProjectXml() {
       <DurationFormat>7</DurationFormat>
       <Work>${daysToProjectDuration(duration)}</Work>
       <PercentComplete>${task.percent}</PercentComplete>
+      <Summary>${task.isSummary ? 1 : 0}</Summary>
+      <Expanded>${task.expanded === false ? 0 : 1}</Expanded>
       <Manual>1</Manual>${predecessors}
     </Task>`;
   }).join("");
@@ -877,6 +986,8 @@ function importProjectXml(text) {
     const finish = childText(node, "Finish").slice(0, 10) || toDateInputValue(addDays(start, durationDays - 1));
     const outlineLevel = normalizeLevel(childText(node, "OutlineLevel") || 1);
     const percent = normalizePercent(childText(node, "PercentComplete") || 0);
+    const isSummary = childText(node, "Summary") === "1";
+    const expanded = childText(node, "Expanded") !== "0";
 
     rawTasks.push({
       uid: Number.isFinite(uid) && uid > 0 ? uid : state.nextUid++,
@@ -890,6 +1001,8 @@ function importProjectXml(text) {
       predecessors: [],
       links: [],
       outlineLevel,
+      isSummary,
+      expanded,
     });
   });
 
@@ -1047,16 +1160,11 @@ async function importProjectMppLocal(file) {
         : result.embeddedXml?.stream ? ` Found Project XML in <code>${escapeXml(result.embeddedXml.stream)}</code>${compressionText}.` : "";
       const reviewText = result.nativeTable ? " <strong>Review this import before treating it as source of truth.</strong>" : "";
       const coverage = result.nativeTable?.fieldCoverage;
-      const features = result.nativeTable?.featureSignals || result.mppFeatureSignals;
-      const stressProfileText = features?.profile ? ` Recognized test profile: <strong>${escapeXml(features.profile.label)}</strong>.` : "";
-      const resourceText = result.nativeTable
-        ? ` Resource/assignment probes: ${result.nativeTable.resourceCount || 0} resource row${result.nativeTable.resourceCount === 1 ? "" : "s"}, ${result.nativeTable.assignmentCount || 0} assignment row${result.nativeTable.assignmentCount === 1 ? "" : "s"}.`
-        : "";
       const coverageText = coverage
-        ? ` Field coverage: ${coverage.starts || 0} start date${coverage.starts === 1 ? "" : "s"}, ${coverage.finishes || 0} finish date${coverage.finishes === 1 ? "" : "s"}, ${coverage.percents || 0} percent value${coverage.percents === 1 ? "" : "s"}, ${coverage.durations || 0} duration hint${coverage.durations === 1 ? "" : "s"}, ${coverage.costs || 0} cost hint${coverage.costs === 1 ? "" : "s"}.`
+        ? ` Field coverage: ${coverage.starts || 0} start date${coverage.starts === 1 ? "" : "s"}, ${coverage.finishes || 0} finish date${coverage.finishes === 1 ? "" : "s"}, ${coverage.percents || 0} percent value${coverage.percents === 1 ? "" : "s"}.`
         : "";
       setMppPanel(
-        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}${stressProfileText}${coverageText}${resourceText}${reviewText}` +
+        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}${coverageText}${reviewText}` +
         `<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="download-xml">Download converted XML</button><button type="button" data-mpp-action="diagnostics">Download diagnostics</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`,
         "ok",
         result.nativeTable ? "MPP decoded locally" : "MPP converted locally"
@@ -1233,7 +1341,9 @@ async function handlePickedFile(file) {
 
 function exportCsv() {
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Start", "Finish", "DurationDays", "PercentComplete", "Predecessors", "OutlineLevel"]];
+  rollupSummaryTasks();
+  ensureDecorations();
+  const rows = [["ID", "WBS", "Name", "Start", "Finish", "DurationDays", "PercentComplete", "Predecessors", "OutlineLevel", "IsSummary", "Expanded"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -1245,6 +1355,8 @@ function exportCsv() {
       task.percent,
       formatLinks(task.links).replaceAll(",", ";"),
       task.outlineLevel,
+      task.isSummary ? "Yes" : "No",
+      task.expanded === false ? "No" : "Yes",
     ]);
   });
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
@@ -2198,6 +2310,16 @@ els.taskBody.addEventListener("change", (event) => {
 });
 
 els.taskBody.addEventListener("click", (event) => {
+  const toggle = event.target.closest("button[data-action='toggle-summary']");
+  if (toggle) {
+    const task = state.tasks[Number(toggle.dataset.index)];
+    if (task) {
+      task.expanded = task.expanded === false;
+      render();
+    }
+    return;
+  }
+
   const button = event.target.closest("button[data-action='delete']");
   if (!button) return;
   deleteTask(Number(button.dataset.index));

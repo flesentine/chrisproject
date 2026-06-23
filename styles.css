@@ -2979,3 +2979,70 @@ body.has-cascade-suggestion .gantt-ghost-bar {
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
+/* Summary task nesting and rollup support. */
+.planner-row.is-summary {
+  background: #f8fbff;
+  font-weight: 700;
+}
+
+.planner-row.is-summary .planner-fields {
+  background: #f8fbff;
+}
+
+.planner-row.is-summary .duration-pill {
+  background: #e9f2ff;
+  color: var(--brand-dark);
+}
+
+.task-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-toggle,
+.summary-toggle-spacer {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.summary-toggle {
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #c8d7ee;
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--brand-dark);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.summary-toggle:hover {
+  background: #eaf3ff;
+  border-color: var(--brand);
+}
+
+.summary-toggle-spacer {
+  display: inline-block;
+}
+
+.planner-row.is-summary input[readonly] {
+  background: #eef4ff;
+  color: #44546a;
+  cursor: default;
+}
+
+.gantt-bar.is-summary {
+  height: calc(var(--bar-height) - 6px);
+  top: calc(var(--bar-top) + 3px);
+  border: 2px solid rgba(38, 97, 156, 0.65);
+  background: linear-gradient(180deg, #5b8bc8, #2f65a5);
+}
+
+.gantt-bar.is-summary::before {
+  background: rgba(255, 255, 255, 0.18);
+}
