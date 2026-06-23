@@ -1,4 +1,6 @@
-/* v0.25.1 Stitch canvas hotfixes. */
+@import url("stitch-sidebar-icons.css?v0.25.2");
+
+/* v0.25.2 Stitch canvas hotfixes. */
 .stitch-gantt-row {
   position: absolute;
   left: 0;
