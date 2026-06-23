@@ -1,0 +1,153 @@
+/* v0.25.3 move old header/ribbon commands into the ProjectHub sidebar. */
+.projecthub-stitch-theme .project-ribbon-shell {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.projecthub-stitch-theme .project-titlebar {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 18px;
+}
+
+.projecthub-stitch-theme .quick-access {
+  gap: 10px;
+}
+
+.projecthub-stitch-theme .quick-command,
+.projecthub-stitch-theme .version-badge,
+.projecthub-stitch-theme .title-project-name-label,
+.projecthub-stitch-theme .ribbon-tabs,
+.projecthub-stitch-theme .office-ribbon {
+  display: none !important;
+}
+
+.projecthub-stitch-theme .project-titlebar-main {
+  justify-content: flex-start;
+}
+
+.projecthub-stitch-theme .title-product-name::before {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.projecthub-stitch-theme .stitch-sidebar {
+  top: 48px;
+}
+
+.stitch-command-drawer {
+  position: fixed;
+  left: 72px;
+  top: 62px;
+  z-index: 120;
+  width: 280px;
+  padding: 12px;
+  border: 1px solid #dce4ee;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(16px);
+}
+
+.stitch-command-drawer[hidden] {
+  display: none !important;
+}
+
+.stitch-command-drawer header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid #e8eef5;
+}
+
+.stitch-command-drawer h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.stitch-command-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  box-shadow: none;
+}
+
+.stitch-command-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.stitch-command-list button,
+.stitch-command-list label,
+.stitch-command-list a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #e1e8f0;
+  border-radius: 10px;
+  color: #243447;
+  background: #ffffff;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.stitch-command-list button:hover,
+.stitch-command-list label:hover,
+.stitch-command-list a:hover {
+  transform: none;
+  color: #0d3b66;
+  background: #f6f9fc;
+  border-color: #cfd9e6;
+  box-shadow: none;
+}
+
+.stitch-command-list .primary-command {
+  color: #fff;
+  background: linear-gradient(135deg, #0d3b66, #31c58b);
+  border-color: transparent;
+}
+
+.stitch-command-list small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stitch-command-list .primary-command small {
+  color: rgba(255,255,255,0.82);
+}
+
+.stitch-command-list input[type="file"] {
+  display: none;
+}
+
+.projecthub-stitch-theme .stitch-rail-item {
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .stitch-command-drawer {
+    left: 12px;
+    top: 58px;
+    width: min(320px, calc(100vw - 24px));
+  }
+}
