@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v3-compact";
-const APP_VERSION = "v0.21.0";
-const APP_VERSION_NAME = "Clean Microsoft Project-style ribbon";
+const APP_VERSION = "v0.22.0";
+const APP_VERSION_NAME = "Baselines + ghost bars";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
@@ -76,6 +76,7 @@ const els = {
   indentTaskBtn: document.getElementById("indentTaskBtn"),
   outdentTaskBtn: document.getElementById("outdentTaskBtn"),
   autoScheduleBtn: document.getElementById("autoScheduleBtn"),
+  setBaselineBtn: document.getElementById("setBaselineBtn"),
   workingDaysInput: document.getElementById("workingDaysInput"),
   holidayInput: document.getElementById("holidayInput"),
   calendarStatus: document.getElementById("calendarStatus"),
@@ -135,6 +136,16 @@ const els = {
   tiOutlineLevel: document.getElementById("tiOutlineLevel"),
   tiParent: document.getElementById("tiParent"),
   tiSummary: document.getElementById("tiSummary"),
+  tiBaselineStart: document.getElementById("tiBaselineStart"),
+  tiBaselineFinish: document.getElementById("tiBaselineFinish"),
+  tiBaselineDuration: document.getElementById("tiBaselineDuration"),
+  tiBaselineWork: document.getElementById("tiBaselineWork"),
+  tiBaselineCost: document.getElementById("tiBaselineCost"),
+  tiStartVariance: document.getElementById("tiStartVariance"),
+  tiFinishVariance: document.getElementById("tiFinishVariance"),
+  tiDurationVariance: document.getElementById("tiDurationVariance"),
+  tiCostVariance: document.getElementById("tiCostVariance"),
+  tiSetBaselineBtn: document.getElementById("tiSetBaselineBtn"),
   tiRollupNotice: document.getElementById("tiRollupNotice"),
   linkSuggestion: document.getElementById("linkSuggestion"),
   cascadeSuggestion: document.getElementById("cascadeSuggestion"),
@@ -152,6 +163,7 @@ let state = {
   nextUid: 2,
   nextResourceUid: 1,
   nextAssignmentUid: 1,
+  baselineSetAt: "",
   activeView: "schedule",
   calendar: { ...STANDARD_CALENDAR },
   tasks: [],
@@ -553,6 +565,74 @@ function formatMoney(value) {
   return n ? `$${n.toFixed(n % 1 ? 2 : 0)}` : "$0";
 }
 
+function hasBaseline(task) {
+  const b = task?.baseline;
+  return Boolean(b && (normalizeDateValue(b.start) || normalizeDateValue(b.finish) || normalizeDurationMinutes(b.durationMinutes, 0) > 0 || normalizeDurationMinutes(b.workMinutes, 0) > 0 || Number(b.cost) > 0));
+}
+
+function normalizeBaseline(baseline = {}, task = null) {
+  const source = baseline || {};
+  const start = normalizeDateValue(source.start ?? source.baselineStart ?? source.Start);
+  const finish = normalizeDateValue(source.finish ?? source.baselineFinish ?? source.Finish);
+  const fallbackDuration = start && finish ? workingSpanMinutes(start, finish) : 0;
+  const durationMinutes = normalizeDurationMinutes(source.durationMinutes ?? source.duration ?? source.baselineDurationMinutes, fallbackDuration);
+  const workMinutes = normalizeDurationMinutes(source.workMinutes ?? source.work ?? source.baselineWorkMinutes, 0);
+  const cost = Number(source.cost ?? source.baselineCost ?? 0);
+  const setAt = String(source.setAt || source.savedAt || "");
+  return {
+    start,
+    finish,
+    durationMinutes,
+    workMinutes,
+    cost: Number.isFinite(cost) ? Math.round(cost * 100) / 100 : 0,
+    setAt,
+  };
+}
+
+function createBaselineFromTask(task) {
+  const assignmentSummary = summarizeTaskAssignments(task);
+  return normalizeBaseline({
+    start: task.start,
+    finish: task.finish,
+    durationMinutes: task.durationMinutes,
+    workMinutes: assignmentSummary.totalWork,
+    cost: assignmentSummary.totalCost,
+    setAt: new Date().toISOString(),
+  }, task);
+}
+
+function baselineVariance(task) {
+  const baseline = normalizeBaseline(task?.baseline, task);
+  if (!hasBaseline({ baseline })) {
+    return { hasBaseline: false, startDays: 0, finishDays: 0, durationMinutes: 0, cost: 0 };
+  }
+  const startDays = baseline.start && task.start ? daysBetween(baseline.start, task.start) : 0;
+  const finishDays = baseline.finish && task.finish ? daysBetween(baseline.finish, task.finish) : 0;
+  const durationMinutes = normalizeDurationMinutes(task.durationMinutes, 0) - normalizeDurationMinutes(baseline.durationMinutes, 0);
+  const currentCost = summarizeTaskAssignments(task).totalCost;
+  const cost = Math.round((currentCost - (Number(baseline.cost) || 0)) * 100) / 100;
+  return { hasBaseline: true, startDays, finishDays, durationMinutes, cost };
+}
+
+function formatDayVariance(days) {
+  const n = Number(days) || 0;
+  if (!n) return "0d";
+  return `${n > 0 ? "+" : ""}${n}d`;
+}
+
+function formatDurationVariance(minutes) {
+  const n = Number(minutes) || 0;
+  if (!n) return "0d";
+  return `${n > 0 ? "+" : "-"}${formatDuration(Math.abs(n))}`;
+}
+
+function formatCostVariance(value) {
+  const n = Number(value) || 0;
+  if (!n) return "$0";
+  const abs = Math.abs(n);
+  return `${n > 0 ? "+" : "-"}${formatMoney(abs)}`;
+}
+
 function normalizeMaxUnits(value) {
   const text = String(value ?? "").trim();
   if (!text) return 100;
@@ -794,6 +874,44 @@ function getSuccessorLinks(taskId) {
   return successors.sort((a, b) => a.id - b.id || LINK_TYPES.indexOf(a.type) - LINK_TYPES.indexOf(b.type) || normalizeLagMinutes(a.lagMinutes) - normalizeLagMinutes(b.lagMinutes));
 }
 
+
+function rollupBaselineSummaryTasks() {
+  for (let i = state.tasks.length - 1; i >= 0; i -= 1) {
+    if (!isSummaryIndex(i)) continue;
+    const leaves = getRollupLeafTasks(i).filter(hasBaseline);
+    if (!leaves.length) continue;
+    const starts = leaves.map((task) => dateOnly(task.baseline?.start)).filter(Boolean);
+    const finishes = leaves.map((task) => dateOnly(task.baseline?.finish)).filter(Boolean);
+    if (!starts.length || !finishes.length) continue;
+    const start = toDateInputValue(new Date(Math.min(...starts.map(Number))));
+    const finish = toDateInputValue(new Date(Math.max(...finishes.map(Number))));
+    const task = state.tasks[i];
+    task.baseline = normalizeBaseline({
+      start,
+      finish,
+      durationMinutes: workingSpanMinutes(start, finish),
+      workMinutes: leaves.reduce((sum, child) => sum + normalizeDurationMinutes(child.baseline?.workMinutes, 0), 0),
+      cost: leaves.reduce((sum, child) => sum + (Number(child.baseline?.cost) || 0), 0),
+      setAt: state.baselineSetAt || leaves[0].baseline?.setAt || "",
+    }, task);
+  }
+}
+
+function setBaseline() {
+  ensureDecorations();
+  rollupSummaryTasks();
+  ensureResources();
+  ensureAssignmentUids();
+  const stamp = new Date().toISOString();
+  state.tasks.forEach((task) => {
+    task.baseline = createBaselineFromTask(task);
+    task.baseline.setAt = stamp;
+  });
+  state.baselineSetAt = stamp;
+  rollupBaselineSummaryTasks();
+  render();
+}
+
 function formatSuccessorLinks(taskId) {
   return getSuccessorLinks(taskId).map(formatLink).join(",");
 }
@@ -957,6 +1075,7 @@ function ensureDecorations() {
     task.constraintType = normalizeConstraintType(task.constraintType);
     task.constraintDate = normalizeDateValue(task.constraintDate);
     task.deadline = normalizeDateValue(task.deadline);
+    task.baseline = normalizeBaseline(task.baseline, task);
     task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
     task.assignments = Array.isArray(task.assignments) ? task.assignments.map(normalizeAssignment).filter((assignment) => assignment.resourceUid > 0) : [];
@@ -1196,6 +1315,7 @@ function load() {
       nextUid: parsed.nextUid || 2,
       nextResourceUid: parsed.nextResourceUid || 1,
       nextAssignmentUid: parsed.nextAssignmentUid || 1,
+      baselineSetAt: parsed.baselineSetAt || "",
       activeView: parsed.activeView || "schedule",
       calendar: normalizeCalendar(parsed.calendar),
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
@@ -1210,6 +1330,7 @@ function load() {
 function render() {
   ensureDecorations();
   rollupSummaryTasks();
+  rollupBaselineSummaryTasks();
   ensureDecorations();
   ensureResources();
   ensureAssignmentUids();
@@ -1409,6 +1530,11 @@ function renderTaskIndicators(task, index, context = {}) {
   if ((task.notes || "").trim()) {
     items.push({ label: "📝", className: "is-note", title: "Task has notes." });
   }
+  if (hasBaseline(task)) {
+    const variance = baselineVariance(task);
+    const title = `Baseline: ${task.baseline.start || "?"} → ${task.baseline.finish || "?"}. Start variance ${formatDayVariance(variance.startDays)}, finish variance ${formatDayVariance(variance.finishDays)}.`;
+    items.push({ label: "B", className: variance.startDays || variance.finishDays || variance.durationMinutes || variance.cost ? "is-baseline has-variance" : "is-baseline", title });
+  }
   const assignmentSummary = summarizeTaskAssignments(task);
   if (assignmentSummary.count) {
     items.push({ label: "👥", className: "is-assignment", title: `Assigned to ${assignmentSummary.names.join(", ")}. Work: ${formatWork(assignmentSummary.totalWork)}. Cost: ${formatMoney(assignmentSummary.totalCost)}.` });
@@ -1457,6 +1583,8 @@ function renderGantt() {
   const starts = tasks.map((t) => dateOnly(t.start)).filter(Boolean);
   const finishes = tasks.map((t) => dateOnly(t.finish)).filter(Boolean);
   tasks.map((t) => dateOnly(t.deadline)).filter(Boolean).forEach((deadline) => finishes.push(deadline));
+  tasks.map((t) => dateOnly(t.baseline?.start)).filter(Boolean).forEach((baselineStart) => starts.push(baselineStart));
+  tasks.map((t) => dateOnly(t.baseline?.finish)).filter(Boolean).forEach((baselineFinish) => finishes.push(baselineFinish));
   tasks.map((t) => dateOnly(t.constraintDate)).filter(Boolean).forEach((constraintDate) => {
     starts.push(constraintDate);
     finishes.push(constraintDate);
@@ -1558,6 +1686,20 @@ function renderGantt() {
       const missedDeadline = dateOnly(task.finish) > deadlineDate;
       deadlineMarkup = `<i class="deadline-marker ${missedDeadline ? "is-missed" : ""}" style="left:${deadlineLeft}px" title="Deadline: ${escapeXml(formatFriendlyDate(deadlineDate))}${missedDeadline ? " · missed" : ""}" aria-hidden="true"></i>`;
     }
+    let baselineMarkup = "";
+    if (hasBaseline(task)) {
+      const baselineStart = dateOnly(task.baseline.start);
+      const baselineFinish = dateOnly(task.baseline.finish);
+      if (baselineStart && baselineFinish) {
+        const baselineStartOffset = Math.max(0, daysBetween(min, baselineStart) - 1);
+        const baselineDuration = Math.max(1, daysBetween(baselineStart, baselineFinish));
+        const baselineLeft = baselineStartOffset * dayWidth;
+        const baselineWidth = isMilestone ? 22 : Math.max(28, baselineDuration * dayWidth - 8);
+        const variance = baselineVariance(task);
+        const baselineTitle = `Baseline for ${task.name}: ${formatFriendlyDate(baselineStart)} → ${formatFriendlyDate(baselineFinish)} · start ${formatDayVariance(variance.startDays)}, finish ${formatDayVariance(variance.finishDays)}`;
+        baselineMarkup = `<div class="baseline-bar ${isSummary ? "is-summary" : ""}" style="left:${baselineLeft}px;width:${baselineWidth}px" title="${escapeXml(baselineTitle)}" aria-hidden="true"><span>${baselineWidth >= 120 ? escapeXml(task.name) : ""}</span></div>`;
+      }
+    }
     let ghostMarkup = "";
     if (pendingPreview) {
       const ghostStartOffset = Math.max(0, daysBetween(min, pendingPreview.start) - 1);
@@ -1599,6 +1741,7 @@ function renderGantt() {
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
           ${nonWorkingMarkup}
           ${deadlineMarkup}
+          ${baselineMarkup}
           ${ghostMarkup}
           <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="${isSummary ? `Summary rollup. ${escapeXml(summaryRollupTitle)} ` : "Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. "}${escapeXml(task.name)}: ${task.start} to ${task.finish} · ${escapeXml(formatDuration(task.durationMinutes))}">
             <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
@@ -1636,7 +1779,7 @@ function getTaskInfoSummaryLabel(index) {
 }
 
 function setTaskInfoTab(tab = "general") {
-  const nextTab = ["general", "resources", "predecessors", "advanced", "notes", "structure"].includes(tab) ? tab : "general";
+  const nextTab = ["general", "resources", "predecessors", "advanced", "notes", "baseline", "structure"].includes(tab) ? tab : "general";
   taskInfoActiveTab = nextTab;
   els.taskInfoModal?.querySelectorAll("[data-task-info-tab]").forEach((button) => {
     const active = button.dataset.taskInfoTab === nextTab;
@@ -1704,6 +1847,17 @@ function refreshTaskInfoPanel(force = false) {
   if (els.tiOutlineLevel) els.tiOutlineLevel.value = normalizeLevel(task.outlineLevel);
   if (els.tiParent) els.tiParent.value = getParentTaskLabel(taskInfoIndex);
   if (els.tiSummary) els.tiSummary.value = getTaskInfoSummaryLabel(taskInfoIndex);
+  const baseline = normalizeBaseline(task.baseline, task);
+  const variance = baselineVariance(task);
+  if (els.tiBaselineStart) els.tiBaselineStart.value = baseline.start || "";
+  if (els.tiBaselineFinish) els.tiBaselineFinish.value = baseline.finish || "";
+  if (els.tiBaselineDuration) els.tiBaselineDuration.value = hasBaseline(task) ? formatDuration(baseline.durationMinutes) : "No baseline";
+  if (els.tiBaselineWork) els.tiBaselineWork.value = hasBaseline(task) ? formatWork(baseline.workMinutes) : "No baseline";
+  if (els.tiBaselineCost) els.tiBaselineCost.value = hasBaseline(task) ? formatMoney(baseline.cost) : "No baseline";
+  if (els.tiStartVariance) els.tiStartVariance.value = variance.hasBaseline ? formatDayVariance(variance.startDays) : "No baseline";
+  if (els.tiFinishVariance) els.tiFinishVariance.value = variance.hasBaseline ? formatDayVariance(variance.finishDays) : "No baseline";
+  if (els.tiDurationVariance) els.tiDurationVariance.value = variance.hasBaseline ? formatDurationVariance(variance.durationMinutes) : "No baseline";
+  if (els.tiCostVariance) els.tiCostVariance.value = variance.hasBaseline ? formatCostVariance(variance.cost) : "No baseline";
   if (els.tiRollupNotice) {
     els.tiRollupNotice.hidden = !isSummary;
     els.tiRollupNotice.textContent = isSummary
@@ -1923,7 +2077,7 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, weighted summary rollups, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, resource assignments, and project calendar.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, weighted summary rollups, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, resource assignments, baselines, ghost bars, and project calendar.</p></div></div>`;
     return;
   }
 
@@ -2134,6 +2288,7 @@ function parseProjectLinkLag(value) {
 function buildProjectXml() {
   ensureDecorations();
   rollupSummaryTasks();
+  rollupBaselineSummaryTasks();
   ensureDecorations();
   const created = new Date().toISOString().replace(/\.\d{3}Z$/, "");
   const projectStart = toProjectDate(state.projectStart);
@@ -2186,6 +2341,16 @@ function buildProjectXml() {
 
   const taskXml = state.tasks.map((task) => {
     const durationMinutes = normalizeDurationMinutes(task.durationMinutes, (task.durationDays || workDaysBetween(task.start, task.finish)) * getCalendar().minutesPerDay);
+    const baseline = normalizeBaseline(task.baseline, task);
+    const baselineXml = hasBaseline(task) ? `
+      <Baseline>
+        <Number>0</Number>
+        <Start>${toProjectDate(baseline.start)}</Start>
+        <Finish>${toProjectDate(baseline.finish, true)}</Finish>
+        <Duration>${minutesToProjectDuration(baseline.durationMinutes)}</Duration>
+        <Work>${minutesToProjectDuration(baseline.workMinutes)}</Work>
+        <Cost>${Number(baseline.cost) || 0}</Cost>
+      </Baseline>` : "";
     const predecessors = getTaskLinks(task).map((link) => {
       const pred = taskById.get(link.id);
       if (!pred) return "";
@@ -2225,7 +2390,7 @@ function buildProjectXml() {
       <Milestone>${durationMinutes === 0 ? 1 : 0}</Milestone>
       <Summary>${task.isSummary ? 1 : 0}</Summary>
       <Expanded>${task.expanded === false ? 0 : 1}</Expanded>
-      <Manual>1</Manual>${predecessors}
+      <Manual>1</Manual>${baselineXml}${predecessors}
     </Task>`;
   }).join("");
 
@@ -2344,6 +2509,14 @@ function importProjectXml(text) {
     const constraintType = normalizeConstraintType(childText(node, "ConstraintType") || "ASAP");
     const constraintDate = normalizeDateValue(childText(node, "ConstraintDate").slice(0, 10));
     const deadline = normalizeDateValue(childText(node, "Deadline").slice(0, 10));
+    const baselineNode = childrenByName(node, "Baseline").find((b) => !childText(b, "Number") || childText(b, "Number") === "0") || childrenByName(node, "Baseline")[0];
+    const baseline = baselineNode ? normalizeBaseline({
+      start: childText(baselineNode, "Start").slice(0, 10),
+      finish: childText(baselineNode, "Finish").slice(0, 10),
+      durationMinutes: durationToMinutes(childText(baselineNode, "Duration") || "PT0H0M0S"),
+      workMinutes: durationToMinutes(childText(baselineNode, "Work") || "PT0H0M0S"),
+      cost: Number(childText(baselineNode, "Cost") || 0),
+    }) : normalizeBaseline();
 
     rawTasks.push({
       uid: Number.isFinite(uid) && uid > 0 ? uid : state.nextUid++,
@@ -2365,6 +2538,7 @@ function importProjectXml(text) {
       constraintType,
       constraintDate,
       deadline,
+      baseline,
     });
   });
 
@@ -2449,6 +2623,7 @@ function importProjectXml(text) {
     nextUid: maxUid + 1,
     nextResourceUid: maxResourceUid + 1,
     nextAssignmentUid: Math.max(maxAssignmentUid + 1, 1),
+    baselineSetAt: rawTasks.some(hasBaseline) ? new Date().toISOString() : "",
     activeView: "schedule",
     calendar: importCalendarsFromXml(projectNode),
     tasks: rawTasks,
@@ -2764,8 +2939,9 @@ async function handlePickedFile(file) {
 function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
+  rollupBaselineSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Notes", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "Resources", "Work", "Cost", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
+  const rows = [["ID", "WBS", "Name", "Notes", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "Resources", "Work", "Cost", "BaselineStart", "BaselineFinish", "BaselineDuration", "BaselineWork", "BaselineCost", "StartVariance", "FinishVariance", "DurationVariance", "CostVariance", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -2782,6 +2958,15 @@ function exportCsv() {
       formatAssignmentResourceNames(task),
       formatWork(summarizeTaskAssignments(task).totalWork),
       summarizeTaskAssignments(task).totalCost,
+      task.baseline?.start || "",
+      task.baseline?.finish || "",
+      hasBaseline(task) ? formatDuration(task.baseline.durationMinutes) : "",
+      hasBaseline(task) ? formatWork(task.baseline.workMinutes) : "",
+      hasBaseline(task) ? task.baseline.cost : "",
+      hasBaseline(task) ? formatDayVariance(baselineVariance(task).startDays) : "",
+      hasBaseline(task) ? formatDayVariance(baselineVariance(task).finishDays) : "",
+      hasBaseline(task) ? formatDurationVariance(baselineVariance(task).durationMinutes) : "",
+      hasBaseline(task) ? formatCostVariance(baselineVariance(task).cost) : "",
       formatConstraintType(task.constraintType),
       task.constraintDate || "",
       task.deadline || "",
@@ -2865,6 +3050,7 @@ function loadSample(shouldRender = true) {
     projectStart: start,
     nextUid: 8,
     nextResourceUid: 5,
+    baselineSetAt: "",
     activeView: state.activeView || "schedule",
     calendar: normalizeCalendar(state.calendar),
     resources: [
@@ -3988,6 +4174,8 @@ els.taskInfoBtn?.addEventListener("click", () => openTaskInfo());
 els.indentTaskBtn?.addEventListener("click", indentSelectedTask);
 els.outdentTaskBtn?.addEventListener("click", outdentSelectedTask);
 els.autoScheduleBtn.addEventListener("click", autoSchedule);
+els.setBaselineBtn?.addEventListener("click", setBaseline);
+els.tiSetBaselineBtn?.addEventListener("click", setBaseline);
 els.exportXmlBtn.addEventListener("click", () => downloadText(buildProjectXml(), `${safeFileName(state.projectName)}.xml`, "application/xml"));
 els.exportCsvBtn.addEventListener("click", exportCsv);
 

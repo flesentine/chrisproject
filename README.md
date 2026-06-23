@@ -1,29 +1,18 @@
-# Chris's Discount Project Maker — v0.21.0
+# Chris's Discount Project Maker — v0.22.0
 
-This build cleans up the top command area into a Microsoft Project-inspired ribbon layout.
+Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
-## What changed
+## v0.22.0 changes
 
-- Added tabbed ribbon behavior: File, Task, Resource, Report, Project, View, Format, Help.
-- Only the active ribbon tab's commands are shown, which removes the huge wall of buttons.
-- Added real dropdown-style command menus for File import/export and Task dependency help.
-- Moved project calendar settings into the Project tab.
-- Moved zoom/layout controls into the View tab.
-- Kept the core row/grid compact so deeper fields stay in Task Information.
-- Kept all current working buttons wired: New, Load sample, Add Task, Add Resource, Task Info, Auto Schedule, Import XML, Convert MPP locally, Export XML, Export CSV, Gantt Chart, Resource Sheet, Indent, Outdent.
-- Added soft messages for Report/Format commands that are on the roadmap instead of dead buttons.
-- Updated version badge to `v0.21.0 · Clean Microsoft Project-style ribbon`.
+- Added Set Baseline command on the Project ribbon.
+- Saves baseline start, finish, duration, work, and cost for each task.
+- Shows baseline ghost bars under the current Gantt bars.
+- Calculates start, finish, duration, and cost variance.
+- Adds a Baseline tab to Task Information.
+- Summary tasks roll baseline dates/work/cost up from child leaf tasks.
+- Project XML import/export now preserves baseline fields.
+- CSV export includes baseline and variance columns.
 
-## Install locally
+## Use
 
-```bash
-cd ~/Documents/Code/chrisproject
-unzip -o ~/Downloads/chris-discount-project-maker-clean-ribbon.zip -d .
-
-git status
-git add index.html styles.css app.js README.md chris-avatar.png mpp-native-reader.js mpp-local-converter.html
-git commit -m "Clean up ribbon header and menus"
-git push origin main
-```
-
-Then hard refresh the GitHub Pages site.
+Open `index.html` locally or host the folder on GitHub Pages. Use Project → Set Baseline after your plan is approved, then move tasks to see variance and ghost bars.

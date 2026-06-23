@@ -19,7 +19,7 @@
   </div>
   <div class="project-titlebar-main">
     <span class="title-product-name">Chris's Discount Project Maker</span>
-    <span class="version-badge" id="appVersionBadge">v0.21.0</span>
+    <span class="version-badge" id="appVersionBadge">v0.22.0</span>
   </div>
   <label class="title-project-name-label">
     <span>Project name</span>
@@ -115,7 +115,7 @@
   <div class="ribbon-panel" data-ribbon-panel="report">
     <div class="command-group compact-group">
       <span class="group-label">Reports</span>
-      <button data-ribbon-message="Summary cards are already shown above the grid. Baselines and critical path reports are next." type="button">Dashboard</button>
+      <button data-ribbon-message="Summary cards are already shown above the grid. Baseline variance is now available; critical path reports are next." type="button">Dashboard</button>
       <button data-ribbon-message="Use File → Export → CSV workbook for now. Dedicated visual reports come later." type="button">Visual reports</button>
     </div>
     <div class="command-group compact-group ribbon-note-group">
@@ -136,6 +136,10 @@
     <div class="command-group compact-group ribbon-note-group">
       <span class="group-label">Calendar status</span>
       <span class="ribbon-note" id="calendarStatus">Mon–Fri · 8h/day · no holidays</span>
+    </div>
+    <div class="command-group compact-group command-group-large">
+      <span class="group-label">Baseline</span>
+      <button class="primary large-ribbon-button" id="setBaselineBtn" type="button"><strong>Set Baseline</strong><small>Save current plan</small></button>
     </div>
   </div>
   <div class="ribbon-panel" data-ribbon-panel="view">
@@ -169,7 +173,7 @@
   <div class="ribbon-panel" data-ribbon-panel="help">
     <div class="command-group compact-group">
       <span class="group-label">About</span>
-      <span class="ribbon-version-card"><strong>Chris's Discount Project Maker</strong><small id="ribbonVersionText">v0.21.0 · cleaned ribbon</small></span>
+      <span class="ribbon-version-card"><strong>Chris's Discount Project Maker</strong><small id="ribbonVersionText">v0.22.0 · baselines + ghost bars</small></span>
     </div>
     <div class="command-group compact-group ribbon-note-group">
       <span class="group-label">How to use</span>
@@ -274,7 +278,7 @@
 </main>
 <footer class="app-footer">
 <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-<span class="footer-status"><span id="appVersionFooter">v0.21.0</span><span id="saveStatus">Saved locally</span></span>
+<span class="footer-status"><span id="appVersionFooter">v0.22.0</span><span id="saveStatus">Saved locally</span></span>
 </footer>
 </div>
 <svg aria-hidden="true" class="link-drag-layer" height="100%" id="linkDragLayer" width="100%">
@@ -333,6 +337,7 @@
 <button class="task-info-tab" data-task-info-tab="predecessors" type="button">Predecessors</button>
 <button class="task-info-tab" data-task-info-tab="advanced" type="button">Advanced</button>
 <button class="task-info-tab" data-task-info-tab="notes" type="button">Notes</button>
+<button class="task-info-tab" data-task-info-tab="baseline" type="button">Baseline</button>
 <button class="task-info-tab" data-task-info-tab="structure" type="button">Structure</button>
 </nav>
 <fieldset class="task-info-page is-active" data-task-info-page="general">
@@ -416,6 +421,52 @@
               <input id="tiDeadline" type="date"/>
 </label>
 </div>
+</fieldset>
+<fieldset class="task-info-page" data-task-info-page="baseline">
+<legend>Baseline / variance</legend>
+<div class="assignment-summary-bar">
+<span>Compare the current schedule to the saved baseline.</span>
+<button class="primary small-primary" id="tiSetBaselineBtn" type="button">Set baseline now</button>
+</div>
+<div class="task-info-grid baseline-info-grid">
+<label>
+              Baseline start
+              <input aria-readonly="true" id="tiBaselineStart" readonly="" type="text"/>
+</label>
+<label>
+              Baseline finish
+              <input aria-readonly="true" id="tiBaselineFinish" readonly="" type="text"/>
+</label>
+<label>
+              Baseline duration
+              <input aria-readonly="true" id="tiBaselineDuration" readonly="" type="text"/>
+</label>
+<label>
+              Baseline work
+              <input aria-readonly="true" id="tiBaselineWork" readonly="" type="text"/>
+</label>
+<label>
+              Baseline cost
+              <input aria-readonly="true" id="tiBaselineCost" readonly="" type="text"/>
+</label>
+<label>
+              Start variance
+              <input aria-readonly="true" id="tiStartVariance" readonly="" type="text"/>
+</label>
+<label>
+              Finish variance
+              <input aria-readonly="true" id="tiFinishVariance" readonly="" type="text"/>
+</label>
+<label>
+              Duration variance
+              <input aria-readonly="true" id="tiDurationVariance" readonly="" type="text"/>
+</label>
+<label>
+              Cost variance
+              <input aria-readonly="true" id="tiCostVariance" readonly="" type="text"/>
+</label>
+</div>
+<p class="task-info-help">Baseline ghost bars appear under the current Gantt bars after you set a baseline.</p>
 </fieldset>
 <fieldset class="task-info-page" data-task-info-page="structure">
 <legend>Structure</legend>

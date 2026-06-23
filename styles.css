@@ -4680,3 +4680,54 @@ body.has-cascade-suggestion .gantt-ghost-bar {
   .compact-ribbon.office-ribbon.command-bar { overflow-x: auto; overflow-y: visible; }
   .compact-hero-board.hero-board { grid-template-columns: 1fr; }
 }
+
+/* Baselines + ghost bars v0.22.0 ------------------------------------------ */
+.baseline-bar {
+  position: absolute;
+  top: calc(var(--bar-top) + var(--bar-height) + 5px);
+  height: 7px;
+  z-index: 1;
+  min-width: 18px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #475569 0 8px, #94a3b8 8px 14px);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18), 0 3px 8px rgba(15, 23, 42, 0.13);
+  pointer-events: none;
+}
+
+.baseline-bar.is-summary {
+  height: 9px;
+  background: repeating-linear-gradient(90deg, #0f172a 0 10px, #64748b 10px 18px);
+}
+
+.baseline-bar span {
+  position: absolute;
+  top: 8px;
+  left: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indicator-dot.is-baseline {
+  color: #1f2937;
+  background: #e2e8f0;
+  box-shadow: inset 0 0 0 1px rgba(71, 85, 105, 0.22);
+}
+
+.indicator-dot.is-baseline.has-variance {
+  color: #ffffff;
+  background: #7c3aed;
+  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.22);
+}
+
+.baseline-info-grid input[readonly] {
+  color: #334155;
+  background: #f8fafc;
+  border-style: dashed;
+  font-weight: 850;
+}
