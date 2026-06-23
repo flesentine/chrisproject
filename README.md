@@ -1,6 +1,16 @@
-# Chris's Discount Project Maker — v0.23.0
+# Chris's Discount Project Maker — v0.24.0
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
+
+## v0.24.0 changes
+
+- Added a Stitch-inspired ProjectHub visual refresh.
+- Adds a dark blue ProjectHub title bar, left navigation rail, and cleaner white project canvas.
+- Restyles the schedule area into a task-list + Gantt canvas with rounded task rows and gradient Gantt bars.
+- Adds a floating Project Health card that summarizes progress, late baseline items, warnings, and cost readiness.
+- Adds a floating selected-task detail card with status, due date, assignees, dependencies, notes, resource allocation, and predecessor links.
+- Applies a better default split so the Gantt chart is visible beside the task list.
+- Keeps the existing progress / actuals, baseline, XML, CSV, resource, and dependency features intact.
 
 ## v0.23.0 changes
 
@@ -26,4 +36,4 @@ Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
 ## Use
 
-Open `index.html` locally or host the folder on GitHub Pages. Use Project → Set Baseline after your plan is approved, then update Task Information → Progress as work happens. The Gantt chart will show partial completion, remaining work, and late/early warnings against the baseline.
+Open `index.html` locally or host the folder on GitHub Pages. Use Project → Set Baseline after your plan is approved, then update Task Information → Progress as work happens. The ProjectHub canvas shows task cards, partial completion, remaining work, and late/early warnings against the baseline.
