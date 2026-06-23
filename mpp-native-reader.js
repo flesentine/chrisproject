@@ -1,5 +1,5 @@
 /*
-  NativeMppReader v0.5
+  NativeMppReader v0.6
   Browser-only Microsoft Project .mpp reader foundation.
 
   What this does:
@@ -8,7 +8,7 @@
   - Reads summary metadata and stream inventory.
   - Detects embedded MSPDI/XML and imports it when present.
   - Adds a stronger recovery layer: stream scoring, UTF-16/ANSI/length-prefixed string mining,
-    date hint discovery, diagnostics JSON, stream-bucket ordering, compressed XML sniffing, and a best-effort draft task-name import.
+    date hint discovery, diagnostics JSON, stream-bucket ordering, compressed XML sniffing, MPXJ stress-file feature probes, and a best-effort draft task-name import.
 
   What this still does not fully do:
   - Decode every private Microsoft Project binary table the way MPXJ does.
@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "0.5.0";
+  const VERSION = "0.6.0";
   const CFB_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
   const ENDOFCHAIN = -2;
   const MAX_TEXT_SCAN_BYTES = 2 * 1024 * 1024;
@@ -966,20 +966,24 @@
     return /^[0-9a-f]{4,}$/i.test(text);
   }
 
-  function readLengthPrefixedValue(bytes, offset) {
-    if (!bytes || offset == null || offset < 0 || offset + 4 > bytes.length) return null;
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const length = readUInt32(view, offset);
-    if (!Number.isFinite(length) || length < 0 || length > bytes.length - offset - 4 || length > 1024 * 1024) return null;
-    const raw = bytes.slice(offset + 4, offset + 4 + length);
-    if (!raw.length) return "";
+  function decodeRawVarValue(raw) {
+    if (!raw || !raw.length) return "";
 
     if (raw.length % 2 === 0 && looksMostlyUtf16(raw)) {
-      return textDecoderUtf16.decode(raw).replace(/\0+$/g, "").trim();
+      return textDecoderUtf16.decode(raw).replace(/ +$/g, "").trim();
     }
 
     if (looksMostlyAnsi(raw)) {
-      return textDecoderUtf8.decode(raw).replace(/\0+$/g, "").trim();
+      return textDecoderUtf8.decode(raw).replace(/ +$/g, "").trim();
+    }
+
+    // Some Project table var values are stored as tiny scalar payloads. Keep them
+    // as text so the diagnostics can still prove we found the field.
+    if (raw.length === 2) {
+      const rawView = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+      const intValue = rawView.getInt16(0, true);
+      if (intValue === -1 || intValue === 0) return "";
+      return String(intValue);
     }
 
     if (raw.length === 4) {
@@ -995,9 +999,52 @@
       if (Number.isFinite(maybeNumber) && Math.abs(maybeNumber) > 0.000001 && Math.abs(maybeNumber) < 1000000000) {
         return String(maybeNumber);
       }
+      const maybeDate = readFileTime(rawView.getUint32(0, true), rawView.getUint32(4, true));
+      if (isReasonableDate(maybeDate)) return dateToIsoLocal(maybeDate);
     }
 
     return "";
+  }
+
+  function findUtf16Terminator(bytes) {
+    for (let i = 0; i + 1 < bytes.length; i += 2) {
+      if (bytes[i] === 0 && bytes[i + 1] === 0) return i;
+    }
+    return -1;
+  }
+
+  function readLengthPrefixedValue(bytes, offset) {
+    if (!bytes || offset == null || offset < 0 || offset + 2 > bytes.length) return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+    const attempts = [];
+    if (offset + 4 <= bytes.length) {
+      const length32 = readUInt32(view, offset);
+      if (Number.isFinite(length32) && length32 >= 0 && length32 <= bytes.length - offset - 4 && length32 <= 1024 * 1024) {
+        attempts.push(bytes.slice(offset + 4, offset + 4 + length32));
+      }
+    }
+
+    const length16 = readUInt16(view, offset);
+    if (Number.isFinite(length16) && length16 > 0 && length16 <= bytes.length - offset - 2 && length16 <= 65535) {
+      attempts.push(bytes.slice(offset + 2, offset + 2 + length16));
+    }
+
+    // Fallback for null-terminated UTF-16/ANSI strings when metadata points at
+    // the value body rather than at a length prefix.
+    const tail = bytes.slice(offset, Math.min(bytes.length, offset + 512));
+    const nul16 = findUtf16Terminator(tail);
+    if (nul16 > 2) attempts.push(tail.slice(0, nul16));
+    const nul8 = tail.indexOf(0);
+    if (nul8 > 2) attempts.push(tail.slice(0, nul8));
+
+    for (const raw of attempts) {
+      const decoded = decodeRawVarValue(raw);
+      if (decoded != null && String(decoded).trim()) return decoded;
+    }
+
+    if (attempts.length) return "";
+    return null;
   }
 
   function getEntryByPath(cfb, suffix) {
@@ -1005,9 +1052,9 @@
     return cfb.entries.find((entry) => entry.type === 2 && String(entry.path || "").toLowerCase().endsWith(normalizedSuffix)) || null;
   }
 
-  function parseTaskVarTable(cfb) {
-    const varMetaEntry = getEntryByPath(cfb, "TBkndTask/VarMeta");
-    const var2DataEntry = getEntryByPath(cfb, "TBkndTask/Var2Data");
+  function parseVarTable(cfb, tableName) {
+    const varMetaEntry = getEntryByPath(cfb, `${tableName}/VarMeta`);
+    const var2DataEntry = getEntryByPath(cfb, `${tableName}/Var2Data`) || getEntryByPath(cfb, `${tableName}/VarData`);
     if (!varMetaEntry || !var2DataEntry) return null;
 
     const varMeta = cfb.getStream(varMetaEntry);
@@ -1016,7 +1063,11 @@
 
     const view = new DataView(varMeta.buffer, varMeta.byteOffset, varMeta.byteLength);
     const rows = new Map();
+    const fieldCounts = new Map();
 
+    // MPP 12/14 table-cache var metadata is commonly 12-byte entries:
+    // field id, row id, value offset. The MPXJ stress files use this layout for
+    // Task/Resource/Assignment var values, so keep it generic by table name.
     for (let offset = 0x20; offset + 12 <= varMeta.length; offset += 12) {
       const fieldId = readUInt32(view, offset);
       const rowId = readUInt32(view, offset + 4);
@@ -1027,15 +1078,30 @@
       const row = rows.get(rowId) || { rowId, fields: new Map() };
       row.fields.set(fieldId, value);
       rows.set(rowId, row);
+      fieldCounts.set(fieldId, (fieldCounts.get(fieldId) || 0) + 1);
     }
 
     return {
+      tableName,
       rows,
       varMetaStream: varMetaEntry.path,
       var2DataStream: var2DataEntry.path,
       varMetaSize: varMeta.length,
       var2DataSize: var2Data.length,
+      fieldCounts,
     };
+  }
+
+  function parseTaskVarTable(cfb) {
+    return parseVarTable(cfb, "TBkndTask");
+  }
+
+  function parseResourceVarTable(cfb) {
+    return parseVarTable(cfb, "TBkndRsc");
+  }
+
+  function parseAssignmentVarTable(cfb) {
+    return parseVarTable(cfb, "TBkndAssn");
   }
 
   function firstUsefulField(row, fieldIds) {
@@ -1157,26 +1223,44 @@
     const bytes = cfb.getStream(fixedDataEntry);
     if (bytes.length < 20) return [];
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const links = [];
-    for (let offset = 0; offset + 20 <= bytes.length; offset += 20) {
-      const linkId = readUInt32(view, offset);
-      const predecessorRow = readUInt32(view, offset + 4);
-      const successorRow = readUInt32(view, offset + 8);
-      const typeCode = readUInt32(view, offset + 12);
-      const lagAndFormat = readUInt32(view, offset + 16);
-      if (!linkId || !predecessorRow || !successorRow || predecessorRow === successorRow) continue;
-      if (predecessorRow > 1000000 || successorRow > 1000000) continue;
-      links.push({
-        linkId,
-        predecessorRow,
-        successorRow,
-        typeCode,
-        type: LINK_TYPE_BY_PROJECT_CODE[typeCode] || "FS",
-        lagAndFormat,
-        source: fixedDataEntry.path,
-      });
-    }
-    return links;
+
+    const parseAtStride = (stride) => {
+      const found = [];
+      for (let offset = 0; offset + 20 <= bytes.length; offset += stride) {
+        const linkId = readUInt32(view, offset);
+        const predecessorRow = readUInt32(view, offset + 4);
+        const successorRow = readUInt32(view, offset + 8);
+        const typeCode = readUInt32(view, offset + 12);
+        const lagAndFormat = readUInt32(view, offset + 16);
+        if (!linkId || !predecessorRow || !successorRow || predecessorRow === successorRow) continue;
+        if (predecessorRow > 1000000 || successorRow > 1000000) continue;
+        if (typeCode > 3) continue;
+        found.push({
+          linkId,
+          predecessorRow,
+          successorRow,
+          typeCode,
+          type: LINK_TYPE_BY_PROJECT_CODE[typeCode] || "FS",
+          lagAndFormat,
+          source: fixedDataEntry.path,
+          stride,
+          offset,
+        });
+      }
+      return found;
+    };
+
+    // Your real MPP decoded cleanly at 20 bytes. The MPXJ relation stress files
+    // are useful because they expose whether Project saved a wider fixed row.
+    // Try common row widths and take the most plausible, de-duplicated set.
+    const candidates = [20, 24, 28, 32, 36, 40].map((stride) => parseAtStride(stride));
+    const best = candidates.sort((a, b) => b.length - a.length)[0] || [];
+    const unique = new Map();
+    best.forEach((link) => {
+      const key = `${link.predecessorRow}|${link.successorRow}|${link.typeCode}`;
+      if (!unique.has(key)) unique.set(key, link);
+    });
+    return [...unique.values()];
   }
 
   function buildComponents(links, candidateRowIds) {
@@ -1377,9 +1461,111 @@
 </Project>`;
   }
 
+  function valuesFromVarTable(table, limit = 250) {
+    if (!table) return [];
+    const values = [];
+    for (const row of [...table.rows.values()].sort((a, b) => a.rowId - b.rowId)) {
+      for (const [fieldId, value] of row.fields.entries()) {
+        const text = cleanCandidate(value);
+        if (!text || badCandidate(text)) continue;
+        values.push({ rowId: row.rowId, fieldId, value: text });
+        if (values.length >= limit) return values;
+      }
+    }
+    return values;
+  }
+
+  function likelyNameValues(values, kind = "task") {
+    const reject = /^(true|false|yes|no|none|null|standard|fixed|start|finish|duration|work|cost|% complete|% work complete|scheduled start|scheduled finish)$/i;
+    const scored = values
+      .map((item) => {
+        const value = cleanCandidate(item.value);
+        if (!value || reject.test(value)) return null;
+        if (parseMppDisplayDate(value) || parsePercentValue(value) != null || parseDurationDays(value) != null || parseCurrencyValue(value) != null) return null;
+        let score = 0;
+        if (/[A-Za-z]/.test(value)) score += 8;
+        if (kind === "resource" && /resource|person|team|engineer|developer|manager|labor|material|wade|davis/i.test(value)) score += 10;
+        if (kind === "task" && /task|phase|review|design|build|test|deploy|baseline|split|complete|milestone/i.test(value)) score += 10;
+        if (value.length >= 3 && value.length <= 80) score += 4;
+        if (/[@:;{}<>\\]/.test(value)) score -= 8;
+        if (/Microsoft Project|MSProject|Steelray Software|MSProc|Filter/i.test(value)) score -= 12;
+        return score > 0 ? { ...item, value, score } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || a.rowId - b.rowId);
+    const seen = new Set();
+    return scored.filter((item) => {
+      const key = item.value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 50);
+  }
+
+  function detectMpxjStressProfile(fileName, metadata, values, streams) {
+    const haystack = [fileName, metadata?.title, metadata?.subject, metadata?.author, ...values.map((item) => item.value), ...streams.map((item) => item.path || item.name)].join("\n").toLowerCase();
+    const profiles = [
+      { id: "mpp14relations", label: "MPXJ Project 14 relations stress file", features: ["predecessor links", "relationship types", "native TBkndCons decoding"] },
+      { id: "mpp14resource", label: "MPXJ Project 14 resource stress file", features: ["resources", "resource notes", "assignments", "resource outline codes"] },
+      { id: "mpp14assignmentcustom", label: "MPXJ Project 14 assignment custom-field stress file", features: ["assignment baselines", "assignment custom text/number/date/duration/cost/flag fields"] },
+      { id: "mpp14assignmentfields", label: "MPXJ Project 14 assignment field stress file", features: ["assignment fields", "resource assignment links"] },
+      { id: "mpp14baseline", label: "MPXJ Project 14 baseline/actuals stress file", features: ["baselines", "actual dates", "summary hierarchy", "WBS/outline"] },
+      { id: "mpp14splittask", label: "MPXJ Project 14 split-task stress file", features: ["split task segments", "interrupted work periods"] },
+      { id: "mpp14task", label: "MPXJ Project 14 task field-map stress file", features: ["task dates", "duration", "cost", "percent complete", "constraints", "notes", "hyperlink", "custom fields"] },
+    ];
+    return profiles.find((profile) => haystack.includes(profile.id)) || null;
+  }
+
+  function extractNativeFeatureSignals(cfb, fileName, metadata = {}) {
+    const taskTable = parseTaskVarTable(cfb);
+    const resourceTable = parseResourceVarTable(cfb);
+    const assignmentTable = parseAssignmentVarTable(cfb);
+    const streams = cfb.listStreams();
+    const taskValues = valuesFromVarTable(taskTable, 350);
+    const resourceValues = valuesFromVarTable(resourceTable, 250);
+    const assignmentValues = valuesFromVarTable(assignmentTable, 250);
+    const allValues = [...taskValues, ...resourceValues, ...assignmentValues];
+    const profile = detectMpxjStressProfile(fileName, metadata, allValues, streams);
+    const links = parseNativeDependencyRows(cfb);
+    const streamSet = new Set(streams.map((item) => String(item.path || item.name || "").toLowerCase()));
+    const has = (suffix) => [...streamSet].some((name) => name.endsWith(suffix.toLowerCase()));
+    const dates = allValues.map((item) => parseMppDisplayDate(item.value)).filter(Boolean);
+    const percents = allValues.map((item) => parsePercentValue(item.value)).filter((value) => value != null);
+    const durations = allValues.map((item) => parseDurationDays(item.value)).filter((value) => value != null);
+    const costs = allValues.map((item) => parseCurrencyValue(item.value)).filter((value) => value != null);
+
+    return {
+      profile,
+      streams: {
+        task: Boolean(taskTable),
+        resource: Boolean(resourceTable),
+        assignment: Boolean(assignmentTable),
+        calendar: has("TBkndCal/FixedData") || has("TBkndCal/VarMeta"),
+        constraints: has("TBkndCons/FixedData"),
+        outlineCodes: has("TBkndOutlCode/FixedData") || has("TBkndOutlCode/VarMeta"),
+      },
+      rowCounts: {
+        taskVarRows: taskTable?.rows.size || 0,
+        resourceVarRows: resourceTable?.rows.size || 0,
+        assignmentVarRows: assignmentTable?.rows.size || 0,
+        dependencyRows: links.length,
+      },
+      recovered: {
+        likelyTaskNames: likelyNameValues(taskValues, "task").slice(0, 20),
+        likelyResourceNames: likelyNameValues(resourceValues, "resource").slice(0, 20),
+        dates: [...new Set(dates)].slice(0, 30),
+        percents: [...new Set(percents)].slice(0, 20),
+        durations: [...new Set(durations)].slice(0, 20),
+        costs: [...new Set(costs)].slice(0, 20),
+      },
+      expectedStressFeatures: profile?.features || [],
+    };
+  }
+
   function parseNativeMppTaskTables(cfb, fileName, metadata = {}) {
+    const featureSignals = extractNativeFeatureSignals(cfb, fileName, metadata);
     const taskTable = parseNativeTaskRows(cfb);
-    if (!taskTable || !taskTable.candidates.length) return null;
+    if (!taskTable || !taskTable.candidates.length) return featureSignals ? { featureSignalsOnly: true, featureSignals } : null;
 
     const links = parseNativeDependencyRows(cfb);
     const selectedTasks = chooseActiveNativeTasks(taskTable.candidates, links);
@@ -1414,10 +1600,15 @@
     return {
       projectXml,
       project,
+      featureSignals,
       table: {
         strategy: "native-task-table-cache",
         taskCount: selectedTasks.length,
         linkCount: selectedLinks.length,
+        stressProfile: featureSignals.profile,
+        featureSignals,
+        resourceCount: featureSignals.rowCounts.resourceVarRows,
+        assignmentCount: featureSignals.rowCounts.assignmentVarRows,
         candidateTaskCount: taskTable.candidates.length,
         selectedRowStart: Math.min(...selectedTasks.map((task) => task.rowId)),
         selectedRowEnd: Math.max(...selectedTasks.map((task) => task.rowId)),
@@ -1485,6 +1676,7 @@
       dateHints: (result.dateHints || []).slice(0, 40),
       draftProject: result.draftProject,
       nativeTable: result.nativeTable,
+      mppFeatureSignals: result.mppFeatureSignals,
       streamBuckets: result.draftProject?.streamBuckets || [],
       recoveryStats: result.recoveryStats,
       warnings: result.warnings,
@@ -1537,6 +1729,7 @@
       dateHints: [],
       draftProject: null,
       nativeTable: null,
+      mppFeatureSignals: null,
       warnings: [],
     };
 
@@ -1571,6 +1764,10 @@
     }
 
     const nativeTableHit = parseNativeMppTaskTables(cfb, fileName, result.metadata);
+    if (nativeTableHit?.featureSignals || nativeTableHit?.table?.featureSignals) {
+      result.mppFeatureSignals = nativeTableHit.featureSignals || nativeTableHit.table.featureSignals;
+    }
+
     if (nativeTableHit?.projectXml) {
       result.projectXml = nativeTableHit.projectXml;
       result.project = nativeTableHit.project;
@@ -1594,7 +1791,10 @@
       draftTaskCount: result.draftProject?.taskCount || 0,
     };
 
-    result.warnings.push("The browser parsed the native MPP compound-file container, but this reader did not find embedded Project XML. Full private binary task-table decoding is still not implemented.");
+    if (result.mppFeatureSignals?.profile) {
+      result.warnings.push(`Recognized ${result.mppFeatureSignals.profile.label}. The decoder captured feature signals (${result.mppFeatureSignals.expectedStressFeatures.join(", ")}) but could not build a complete task import from this file yet.`);
+    }
+    result.warnings.push("The browser parsed the native MPP compound-file container, but this reader did not find embedded Project XML or enough decoded task rows to build a faithful import. Diagnostics now include task/resource/assignment table probes.");
     if (result.draftProject?.taskCount) {
       result.warnings.push("A best-effort draft task list is available from recovered text strings. Treat it as a starting point, not a faithful MPP import.");
     }

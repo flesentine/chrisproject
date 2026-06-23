@@ -29,9 +29,15 @@ The converter does the best practical static-web approach:
    - `TBkndTask/VarMeta`
    - `TBkndTask/Var2Data`
    - `TBkndCons/FixedData`
-5. Converts recovered tasks, dates, and FS/SS/FF/SF links into Project XML and imports it.
-6. If that table-cache decode is not available, falls back to recovered text / draft XML.
-7. Lets you download diagnostics, recovered text, or converted XML.
+5. Probes additional Project table-cache streams learned from the MPXJ stress files:
+   - `TBkndRsc` resources
+   - `TBkndAssn` assignments
+   - `TBkndCal` calendars
+   - `TBkndOutlCode` outline codes
+6. Detects MPXJ-style stress profiles such as task fields, relations, baselines, split tasks, resources, and assignments.
+7. Converts recovered tasks, dates, percent complete, duration hints, cost hints, and FS/SS/FF/SF links into Project XML and imports it.
+8. If that table-cache decode is not available, falls back to recovered text / draft XML.
+9. Lets you download diagnostics, recovered text, or converted XML.
 
 ## Honest limitation
 
@@ -77,21 +83,23 @@ This MVP intentionally keeps the model small. It does not yet fully support:
 
 - Native `.mpp` parity for every file
 - Resource pools
-- Assignment units/costs
-- Baselines
-- Complex constraints
-- Calendars beyond a simple 8-hour day
+- Full assignment units/cost import, although assignment rows are now probed in diagnostics
+- Full baseline import, although baseline stress files are now recognized
+- Complex constraints, although constraint/date/cost/duration hints are recovered when visible
+- Calendars beyond a simple 8-hour day, although calendar stream presence is now reported
 - Critical path calculation
 
-## Native MPP reader improvement notes
 
-This version adds what we learned from the MPXJ `mpp14task.mpp` field-coverage sample:
+## MPXJ stress files this decoder is now aware of
 
-- Parses Project display dates like `23/08/06 08:00`, `29/08/06 17:00`, and weekday-prefixed dates such as `Tue 07/02/06`.
-- Uses weekday text, when available, to disambiguate `DD/MM/YY` vs `MM/DD/YY`.
-- Recovers percent-complete values such as `45%` from native task table values.
-- Recovers simple duration hints such as `5d`, `5 days`, `1 week`, and `40h`.
-- Recovers cost-looking values for diagnostics when present.
-- Reports native field coverage in the MPP import banner and diagnostics.
+The reader has built-in feature probes for these public MPXJ test files:
 
-This is still browser-only best-effort MPP decoding. Project XML remains the reliable interchange format, but the native table decoder is now better on task-field-heavy MPP files.
+- `mpp14task.mpp` — task field-map coverage
+- `mpp14relations.mpp` — predecessor/dependency coverage
+- `mpp14baseline.mpp` — baseline/actuals/hierarchy coverage
+- `mpp14splittask.mpp` — split task coverage
+- `mpp14resource.mpp` — resource/assignment/outline-code coverage
+- `mpp14assignmentcustom.mpp` — assignment custom/baseline fields
+- `mpp14assignmentfields.mpp` — assignment field coverage
+
+These probes do not magically make the app MPXJ, but they make failures more useful: diagnostics now show which table-cache families were found and what values were recovered.

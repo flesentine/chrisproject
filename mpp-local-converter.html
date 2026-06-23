@@ -116,11 +116,13 @@
         lastResult = await window.NativeMppReader.read(file);
         if (lastResult.projectXml) {
           lastXml = lastResult.projectXml;
+          const features = lastResult.nativeTable?.featureSignals || lastResult.mppFeatureSignals;
           const nativeText = lastResult.nativeTable
-            ? `Decoded native MPP table streams: <strong>${lastResult.nativeTable.taskCount}</strong> tasks and <strong>${lastResult.nativeTable.linkCount}</strong> links.`
+            ? `Decoded native MPP table streams: <strong>${lastResult.nativeTable.taskCount}</strong> tasks and <strong>${lastResult.nativeTable.linkCount}</strong> links. Resource/assignment probes: <strong>${lastResult.nativeTable.resourceCount || 0}</strong> resources, <strong>${lastResult.nativeTable.assignmentCount || 0}</strong> assignments.`
             : `Found import-ready Project XML inside <strong>${escapeXml(file.name)}</strong>.`;
+          const profileText = features?.profile ? `<p>Recognized stress profile: <strong>${escapeXml(features.profile.label)}</strong>.</p>` : '';
           const heading = lastResult.nativeTable ? 'Decoded native MPP table cache' : 'Converted from embedded Project XML';
-          show(`<h2>${heading}</h2><p>${nativeText} Tasks detected: ${lastResult.project?.taskCount ?? 'unknown'}. Review the result before using it as source of truth.</p><div class="actions"><button class="primary" id="downloadXml">Download XML</button><button id="downloadDiag">Download diagnostics</button><a class="button" href="index.html">Open planner</a></div>`, 'ok');
+          show(`<h2>${heading}</h2><p>${nativeText} Tasks detected: ${lastResult.project?.taskCount ?? 'unknown'}. Review the result before using it as source of truth.</p>${profileText}<div class="actions"><button class="primary" id="downloadXml">Download XML</button><button id="downloadDiag">Download diagnostics</button><a class="button" href="index.html">Open planner</a></div>`, 'ok');
           return;
         }
         const count = lastResult.draftProject?.taskCount || 0;

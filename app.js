@@ -1047,11 +1047,16 @@ async function importProjectMppLocal(file) {
         : result.embeddedXml?.stream ? ` Found Project XML in <code>${escapeXml(result.embeddedXml.stream)}</code>${compressionText}.` : "";
       const reviewText = result.nativeTable ? " <strong>Review this import before treating it as source of truth.</strong>" : "";
       const coverage = result.nativeTable?.fieldCoverage;
+      const features = result.nativeTable?.featureSignals || result.mppFeatureSignals;
+      const stressProfileText = features?.profile ? ` Recognized test profile: <strong>${escapeXml(features.profile.label)}</strong>.` : "";
+      const resourceText = result.nativeTable
+        ? ` Resource/assignment probes: ${result.nativeTable.resourceCount || 0} resource row${result.nativeTable.resourceCount === 1 ? "" : "s"}, ${result.nativeTable.assignmentCount || 0} assignment row${result.nativeTable.assignmentCount === 1 ? "" : "s"}.`
+        : "";
       const coverageText = coverage
-        ? ` Field coverage: ${coverage.starts || 0} start date${coverage.starts === 1 ? "" : "s"}, ${coverage.finishes || 0} finish date${coverage.finishes === 1 ? "" : "s"}, ${coverage.percents || 0} percent value${coverage.percents === 1 ? "" : "s"}.`
+        ? ` Field coverage: ${coverage.starts || 0} start date${coverage.starts === 1 ? "" : "s"}, ${coverage.finishes || 0} finish date${coverage.finishes === 1 ? "" : "s"}, ${coverage.percents || 0} percent value${coverage.percents === 1 ? "" : "s"}, ${coverage.durations || 0} duration hint${coverage.durations === 1 ? "" : "s"}, ${coverage.costs || 0} cost hint${coverage.costs === 1 ? "" : "s"}.`
         : "";
       setMppPanel(
-        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}${coverageText}${reviewText}` +
+        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}${stressProfileText}${coverageText}${resourceText}${reviewText}` +
         `<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="download-xml">Download converted XML</button><button type="button" data-mpp-action="diagnostics">Download diagnostics</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`,
         "ok",
         result.nativeTable ? "MPP decoded locally" : "MPP converted locally"
