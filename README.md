@@ -14,6 +14,10 @@ A lightweight Microsoft Project XML-compatible planner with a browser-only local
 - Detect dependency loops before scheduling
 - Review downstream cascade changes before moving linked tasks
 - Import/export Microsoft Project XML / MSPDI
+- Manage resources in a Resource Sheet
+- Assign resources to tasks from Task Information → Resources
+- Track assignment units, work, actual work, remaining work, and calculated cost
+- Export/import Project XML resources and assignments
 - Export CSV
 - Save automatically in browser localStorage
 - Try to read `.mpp` files locally in the browser without upload or backend
@@ -181,3 +185,10 @@ Task notes still round-trip through Project XML using `<Notes>` when present.
 - CSV export now includes a resources section after the task table.
 
 This adds the resource master list. The next roadmap item is the assignment model that connects resources to tasks.
+
+
+## Build version
+
+`v0.19.0 · Assignment model`
+
+This build adds the real task-to-resource assignment model. Tasks can now hold assignment records that connect Resource Sheet resources to task work/cost. This is the foundation for later fixed-units/fixed-work scheduling, resource usage views, cost rollups, and leveling.

@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v3-compact";
-const APP_VERSION = "v0.18.0";
-const APP_VERSION_NAME = "Resource Sheet";
+const APP_VERSION = "v0.19.0";
+const APP_VERSION_NAME = "Assignment model";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
@@ -123,6 +123,9 @@ const els = {
   tiPercent: document.getElementById("tiPercent"),
   tiMilestone: document.getElementById("tiMilestone"),
   tiNotes: document.getElementById("tiNotes"),
+  tiAssignmentSummary: document.getElementById("tiAssignmentSummary"),
+  tiAssignmentBody: document.getElementById("tiAssignmentBody"),
+  tiAddAssignmentBtn: document.getElementById("tiAddAssignmentBtn"),
   tiPredecessors: document.getElementById("tiPredecessors"),
   tiSuccessors: document.getElementById("tiSuccessors"),
   tiConstraintType: document.getElementById("tiConstraintType"),
@@ -148,6 +151,7 @@ let state = {
   projectStart: today,
   nextUid: 2,
   nextResourceUid: 1,
+  nextAssignmentUid: 1,
   activeView: "schedule",
   calendar: { ...STANDARD_CALENDAR },
   tasks: [],
@@ -590,6 +594,92 @@ function resourceTypeOptions(selected) {
   return RESOURCE_TYPES.map((type) => `<option value="${type}"${type === normalized ? " selected" : ""}>${type}</option>`).join("");
 }
 
+
+function getResourceByUid(uid) {
+  ensureResources();
+  const numeric = Number(uid);
+  return state.resources.find((resource) => Number(resource.uid) === numeric) || null;
+}
+
+function formatWork(minutes) {
+  const safe = normalizeDurationMinutes(minutes, 0);
+  if (safe === 0) return "0h";
+  if (safe % 60 === 0) return `${safe / 60}h`;
+  return `${safe}m`;
+}
+
+function parseWorkInput(value, fallbackMinutes = getCalendar().minutesPerDay) {
+  return parseDurationInput(value, fallbackMinutes);
+}
+
+function normalizeAssignmentUnits(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return 100;
+  const n = Number(text.replace("%", ""));
+  return Number.isFinite(n) ? Math.min(1000, Math.max(0, Math.round(n))) : 100;
+}
+
+function normalizeAssignment(assignment = {}, index = 0) {
+  const firstResource = state.resources?.[0];
+  const resourceUid = Number(assignment.resourceUid ?? assignment.resource_uid ?? assignment.resourceId ?? assignment.resourceID ?? firstResource?.uid ?? 0);
+  const workMinutes = normalizeDurationMinutes(assignment.workMinutes ?? assignment.work ?? assignment.work_minutes ?? getCalendar().minutesPerDay, getCalendar().minutesPerDay);
+  const actualWorkMinutes = normalizeDurationMinutes(assignment.actualWorkMinutes ?? assignment.actualWork ?? assignment.actual_work_minutes ?? 0, 0);
+  const remainingWorkMinutes = normalizeDurationMinutes(assignment.remainingWorkMinutes ?? assignment.remainingWork ?? assignment.remaining_work_minutes ?? Math.max(0, workMinutes - actualWorkMinutes), Math.max(0, workMinutes - actualWorkMinutes));
+  return {
+    uid: Number.isInteger(Number(assignment.uid)) && Number(assignment.uid) > 0 ? Number(assignment.uid) : 0,
+    resourceUid: Number.isFinite(resourceUid) && resourceUid > 0 ? resourceUid : 0,
+    units: normalizeAssignmentUnits(assignment.units ?? assignment.maxUnits ?? 100),
+    workMinutes,
+    actualWorkMinutes: Math.min(actualWorkMinutes, workMinutes),
+    remainingWorkMinutes: Math.min(remainingWorkMinutes, workMinutes),
+    notes: String(assignment.notes || ""),
+  };
+}
+
+function ensureAssignmentUids() {
+  let maxUid = Number(state.nextAssignmentUid) || 1;
+  state.tasks.forEach((task) => {
+    task.assignments = Array.isArray(task.assignments) ? task.assignments.map(normalizeAssignment).filter((assignment) => assignment.resourceUid > 0) : [];
+    task.assignments.forEach((assignment) => {
+      if (!Number.isInteger(Number(assignment.uid)) || Number(assignment.uid) <= 0) assignment.uid = maxUid++;
+      maxUid = Math.max(maxUid, Number(assignment.uid) + 1);
+    });
+  });
+  state.nextAssignmentUid = Math.max(Number(state.nextAssignmentUid) || 1, maxUid);
+}
+
+function assignmentCost(assignment) {
+  const resource = getResourceByUid(assignment.resourceUid);
+  if (!resource) return 0;
+  if (resource.type === "Cost") return parseRateValue(resource.costPerUse);
+  const workHours = normalizeDurationMinutes(assignment.workMinutes, 0) / 60;
+  const rate = resource.type === "Material" ? parseRateValue(resource.costPerUse) : parseRateValue(resource.standardRate);
+  const usageCost = resource.type === "Material" ? 0 : parseRateValue(resource.costPerUse);
+  return Math.round((workHours * rate + usageCost) * 100) / 100;
+}
+
+function summarizeTaskAssignments(task) {
+  const assignments = Array.isArray(task?.assignments) ? task.assignments : [];
+  const totalWork = assignments.reduce((sum, assignment) => sum + normalizeDurationMinutes(assignment.workMinutes, 0), 0);
+  const actualWork = assignments.reduce((sum, assignment) => sum + normalizeDurationMinutes(assignment.actualWorkMinutes, 0), 0);
+  const remainingWork = assignments.reduce((sum, assignment) => sum + normalizeDurationMinutes(assignment.remainingWorkMinutes, Math.max(0, assignment.workMinutes - assignment.actualWorkMinutes)), 0);
+  const totalCost = assignments.reduce((sum, assignment) => sum + assignmentCost(assignment), 0);
+  const names = assignments.map((assignment) => getResourceByUid(assignment.resourceUid)?.name).filter(Boolean);
+  return { count: assignments.length, totalWork, actualWork, remainingWork, totalCost, names };
+}
+
+function formatAssignmentResourceNames(task) {
+  const summary = summarizeTaskAssignments(task);
+  return summary.names.length ? summary.names.join(", ") : "Unassigned";
+}
+
+function resourceOptions(selectedUid) {
+  ensureResources();
+  if (!state.resources.length) return `<option value="0">No resources yet</option>`;
+  const selected = Number(selectedUid);
+  return state.resources.map((resource) => `<option value="${resource.uid}"${Number(resource.uid) === selected ? " selected" : ""}>${escapeXml(resource.name)} (${escapeXml(resource.initials)})</option>`).join("");
+}
+
 function normalizeConstraintType(value) {
   const raw = String(value ?? "").trim().toUpperCase();
   if (!raw) return "ASAP";
@@ -869,6 +959,7 @@ function ensureDecorations() {
     task.deadline = normalizeDateValue(task.deadline);
     task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
+    task.assignments = Array.isArray(task.assignments) ? task.assignments.map(normalizeAssignment).filter((assignment) => assignment.resourceUid > 0) : [];
 
     const level = task.outlineLevel;
     counters.length = level;
@@ -1084,6 +1175,7 @@ function outdentSelectedTask() {
 function save() {
   ensureDecorations();
   ensureResources();
+  ensureAssignmentUids();
   rollupSummaryTasks();
   ensureDecorations();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1103,6 +1195,7 @@ function load() {
       projectStart: parsed.projectStart || today,
       nextUid: parsed.nextUid || 2,
       nextResourceUid: parsed.nextResourceUid || 1,
+      nextAssignmentUid: parsed.nextAssignmentUid || 1,
       activeView: parsed.activeView || "schedule",
       calendar: normalizeCalendar(parsed.calendar),
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
@@ -1119,6 +1212,7 @@ function render() {
   rollupSummaryTasks();
   ensureDecorations();
   ensureResources();
+  ensureAssignmentUids();
   applyUiPrefs();
   refreshCalendarControls();
   els.projectName.value = state.projectName;
@@ -1196,6 +1290,22 @@ function updateActiveView() {
   els.resourceViewBtn?.classList.toggle("is-active", view === "resources");
 }
 
+function getResourceUsageSummary(resourceUid) {
+  const uid = Number(resourceUid);
+  const summary = { count: 0, workMinutes: 0, cost: 0, taskNames: [] };
+  state.tasks.forEach((task) => {
+    (task.assignments || []).forEach((assignment) => {
+      if (Number(assignment.resourceUid) !== uid) return;
+      summary.count += 1;
+      summary.workMinutes += normalizeDurationMinutes(assignment.workMinutes, 0);
+      summary.cost += assignmentCost(assignment);
+      summary.taskNames.push(`${task.id}. ${task.name}`);
+    });
+  });
+  summary.cost = Math.round(summary.cost * 100) / 100;
+  return summary;
+}
+
 function renderResourceSheet() {
   ensureResources();
   if (els.resourceCount) els.resourceCount.textContent = `${state.resources.length} resource${state.resources.length === 1 ? "" : "s"}`;
@@ -1204,11 +1314,13 @@ function renderResourceSheet() {
     els.resourceBody.innerHTML = `
       <div class="resource-empty">
         <strong>No resources yet.</strong>
-        <span>Add people, teams, equipment, materials, or fixed-cost placeholders here. Assignments come next.</span>
+        <span>Add people, teams, equipment, materials, or fixed-cost placeholders here. Use Task Information → Resources to assign these to tasks.</span>
       </div>`;
     return;
   }
-  els.resourceBody.innerHTML = state.resources.map((resource, index) => `
+  els.resourceBody.innerHTML = state.resources.map((resource, index) => {
+    const usage = getResourceUsageSummary(resource.uid);
+    return `
     <div class="resource-row" data-resource-index="${index}">
       <div class="resource-cell resource-id">${resource.id}</div>
       <div class="resource-cell resource-indicator" title="${resource.type} resource">${resource.type === "Work" ? "👤" : resource.type === "Material" ? "📦" : "💵"}</div>
@@ -1219,10 +1331,14 @@ function renderResourceSheet() {
       <div class="resource-cell rate-cell"><input data-resource-index="${index}" data-resource-field="standardRate" type="text" value="${escapeXml(formatMoney(resource.standardRate))}" /></div>
       <div class="resource-cell rate-cell"><input data-resource-index="${index}" data-resource-field="overtimeRate" type="text" value="${escapeXml(formatMoney(resource.overtimeRate))}" /></div>
       <div class="resource-cell rate-cell"><input data-resource-index="${index}" data-resource-field="costPerUse" type="text" value="${escapeXml(formatMoney(resource.costPerUse))}" /></div>
+      <div class="resource-cell assignment-count-cell" title="${escapeXml(usage.taskNames.join(', ') || 'No task assignments')}">${usage.count} task${usage.count === 1 ? "" : "s"}</div>
+      <div class="resource-cell work-cell">${escapeXml(formatWork(usage.workMinutes))}</div>
+      <div class="resource-cell rate-cell">${escapeXml(formatMoney(usage.cost))}</div>
       <div class="resource-cell"><input data-resource-index="${index}" data-resource-field="baseCalendar" type="text" value="${escapeXml(resource.baseCalendar)}" /></div>
       <div class="resource-cell"><input data-resource-index="${index}" data-resource-field="notes" type="text" value="${escapeXml(resource.notes)}" placeholder="notes" /></div>
       <div class="resource-cell resource-actions"><button type="button" class="delete-btn" data-resource-action="delete" data-resource-index="${index}">Delete</button></div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 function addResource() {
@@ -1250,7 +1366,13 @@ function updateResource(index, field, value) {
 
 function deleteResource(index) {
   ensureResources();
+  const deletedUid = state.resources[index]?.uid;
   state.resources.splice(index, 1);
+  if (deletedUid) {
+    state.tasks.forEach((task) => {
+      task.assignments = (task.assignments || []).filter((assignment) => Number(assignment.resourceUid) !== Number(deletedUid));
+    });
+  }
   render();
 }
 
@@ -1283,6 +1405,10 @@ function renderTaskIndicators(task, index, context = {}) {
   }
   if ((task.notes || "").trim()) {
     items.push({ label: "📝", className: "is-note", title: "Task has notes." });
+  }
+  const assignmentSummary = summarizeTaskAssignments(task);
+  if (assignmentSummary.count) {
+    items.push({ label: "👥", className: "is-assignment", title: `Assigned to ${assignmentSummary.names.join(", ")}. Work: ${formatWork(assignmentSummary.totalWork)}. Cost: ${formatMoney(assignmentSummary.totalCost)}.` });
   }
   if (task.links?.length) {
     items.push({ label: "←", className: "is-link", title: `Predecessors: ${formatLinks(task.links)}.` });
@@ -1507,7 +1633,7 @@ function getTaskInfoSummaryLabel(index) {
 }
 
 function setTaskInfoTab(tab = "general") {
-  const nextTab = ["general", "predecessors", "advanced", "notes", "structure"].includes(tab) ? tab : "general";
+  const nextTab = ["general", "resources", "predecessors", "advanced", "notes", "structure"].includes(tab) ? tab : "general";
   taskInfoActiveTab = nextTab;
   els.taskInfoModal?.querySelectorAll("[data-task-info-tab]").forEach((button) => {
     const active = button.dataset.taskInfoTab === nextTab;
@@ -1550,6 +1676,7 @@ function refreshTaskInfoPanel(force = false) {
   const linksText = formatLinks(task.links || []);
   const successorsText = formatSuccessorLinks(task.id);
   const constraintType = normalizeConstraintType(task.constraintType);
+  const assignmentSummary = summarizeTaskAssignments(task);
 
   if (els.taskInfoTitle) els.taskInfoTitle.textContent = `Task ${task.id}: ${task.name}`;
   if (els.taskInfoMeta) els.taskInfoMeta.textContent = `${task.wbs || "—"} · ${formatFriendlyDate(task.start)} → ${formatFriendlyDate(task.finish)} · ${durationText}`;
@@ -1559,6 +1686,8 @@ function refreshTaskInfoPanel(force = false) {
   if (els.tiDuration) els.tiDuration.value = durationText;
   if (els.tiPercent) els.tiPercent.value = normalizePercent(task.percent);
   if (els.tiMilestone) els.tiMilestone.checked = normalizeDurationMinutes(task.durationMinutes, 0) === 0;
+  if (els.tiAssignmentSummary) els.tiAssignmentSummary.textContent = assignmentSummary.count ? `${assignmentSummary.count} assignment${assignmentSummary.count === 1 ? "" : "s"} · ${formatWork(assignmentSummary.totalWork)} work · ${formatMoney(assignmentSummary.totalCost)} cost` : "No resources assigned yet.";
+  renderTaskInfoAssignments(task);
   if (els.tiNotes) els.tiNotes.value = task.notes || "";
   if (els.tiPredecessors) els.tiPredecessors.value = linksText;
   if (els.tiSuccessors) els.tiSuccessors.value = successorsText;
@@ -1582,6 +1711,76 @@ function refreshTaskInfoPanel(force = false) {
   [els.tiStart, els.tiFinish, els.tiDuration, els.tiPercent, els.tiMilestone].forEach((field) => {
     if (field) field.disabled = isSummary;
   });
+}
+
+function renderTaskInfoAssignments(task) {
+  if (!els.tiAssignmentBody) return;
+  ensureResources();
+  const assignments = Array.isArray(task?.assignments) ? task.assignments : [];
+  if (!state.resources.length) {
+    els.tiAssignmentBody.innerHTML = `<div class="assignment-empty"><strong>No resources yet.</strong><span>Create resources on the Resource Sheet first, then assign them here.</span></div>`;
+    return;
+  }
+  if (!assignments.length) {
+    els.tiAssignmentBody.innerHTML = `<div class="assignment-empty"><strong>No assignments yet.</strong><span>Click Add assignment to connect a resource to this task.</span></div>`;
+    return;
+  }
+  els.tiAssignmentBody.innerHTML = assignments.map((assignment, index) => {
+    const resource = getResourceByUid(assignment.resourceUid);
+    return `
+      <div class="assignment-row" data-assignment-index="${index}">
+        <select data-assignment-field="resourceUid" data-assignment-index="${index}" aria-label="Assigned resource">${resourceOptions(assignment.resourceUid)}</select>
+        <input data-assignment-field="units" data-assignment-index="${index}" type="text" value="${assignment.units}%" aria-label="Assignment units" />
+        <input data-assignment-field="workMinutes" data-assignment-index="${index}" type="text" value="${escapeXml(formatWork(assignment.workMinutes))}" aria-label="Assignment work" />
+        <input data-assignment-field="actualWorkMinutes" data-assignment-index="${index}" type="text" value="${escapeXml(formatWork(assignment.actualWorkMinutes))}" aria-label="Actual work" />
+        <span class="assignment-cost" title="${escapeXml(resource ? `${resource.name} cost` : 'Unassigned')}" aria-label="Assignment cost">${escapeXml(formatMoney(assignmentCost(assignment)))}</span>
+        <button type="button" class="delete-btn" data-assignment-action="delete" data-assignment-index="${index}">Remove</button>
+      </div>`;
+  }).join("");
+}
+
+function addAssignmentToTask(index = taskInfoIndex) {
+  const task = state.tasks[index];
+  if (!task) return;
+  ensureResources();
+  if (!state.resources.length) {
+    state.activeView = "resources";
+    render();
+    return;
+  }
+  const used = new Set((task.assignments || []).map((assignment) => Number(assignment.resourceUid)));
+  const resource = state.resources.find((candidate) => !used.has(Number(candidate.uid))) || state.resources[0];
+  task.assignments = Array.isArray(task.assignments) ? task.assignments : [];
+  task.assignments.push(normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: resource.uid, units: Math.min(100, resource.maxUnits || 100), workMinutes: task.durationMinutes || getCalendar().minutesPerDay, actualWorkMinutes: 0 }));
+  refreshTaskInfoPanel(true);
+  renderResourceSheet();
+}
+
+function updateTaskAssignment(taskIndex, assignmentIndex, field, value) {
+  const task = state.tasks[taskIndex];
+  if (!task || !task.assignments?.[assignmentIndex]) return;
+  const assignment = task.assignments[assignmentIndex];
+  if (field === "resourceUid") assignment.resourceUid = Number(value);
+  else if (field === "units") assignment.units = normalizeAssignmentUnits(value);
+  else if (field === "workMinutes") {
+    assignment.workMinutes = parseWorkInput(value, assignment.workMinutes || task.durationMinutes || getCalendar().minutesPerDay);
+    assignment.remainingWorkMinutes = Math.max(0, assignment.workMinutes - normalizeDurationMinutes(assignment.actualWorkMinutes, 0));
+  }
+  else if (field === "actualWorkMinutes") {
+    assignment.actualWorkMinutes = Math.min(parseWorkInput(value, assignment.actualWorkMinutes || 0), assignment.workMinutes || 0);
+    assignment.remainingWorkMinutes = Math.max(0, normalizeDurationMinutes(assignment.workMinutes, 0) - assignment.actualWorkMinutes);
+  }
+  task.assignments[assignmentIndex] = normalizeAssignment(assignment, assignmentIndex);
+  refreshTaskInfoPanel(true);
+  renderResourceSheet();
+}
+
+function deleteTaskAssignment(taskIndex, assignmentIndex) {
+  const task = state.tasks[taskIndex];
+  if (!task?.assignments) return;
+  task.assignments.splice(assignmentIndex, 1);
+  refreshTaskInfoPanel(true);
+  renderResourceSheet();
 }
 
 function applyTaskInfoForm() {
@@ -1639,6 +1838,9 @@ function validateProject() {
 
   state.tasks.forEach((task) => {
     if (!task.name.trim()) issues.push(`Task ${task.id} has a blank name.`);
+    (task.assignments || []).forEach((assignment) => {
+      if (!getResourceByUid(assignment.resourceUid)) issues.push(`Task ${task.id} has an assignment to a missing resource.`);
+    });
     if (!dateOnly(task.start)) issues.push(`Task ${task.id} has an invalid start date.`);
     if (!dateOnly(task.finish)) issues.push(`Task ${task.id} has an invalid finish date.`);
     if (dateOnly(task.finish) < dateOnly(task.start)) issues.push(`Task ${task.id} finishes before it starts.`);
@@ -1718,7 +1920,7 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, weighted summary rollups, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, and project calendar.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, weighted summary rollups, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, resource assignments, and project calendar.</p></div></div>`;
     return;
   }
 
@@ -1796,6 +1998,7 @@ function addTask() {
     constraintType: "ASAP",
     constraintDate: "",
     deadline: "",
+    assignments: [],
   });
   selectedTaskIndex = newIndex;
   render();
@@ -2023,6 +2226,24 @@ function buildProjectXml() {
     </Task>`;
   }).join("");
 
+  ensureAssignmentUids();
+  const assignmentsXml = state.tasks.flatMap((task) => (task.assignments || []).map((assignment) => {
+    const resource = getResourceByUid(assignment.resourceUid);
+    if (!resource) return "";
+    const cost = assignmentCost(assignment);
+    return `
+    <Assignment>
+      <UID>${assignment.uid}</UID>
+      <TaskUID>${task.uid}</TaskUID>
+      <ResourceUID>${assignment.resourceUid}</ResourceUID>
+      <Units>${(assignment.units / 100).toFixed(2)}</Units>
+      <Work>${minutesToProjectDuration(assignment.workMinutes)}</Work>
+      <ActualWork>${minutesToProjectDuration(assignment.actualWorkMinutes)}</ActualWork>
+      <RemainingWork>${minutesToProjectDuration(assignment.remainingWorkMinutes)}</RemainingWork>
+      <Cost>${cost}</Cost>
+    </Assignment>`;
+  })).join("");
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Project xmlns="${MS_PROJECT_NS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="${MS_PROJECT_SCHEMA_LOCATION}">
   <SaveVersion>12</SaveVersion>
@@ -2085,6 +2306,8 @@ function buildProjectXml() {
   </Tasks>
   <Resources>${resourcesXml}
   </Resources>
+  <Assignments>${assignmentsXml}
+  </Assignments>
 </Project>`;
 }
 
@@ -2190,6 +2413,31 @@ function importProjectXml(text) {
     }, importedResources.length));
   });
 
+  const taskByUidForAssignments = new Map(rawTasks.map((task) => [Number(task.uid), task]));
+  const resourceUidSet = new Set(importedResources.map((resource) => Number(resource.uid)));
+  const assignmentNodes = [...xml.getElementsByTagName("Assignment")];
+  let maxAssignmentUid = 0;
+  assignmentNodes.forEach((node) => {
+    const uid = Number(childText(node, "UID"));
+    const taskUid = Number(childText(node, "TaskUID"));
+    const resourceUid = Number(childText(node, "ResourceUID"));
+    const task = taskByUidForAssignments.get(taskUid);
+    if (!task || !resourceUidSet.has(resourceUid)) return;
+    const workMinutes = durationToMinutes(childText(node, "Work") || "PT0H0M0S");
+    const actualWorkMinutes = durationToMinutes(childText(node, "ActualWork") || "PT0H0M0S");
+    const remainingWorkMinutes = durationToMinutes(childText(node, "RemainingWork") || "PT0H0M0S") || Math.max(0, workMinutes - actualWorkMinutes);
+    task.assignments = Array.isArray(task.assignments) ? task.assignments : [];
+    task.assignments.push(normalizeAssignment({
+      uid: Number.isFinite(uid) && uid > 0 ? uid : 0,
+      resourceUid,
+      units: Math.round((Number(childText(node, "Units")) || 1) * 100),
+      workMinutes,
+      actualWorkMinutes,
+      remainingWorkMinutes,
+    }));
+    maxAssignmentUid = Math.max(maxAssignmentUid, uid || 0);
+  });
+
   const maxUid = Math.max(...rawTasks.map((task) => task.uid), 1);
   const maxResourceUid = importedResources.length ? Math.max(...importedResources.map((resource) => resource.uid), 0) : 0;
   state = {
@@ -2197,6 +2445,7 @@ function importProjectXml(text) {
     projectStart: importedStart,
     nextUid: maxUid + 1,
     nextResourceUid: maxResourceUid + 1,
+    nextAssignmentUid: Math.max(maxAssignmentUid + 1, 1),
     activeView: "schedule",
     calendar: importCalendarsFromXml(projectNode),
     tasks: rawTasks,
@@ -2513,7 +2762,7 @@ function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Notes", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
+  const rows = [["ID", "WBS", "Name", "Notes", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "Resources", "Work", "Cost", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -2527,6 +2776,9 @@ function exportCsv() {
       task.percent,
       formatLinks(task.links).replaceAll(",", ";"),
       formatSuccessorLinks(task.id).replaceAll(",", ";"),
+      formatAssignmentResourceNames(task),
+      formatWork(summarizeTaskAssignments(task).totalWork),
+      summarizeTaskAssignments(task).totalCost,
       formatConstraintType(task.constraintType),
       task.constraintDate || "",
       task.deadline || "",
@@ -2539,10 +2791,20 @@ function exportCsv() {
   });
   rows.push([]);
   rows.push(["Resources"]);
-  rows.push(["ID", "Name", "Type", "Initials", "MaxUnits", "StandardRate", "OvertimeRate", "CostPerUse", "BaseCalendar", "Notes"]);
+  rows.push(["ID", "Name", "Type", "Initials", "MaxUnits", "StandardRate", "OvertimeRate", "CostPerUse", "AssignedTasks", "AssignedWork", "AssignedCost", "BaseCalendar", "Notes"]);
   ensureResources();
   state.resources.forEach((resource) => {
-    rows.push([resource.id, resource.name, resource.type, resource.initials, `${resource.maxUnits}%`, resource.standardRate, resource.overtimeRate, resource.costPerUse, resource.baseCalendar, resource.notes]);
+    const usage = getResourceUsageSummary(resource.uid);
+    rows.push([resource.id, resource.name, resource.type, resource.initials, `${resource.maxUnits}%`, resource.standardRate, resource.overtimeRate, resource.costPerUse, usage.count, formatWork(usage.workMinutes), usage.cost, resource.baseCalendar, resource.notes]);
+  });
+  rows.push([]);
+  rows.push(["Assignments"]);
+  rows.push(["TaskID", "TaskName", "Resource", "Units", "Work", "ActualWork", "RemainingWork", "Cost"]);
+  state.tasks.forEach((task) => {
+    (task.assignments || []).forEach((assignment) => {
+      const resource = getResourceByUid(assignment.resourceUid);
+      rows.push([task.id, task.name, resource?.name || "Missing resource", `${assignment.units}%`, formatWork(assignment.workMinutes), formatWork(assignment.actualWorkMinutes), formatWork(assignment.remainingWorkMinutes), assignmentCost(assignment)]);
+    });
   });
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
   downloadText(csv, `${safeFileName(state.projectName)}.csv`, "text/csv");
@@ -2589,6 +2851,7 @@ function makeSampleTask(uid, name, startOffset, durationDays, percent, links = [
     constraintType: "ASAP",
     constraintDate: "",
     deadline: "",
+    assignments: [],
   };
 }
 
@@ -2617,6 +2880,12 @@ function loadSample(shouldRender = true) {
       makeSampleTask(7, "Submit build", 13, 1, 0, [{ id: 5, type: "FS" }, { id: 6, type: "FF" }]),
     ],
   };
+  state.nextAssignmentUid = 1;
+  state.tasks[0].assignments = [normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: 1, units: 50, workMinutes: getCalendar().minutesPerDay })];
+  state.tasks[1].assignments = [normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: 2, units: 100, workMinutes: getCalendar().minutesPerDay * 4 })];
+  state.tasks[2].assignments = [normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: 3, units: 100, workMinutes: getCalendar().minutesPerDay * 2 })];
+  state.tasks[3].assignments = [normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: 2, units: 100, workMinutes: getCalendar().minutesPerDay * 3 })];
+  state.tasks[4].assignments = [normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: 3, units: 100, workMinutes: getCalendar().minutesPerDay * 2 }), normalizeAssignment({ uid: state.nextAssignmentUid++, resourceUid: 4, units: 100, workMinutes: 0 })];
   if (shouldRender) render();
 }
 
@@ -3703,7 +3972,7 @@ els.projectStart.addEventListener("change", () => {
 });
 
 els.newProjectBtn.addEventListener("click", () => {
-  state = { projectName: "New Project", projectStart: today, nextUid: 1, nextResourceUid: 1, activeView: "schedule", calendar: normalizeCalendar(state.calendar), tasks: [], resources: [] };
+  state = { projectName: "New Project", projectStart: today, nextUid: 1, nextResourceUid: 1, nextAssignmentUid: 1, activeView: "schedule", calendar: normalizeCalendar(state.calendar), tasks: [], resources: [] };
   addTask();
 });
 
@@ -3802,6 +4071,17 @@ els.taskInfoModal?.addEventListener("click", (event) => {
     return;
   }
 
+  const addAssignmentButton = event.target.closest("[data-assignment-action='add']");
+  if (addAssignmentButton) {
+    addAssignmentToTask();
+    return;
+  }
+  const deleteAssignmentButton = event.target.closest("[data-assignment-action='delete']");
+  if (deleteAssignmentButton) {
+    deleteTaskAssignment(taskInfoIndex, Number(deleteAssignmentButton.dataset.assignmentIndex));
+    return;
+  }
+
   const action = event.target.closest("[data-task-info-action]")?.dataset.taskInfoAction;
   if (!action) return;
   if (action === "close") closeTaskInfo();
@@ -3809,6 +4089,14 @@ els.taskInfoModal?.addEventListener("click", (event) => {
     applyTaskInfoForm();
     closeTaskInfo();
   }
+});
+
+els.taskInfoModal?.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+  const field = target.dataset.assignmentField;
+  if (!field) return;
+  updateTaskAssignment(taskInfoIndex, Number(target.dataset.assignmentIndex), field, target.value);
 });
 
 els.tiConstraintType?.addEventListener("change", () => {

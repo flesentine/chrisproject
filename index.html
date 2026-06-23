@@ -14,7 +14,7 @@
           <img src="chris-avatar.png" alt="" />
         </div>
         <div>
-          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.18.0</span></div>
+          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.19.0</span></div>
           <h1>Chris's Discount Project Maker</h1>
         </div>
       </div>
@@ -156,7 +156,7 @@
           <div class="card-header">
             <div>
               <h2>Resource Sheet</h2>
-              <p>MS Project-style list of people, equipment, materials, and cost resources. Assigning these to tasks is the next build.</p>
+              <p>MS Project-style list of people, equipment, materials, and cost resources. Assigned task/work/cost totals update from task assignments.</p>
             </div>
             <span class="card-badge" id="resourceCount">0 resources</span>
           </div>
@@ -172,6 +172,9 @@
               <span>Std Rate</span>
               <span>Ovt Rate</span>
               <span>Cost/Use</span>
+              <span>Assigned</span>
+              <span>Work</span>
+              <span>Cost</span>
               <span>Base Calendar</span>
               <span>Notes</span>
               <span>Actions</span>
@@ -184,7 +187,7 @@
 
     <footer class="app-footer">
       <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-      <span class="footer-status"><span id="appVersionFooter">v0.18.0</span><span id="saveStatus">Saved locally</span></span>
+      <span class="footer-status"><span id="appVersionFooter">v0.19.0</span><span id="saveStatus">Saved locally</span></span>
     </footer>
   </div>
 
@@ -245,6 +248,7 @@
 
         <nav class="task-info-tabs" aria-label="Task Information sections">
           <button type="button" class="task-info-tab is-active" data-task-info-tab="general">General</button>
+          <button type="button" class="task-info-tab" data-task-info-tab="resources">Resources</button>
           <button type="button" class="task-info-tab" data-task-info-tab="predecessors">Predecessors</button>
           <button type="button" class="task-info-tab" data-task-info-tab="advanced">Advanced</button>
           <button type="button" class="task-info-tab" data-task-info-tab="notes">Notes</button>
@@ -279,6 +283,24 @@
             <input id="tiMilestone" type="checkbox" />
             Milestone / zero-duration task
           </label>
+        </fieldset>
+
+        <fieldset class="task-info-page" data-task-info-page="resources">
+          <legend>Resources / assignments</legend>
+          <div class="assignment-summary-bar">
+            <span id="tiAssignmentSummary">No resources assigned yet.</span>
+            <button id="tiAddAssignmentBtn" type="button" class="primary small-primary" data-assignment-action="add">+ Add assignment</button>
+          </div>
+          <div class="assignment-grid-heading" aria-hidden="true">
+            <span>Resource</span>
+            <span>Units</span>
+            <span>Work</span>
+            <span>Actual</span>
+            <span>Cost</span>
+            <span>Action</span>
+          </div>
+          <div id="tiAssignmentBody" class="assignment-body"></div>
+          <p class="task-info-help">This is the real MS Project-style bridge between task rows and Resource Sheet rows. Duration/work scheduling math comes later; for now assignments store resource, units, work, actual work, remaining work, and calculated cost.</p>
         </fieldset>
 
         <fieldset class="task-info-page" data-task-info-page="notes">
