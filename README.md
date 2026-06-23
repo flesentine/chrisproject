@@ -5,7 +5,7 @@ A lightweight Microsoft Project XML-compatible planner with a browser-only local
 ## What it does
 
 - Create and edit task schedules
-- Show a polished unified Gantt/grid like a lightweight Microsoft Project sheet
+- Show a compact Microsoft Project-style Entry sheet with Gantt bars on the same rows
 - Drag task bars to move dates
 - Resize durations from the bar edges
 - Connect tasks with hover-reveal pull strings
@@ -140,17 +140,33 @@ Supported lag/lead units:
 
 Positive values are lag. Negative values are lead. Auto Schedule and cascade scheduling both honor lag/lead and still use the project calendar, so weekends and holidays are skipped. The successor column is calculated from the predecessor links and includes lag/lead too.
 
-## Task Information panel
+## Compact Entry view and Task Information dialog
 
-Version `v0.16.0` adds a Microsoft Project-style **Task info** panel.
+Version `v0.17.0` makes the main grid closer to Microsoft Project's default Entry/Gantt Chart pattern: keep the common schedule fields visible and move the less-common fields into Task Information.
 
-Open it by selecting a row and clicking **Task info**, or by double-clicking a task row. The panel gives the crowded grid a proper place for full task details:
+The visible row now focuses on:
 
-- General task details: name, start, finish, duration, percent complete, milestone, and notes
-- Dependency details: editable predecessors and read-only calculated successors
-- Advanced scheduling: constraint type, constraint date, and deadline
-- Structure details: WBS, outline level, parent task, and summary/rollup status
+- ID
+- Indicators
+- WBS
+- Task Name
+- Duration
+- Start
+- Finish
+- Percent complete
+- Predecessors
+- Details / delete actions
 
-Summary tasks keep their rollup fields read-only in the panel. Their start, finish, duration, and percent complete still come from their child tasks.
+The row no longer burns space on Successors, Constraint, Constraint Date, Deadline, and Outline Level. Those still exist, but they live in **Task Information**.
 
-Task notes now round-trip through Project XML using `<Notes>` when present.
+Open Task Information by selecting a row and clicking **Task info**, clicking the row's **Info** button, clicking the indicator cell, or double-clicking a task row. The dialog now uses Project-like tabs:
+
+- General: name, start, finish, duration, percent complete, milestone
+- Predecessors: editable predecessors and read-only calculated successors
+- Advanced: constraint type, constraint date, and deadline
+- Notes: task notes
+- Structure: WBS, outline level, parent task, and summary/rollup status
+
+Summary tasks keep their rollup fields read-only in the dialog. Their start, finish, duration, and percent complete still come from their child tasks.
+
+Task notes still round-trip through Project XML using `<Notes>` when present.

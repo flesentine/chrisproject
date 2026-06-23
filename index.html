@@ -14,7 +14,7 @@
           <img src="chris-avatar.png" alt="" />
         </div>
         <div>
-          <p class="eyebrow">MS Project XML compatible</p>
+          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.17.0</span></div>
           <h1>Chris's Discount Project Maker</h1>
         </div>
       </div>
@@ -130,9 +130,9 @@
           <div class="card-header">
             <div>
               <h2>Schedule grid</h2>
-              <p>Task data and Gantt bars live on the same row, like a lightweight Microsoft Project sheet.</p>
+              <p>Compact Entry-style task sheet on the left, full details in Task Information, Gantt bars on the right.</p>
             </div>
-            <span class="card-badge">Unified rows</span>
+            <span class="card-badge">Compact Entry view</span>
           </div>
 
           <div class="planner-shell" aria-label="Task grid with Gantt chart">
@@ -149,7 +149,7 @@
 
     <footer class="app-footer">
       <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-      <span id="saveStatus">Saved locally</span>
+      <span class="footer-status"><span id="appVersionFooter">v0.17.0</span><span id="saveStatus">Saved locally</span></span>
     </footer>
   </div>
 
@@ -208,7 +208,15 @@
       <form id="taskInfoForm" class="task-info-form">
         <p id="tiRollupNotice" class="task-info-notice" hidden></p>
 
-        <fieldset>
+        <nav class="task-info-tabs" aria-label="Task Information sections">
+          <button type="button" class="task-info-tab is-active" data-task-info-tab="general">General</button>
+          <button type="button" class="task-info-tab" data-task-info-tab="predecessors">Predecessors</button>
+          <button type="button" class="task-info-tab" data-task-info-tab="advanced">Advanced</button>
+          <button type="button" class="task-info-tab" data-task-info-tab="notes">Notes</button>
+          <button type="button" class="task-info-tab" data-task-info-tab="structure">Structure</button>
+        </nav>
+
+        <fieldset class="task-info-page is-active" data-task-info-page="general">
           <legend>General</legend>
           <label class="wide-field">
             Task name
@@ -236,14 +244,18 @@
             <input id="tiMilestone" type="checkbox" />
             Milestone / zero-duration task
           </label>
+        </fieldset>
+
+        <fieldset class="task-info-page" data-task-info-page="notes">
+          <legend>Notes</legend>
           <label class="wide-field">
-            Notes
-            <textarea id="tiNotes" rows="4" placeholder="Task notes, assumptions, handoff details, risks..."></textarea>
+            Task notes
+            <textarea id="tiNotes" rows="8" placeholder="Task notes, assumptions, handoff details, risks..."></textarea>
           </label>
         </fieldset>
 
-        <fieldset>
-          <legend>Dependencies</legend>
+        <fieldset class="task-info-page" data-task-info-page="predecessors">
+          <legend>Predecessors / Successors</legend>
           <label class="wide-field">
             Predecessors
             <input id="tiPredecessors" type="text" placeholder="1FS, 2SS+2d, 3FF-4h" />
@@ -255,7 +267,7 @@
           <p class="task-info-help">Predecessors are editable here. Successors are calculated from other tasks that point to this one.</p>
         </fieldset>
 
-        <fieldset>
+        <fieldset class="task-info-page" data-task-info-page="advanced">
           <legend>Advanced scheduling</legend>
           <div class="task-info-grid">
             <label>
@@ -273,7 +285,7 @@
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset class="task-info-page" data-task-info-page="structure">
           <legend>Structure</legend>
           <div class="task-info-grid">
             <label>

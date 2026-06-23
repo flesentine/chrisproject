@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
-const UI_PREFS_KEY = "chris-discount-project-maker-ui-v2";
-const APP_VERSION = "v0.16.0";
-const APP_VERSION_NAME = "Task Information panel";
+const UI_PREFS_KEY = "chris-discount-project-maker-ui-v3-compact";
+const APP_VERSION = "v0.17.0";
+const APP_VERSION_NAME = "MS Project-style compact rows";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
@@ -42,19 +42,15 @@ const STANDARD_CALENDAR = {
 
 const FIELD_COLUMNS = [
   { key: "id", label: "ID", defaultWidth: 48, min: 40, max: 76 },
-  { key: "wbs", label: "WBS", defaultWidth: 72, min: 48, max: 180 },
-  { key: "name", label: "Task name", defaultWidth: 320, min: 190, max: 1100 },
-  { key: "start", label: "Start", defaultWidth: 128, min: 112, max: 170 },
-  { key: "finish", label: "Finish", defaultWidth: 128, min: 112, max: 170 },
-  { key: "duration", label: "Dur", defaultWidth: 58, min: 48, max: 90 },
-  { key: "percent", label: "%", defaultWidth: 86, min: 70, max: 130 },
-  { key: "predecessors", label: "Pred", defaultWidth: 150, min: 92, max: 360 },
-  { key: "successors", label: "Succ", defaultWidth: 150, min: 92, max: 360 },
-  { key: "constraint", label: "Constraint", defaultWidth: 170, min: 130, max: 250 },
-  { key: "constraintDate", label: "Const date", defaultWidth: 132, min: 112, max: 170 },
-  { key: "deadline", label: "Deadline", defaultWidth: 132, min: 112, max: 170 },
-  { key: "level", label: "Lvl", defaultWidth: 62, min: 52, max: 90 },
-  { key: "actions", label: "", defaultWidth: 60, min: 44, max: 82 },
+  { key: "indicators", label: "i", defaultWidth: 70, min: 54, max: 116 },
+  { key: "wbs", label: "WBS", defaultWidth: 82, min: 52, max: 180 },
+  { key: "name", label: "Task Name", defaultWidth: 430, min: 220, max: 1100 },
+  { key: "duration", label: "Dur", defaultWidth: 72, min: 54, max: 110 },
+  { key: "start", label: "Start", defaultWidth: 124, min: 108, max: 170 },
+  { key: "finish", label: "Finish", defaultWidth: 124, min: 108, max: 170 },
+  { key: "percent", label: "%", defaultWidth: 76, min: 62, max: 120 },
+  { key: "predecessors", label: "Pred", defaultWidth: 138, min: 92, max: 360 },
+  { key: "actions", label: "Details", defaultWidth: 86, min: 72, max: 128 },
 ];
 const FIELD_COLUMN_MAP = new Map(FIELD_COLUMNS.map((column) => [column.key, column]));
 const SPLITTER_RESIZE_COLUMN = "name";
@@ -164,6 +160,7 @@ let pendingScheduleChoice = null;
 let pendingCascadeChoice = null;
 let selectedTaskIndex = null;
 let taskInfoIndex = null;
+let taskInfoActiveTab = "general";
 let lastMppFileName = null;
 let lastMppResult = null;
 let fileDragDepth = 0;
@@ -1111,6 +1108,49 @@ function renderTaskTable() {
   // task fields and the Gantt bar stay on the exact same visual row.
 }
 
+function renderTaskIndicators(task, index, context = {}) {
+  const items = [];
+  const warnings = context.taskWarnings || getTaskConstraintWarnings(task);
+  const constraintType = context.constraintType || normalizeConstraintType(task.constraintType);
+  const deadlineDate = context.deadlineDate || dateOnly(task.deadline);
+
+  if (warnings.length) {
+    items.push({ label: "!", className: "is-warning", title: warnings.join(" ") });
+  }
+  if (context.isSummary || isSummaryIndex(index)) {
+    items.push({ label: "Σ", className: "is-summary", title: "Summary task. Dates, duration, and percent roll up from children." });
+  }
+  if (context.isMilestone || task.isMilestone || normalizeDurationMinutes(task.durationMinutes, getCalendar().minutesPerDay) === 0) {
+    items.push({ label: "◆", className: "is-milestone", title: "Milestone / zero-duration task." });
+  }
+  if (constraintType && constraintType !== "ASAP") {
+    items.push({ label: "📌", className: "is-constraint", title: `Constraint: ${formatConstraintType(constraintType)}${task.constraintDate ? ` on ${formatFriendlyDate(task.constraintDate)}` : ""}.` });
+  }
+  if (deadlineDate) {
+    const missed = dateOnly(task.finish) > deadlineDate;
+    items.push({ label: "D", className: missed ? "is-deadline is-warning" : "is-deadline", title: `Deadline: ${formatFriendlyDate(deadlineDate)}${missed ? " · missed" : ""}.` });
+  }
+  if ((task.notes || "").trim()) {
+    items.push({ label: "📝", className: "is-note", title: "Task has notes." });
+  }
+  if (task.links?.length) {
+    items.push({ label: "←", className: "is-link", title: `Predecessors: ${formatLinks(task.links)}.` });
+  }
+  const successorText = context.successorText || formatSuccessorLinks(task.id);
+  if (successorText) {
+    items.push({ label: "→", className: "is-link", title: `Successors: ${successorText}.` });
+  }
+
+  const title = items.length
+    ? items.map((item) => item.title).join(" ")
+    : "No special indicators. Click for Task Information.";
+  const iconMarkup = (items.length ? items.slice(0, 4) : [{ label: "i", className: "is-info", title }])
+    .map((item) => `<span class="indicator-dot ${item.className}" title="${escapeXml(item.title)}">${escapeXml(item.label)}</span>`)
+    .join("");
+  const overflow = items.length > 4 ? `<span class="indicator-more" title="${escapeXml(title)}">+${items.length - 4}</span>` : "";
+  return `<button type="button" class="indicator-button" data-action="task-info" data-index="${index}" title="${escapeXml(title)}" aria-label="Open Task Information for ${escapeXml(task.name)}">${iconMarkup}${overflow}</button>`;
+}
+
 function renderGantt() {
   const tasks = state.tasks;
   const rowHeight = uiPrefs.rowHeight;
@@ -1256,15 +1296,17 @@ function renderGantt() {
         </div>`;
     }
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
+    const indicatorsMarkup = renderTaskIndicators(task, index, { isSummary, isMilestone, taskWarnings, deadlineDate, constraintType, successorText });
     return `
       <div class="${rowClasses.join(" ")}" data-row-index="${index}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
         <div class="planner-fields${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
           <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
+          <div class="planner-cell indicator-cell">${indicatorsMarkup}</div>
           <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
           <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}${taskWarnings.length ? `<span class="constraint-warning-badge" title="${escapeXml(warningTitle)}">!</span>` : ""}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" title="${escapeXml(summaryRollupTitle || task.name)}" />${summaryRollupBadge}</div></div>
+          <div class="planner-cell"><input class="duration-input" data-field="duration" data-index="${index}" value="${escapeXml(formatDuration(task.durationMinutes))}" title="Duration. Examples: 0d milestone, 4h, 3d, 1w"${summaryLocked} /></div>
           <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}"${summaryLocked} /></div>
           <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}"${summaryLocked} /></div>
-          <div class="planner-cell"><input class="duration-input" data-field="duration" data-index="${index}" value="${escapeXml(formatDuration(task.durationMinutes))}" title="Duration. Examples: 0d milestone, 4h, 3d, 1w"${summaryLocked} /></div>
           <div class="planner-cell">
             <div class="percent-cell">
               <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete"${summaryLocked} />
@@ -1272,12 +1314,7 @@ function renderGantt() {
             </div>
           </div>
           <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="none" title="Predecessors: tasks this row waits for. Type 1FS, 2SS, 3FF, 4SF, or add lag/lead like 1FS+2d or 2SS-4h. Pull strings on the Gantt bars for quick links." /></div>
-          <div class="planner-cell"><input class="readonly-link-field" value="${escapeXml(successorText)}" placeholder="none" readonly aria-readonly="true" title="Successors: calculated from other rows that list this task as a predecessor. Edit those rows' Pred fields to change this." /></div>
-          <div class="planner-cell"><select class="constraint-select" data-field="constraintType" data-index="${index}" title="Scheduling constraint. Deadlines warn only; constraints can move tasks during Auto schedule.">${renderConstraintOptions(constraintType)}</select></div>
-          <div class="planner-cell"><input type="date" data-field="constraintDate" data-index="${index}" value="${escapeXml(constraintDate)}" title="Constraint date. Used by Must Start On, Must Finish On, Start/Finish No Earlier/Later Than."${constraintNeedsDate(constraintType) ? "" : " disabled"} /></div>
-          <div class="planner-cell"><input type="date" data-field="deadline" data-index="${index}" value="${escapeXml(deadline)}" title="Deadline. Does not move the task; it warns if finish goes past this date." /></div>
-          <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" title="Outline level / WBS depth. Use Indent/Outdent buttons or Cmd/Ctrl+[ and Cmd/Ctrl+] for safer WBS editing." /></div>
-          <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
+          <div class="planner-cell action-cell row-detail-actions"><button type="button" class="info-btn" data-action="task-info" data-index="${index}" title="Open Task Information" aria-label="Open Task Information for ${escapeXml(task.name)}">Info</button><button type="button" class="delete-btn compact-delete" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
           ${nonWorkingMarkup}
@@ -1318,6 +1355,19 @@ function getTaskInfoSummaryLabel(index) {
   return `Yes — ${children} direct child${children === 1 ? "" : "ren"}, ${leaves} leaf task${leaves === 1 ? "" : "s"}`;
 }
 
+function setTaskInfoTab(tab = "general") {
+  const nextTab = ["general", "predecessors", "advanced", "notes", "structure"].includes(tab) ? tab : "general";
+  taskInfoActiveTab = nextTab;
+  els.taskInfoModal?.querySelectorAll("[data-task-info-tab]").forEach((button) => {
+    const active = button.dataset.taskInfoTab === nextTab;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  els.taskInfoModal?.querySelectorAll("[data-task-info-page]").forEach((page) => {
+    page.classList.toggle("is-active", page.dataset.taskInfoPage === nextTab);
+  });
+}
+
 function openTaskInfo(index = getSelectedTaskIndex()) {
   const numeric = Number(index);
   if (!Number.isInteger(numeric) || numeric < 0 || numeric >= state.tasks.length) return;
@@ -1327,7 +1377,8 @@ function openTaskInfo(index = getSelectedTaskIndex()) {
   rollupSummaryTasks();
   refreshTaskInfoPanel(true);
   if (els.taskInfoModal) els.taskInfoModal.hidden = false;
-  setTimeout(() => els.tiName?.focus(), 0);
+  setTaskInfoTab(taskInfoActiveTab || "general");
+  setTimeout(() => (taskInfoActiveTab === "general" ? els.tiName : els.taskInfoModal?.querySelector(".task-info-page.is-active input, .task-info-page.is-active textarea, .task-info-page.is-active select"))?.focus(), 0);
   renderGantt();
 }
 
@@ -3379,6 +3430,12 @@ els.taskBody.addEventListener("click", (event) => {
     return;
   }
 
+  const infoButton = event.target.closest("button[data-action='task-info']");
+  if (infoButton) {
+    openTaskInfo(Number(infoButton.dataset.index));
+    return;
+  }
+
   const button = event.target.closest("button[data-action='delete']");
   if (!button) return;
   deleteTask(Number(button.dataset.index));
@@ -3505,6 +3562,12 @@ window.addEventListener("scroll", () => {
 }, true);
 
 els.taskInfoModal?.addEventListener("click", (event) => {
+  const tabButton = event.target.closest("[data-task-info-tab]");
+  if (tabButton) {
+    setTaskInfoTab(tabButton.dataset.taskInfoTab);
+    return;
+  }
+
   const action = event.target.closest("[data-task-info-action]")?.dataset.taskInfoAction;
   if (!action) return;
   if (action === "close") closeTaskInfo();
