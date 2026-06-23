@@ -42,7 +42,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.25.1";
+  const STITCH_VERSION = "v0.25.3";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
@@ -58,8 +58,7 @@
   }
 
   function loadScriptOnce(id, src) {
-    const existing = document.getElementById(id);
-    if (existing) return;
+    if (document.getElementById(id)) return;
     const script = document.createElement("script");
     script.id = id;
     script.src = src;
@@ -72,7 +71,9 @@
     loadCssOnce("stitchThemeCss", `stitch-theme.css?${STITCH_VERSION}`);
     loadCssOnce("stitchCanvasCss", `stitch-canvas.css?${STITCH_VERSION}`);
     loadCssOnce("stitchCanvasFixCss", `stitch-canvas-fix.css?${STITCH_VERSION}`);
+    loadCssOnce("stitchSidebarCommandsCss", `stitch-sidebar-commands.css?${STITCH_VERSION}`);
     loadScriptOnce("stitchCanvasJs", `stitch-canvas.js?${STITCH_VERSION}`);
+    loadScriptOnce("stitchSidebarCommandsJs", `stitch-sidebar-commands.js?${STITCH_VERSION}`);
   }
 
   if (document.readyState === "loading") {
