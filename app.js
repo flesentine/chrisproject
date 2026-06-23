@@ -21,6 +21,7 @@ const FIELD_COLUMNS = [
   { key: "duration", label: "Dur", defaultWidth: 58, min: 48, max: 90 },
   { key: "percent", label: "%", defaultWidth: 86, min: 70, max: 130 },
   { key: "predecessors", label: "Pred", defaultWidth: 150, min: 92, max: 360 },
+  { key: "successors", label: "Succ", defaultWidth: 150, min: 92, max: 360 },
   { key: "level", label: "Lvl", defaultWidth: 62, min: 52, max: 90 },
   { key: "actions", label: "", defaultWidth: 60, min: 44, max: 82 },
 ];
@@ -296,6 +297,22 @@ function getTaskLinks(task) {
 
 function formatLinks(links) {
   return getTaskLinks({ links }).map((link) => `${link.id}${link.type}`).join(",");
+}
+
+function getSuccessorLinks(taskId) {
+  const id = Number(taskId);
+  if (!Number.isInteger(id)) return [];
+  const successors = [];
+  state.tasks.forEach((candidate) => {
+    getTaskLinks(candidate).forEach((link) => {
+      if (link.id === id) successors.push({ id: candidate.id, type: link.type });
+    });
+  });
+  return successors.sort((a, b) => a.id - b.id || LINK_TYPES.indexOf(a.type) - LINK_TYPES.indexOf(b.type));
+}
+
+function formatSuccessorLinks(taskId) {
+  return getSuccessorLinks(taskId).map((link) => `${link.id}${link.type}`).join(",");
 }
 
 function parseLinksInput(value, selfId) {
@@ -624,6 +641,7 @@ function renderGantt() {
     const barClass = barClasses.join(" ");
     const summaryLocked = isSummary ? ' readonly aria-readonly="true"' : "";
     const linkText = task.links.length ? formatLinks(task.links) : "";
+    const successorText = formatSuccessorLinks(task.id);
     const linkPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
     const primaryCascadeChange = pendingCascadeChoice?.changes?.[0] || null;
     const cascadePreview = primaryCascadeChange?.id === task.id ? primaryCascadeChange.to : null;
@@ -661,7 +679,8 @@ function renderGantt() {
               <div class="percent-track" aria-hidden="true"><span style="--pct:${task.percent}%"></span></div>
             </div>
           </div>
-          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="connect dots" title="Use the pull strings on the Gantt bars, or type 1FS, 2SS, 3FF, or 4SF" /></div>
+          <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="none" title="Predecessors: tasks this row waits for. Type 1FS, 2SS, 3FF, or 4SF, or use the pull strings on the Gantt bars." /></div>
+          <div class="planner-cell"><input class="readonly-link-field" value="${escapeXml(successorText)}" placeholder="none" readonly aria-readonly="true" title="Successors: calculated from other rows that list this task as a predecessor. Edit those rows' Pred fields to change this." /></div>
           <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
@@ -755,7 +774,7 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, dates, duration, percent complete, WBS, outline level, and FS, SS, FF, and SF predecessors.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, dates, duration, percent complete, WBS, outline level, predecessors, and calculated successors.</p></div></div>`;
     return;
   }
 
@@ -1343,7 +1362,7 @@ function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Start", "Finish", "DurationDays", "PercentComplete", "Predecessors", "OutlineLevel", "IsSummary", "Expanded"]];
+  const rows = [["ID", "WBS", "Name", "Start", "Finish", "DurationDays", "PercentComplete", "Predecessors", "Successors", "OutlineLevel", "IsSummary", "Expanded"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -1354,6 +1373,7 @@ function exportCsv() {
       task.durationDays,
       task.percent,
       formatLinks(task.links).replaceAll(",", ";"),
+      formatSuccessorLinks(task.id).replaceAll(",", ";"),
       task.outlineLevel,
       task.isSummary ? "Yes" : "No",
       task.expanded === false ? "No" : "Yes",

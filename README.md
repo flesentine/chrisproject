@@ -100,3 +100,9 @@ The app now supports project nesting:
 ## Field width display improvement
 
 The task-name, predecessor, date, percent, and outline-level editors now expand to fill their resized columns. The task-name column also has a much higher maximum width, so widening the column actually shows more of long imported MPP task names instead of leaving a small input floating inside a big cell.
+
+## Predecessor and successor columns
+
+- **Pred** means predecessors: tasks that must happen before the current row. Example: `3FS` means this task starts after task 3 finishes.
+- **Succ** means successors: tasks that depend on the current row. This column is calculated automatically from the Pred column on other rows, so it is read-only.
+- Empty dependency fields now show `none` instead of the old confusing `connect` placeholder.

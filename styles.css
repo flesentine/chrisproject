@@ -1228,7 +1228,7 @@ body.is-modal-open {
 .planner-fields {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 48px 64px minmax(230px, 1fr) 128px 128px 58px 86px 126px 62px 44px;
+  grid-template-columns: 48px 64px minmax(230px, 1fr) 128px 128px 58px 86px 126px 126px 62px 44px;
 }
 
 .planner-fields-heading {
@@ -1416,7 +1416,7 @@ body.is-modal-open {
 
   .planner-fields-heading,
   .planner-fields {
-    grid-template-columns: 44px 56px minmax(200px, 1fr) 120px 120px 54px 78px 110px 58px 42px;
+    grid-template-columns: 44px 56px minmax(200px, 1fr) 120px 120px 54px 78px 110px 110px 58px 42px;
   }
 }
 
@@ -1480,7 +1480,7 @@ body.is-modal-open {
 
 .planner-fields-heading,
 .planner-fields {
-  grid-template-columns: var(--planner-field-template, 48px 64px 240px 128px 128px 58px 86px 126px 62px 60px);
+  grid-template-columns: var(--planner-field-template, 48px 64px 240px 128px 128px 58px 86px 126px 126px 62px 60px);
 }
 
 .planner-fields-heading {
@@ -1605,7 +1605,7 @@ body.is-column-resizing * {
 .planner-fields {
   width: var(--planner-fields-width, 1000px);
   overflow: hidden;
-  grid-template-columns: var(--planner-field-template, 48px 64px 240px 128px 128px 58px 86px 126px 62px 60px);
+  grid-template-columns: var(--planner-field-template, 48px 64px 240px 128px 128px 58px 86px 126px 126px 62px 60px);
 }
 
 .planner-fields-heading {
@@ -3086,6 +3086,7 @@ body.has-cascade-suggestion .gantt-ghost-bar {
 }
 
 .planner-cell input[data-field="predecessors"],
+.planner-cell .readonly-link-field,
 .planner-cell input[data-field="outlineLevel"],
 .planner-cell input[type="date"] {
   width: 100%;
@@ -3098,9 +3099,21 @@ body.has-cascade-suggestion .gantt-ghost-bar {
   width: 100%;
 }
 
+.planner-cell .readonly-link-field {
+  color: var(--muted);
+  background: rgba(239, 246, 255, 0.82);
+  cursor: default;
+}
+
+.planner-cell .readonly-link-field:not(:placeholder-shown) {
+  color: var(--text);
+  font-weight: 650;
+}
+
 /* Let wide columns feel worth resizing instead of stopping too early. */
 .field-heading-cell[data-column-key="name"] > span,
 .field-heading-cell[data-column-key="predecessors"] > span,
+.field-heading-cell[data-column-key="successors"] > span,
 .field-heading-cell[data-column-key="wbs"] > span {
   text-overflow: clip;
 }
