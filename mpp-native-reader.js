@@ -1,5 +1,5 @@
 /*
-  NativeMppReader v0.4
+  NativeMppReader v0.5
   Browser-only Microsoft Project .mpp reader foundation.
 
   What this does:
@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "0.4.0";
+  const VERSION = "0.5.0";
   const CFB_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
   const ENDOFCHAIN = -2;
   const MAX_TEXT_SCAN_BYTES = 2 * 1024 * 1024;
@@ -875,17 +875,90 @@
     return `${year}-${month}-${day}`;
   }
 
-  function parseMppDisplayDate(value) {
-    const text = cleanCandidate(value);
-    const match = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/i.exec(text);
-    if (!match) return "";
-    const month = Number(match[1]);
-    const day = Number(match[2]);
-    let year = Number(match[3]);
+  const WEEKDAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+  function makeUtcDate(year, month, day) {
     if (year < 100) year += year >= 80 ? 1900 : 2000;
     const date = new Date(Date.UTC(year, month - 1, day));
-    if (Number.isNaN(date.getTime()) || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
-    return dateToIsoLocal(date);
+    if (Number.isNaN(date.getTime())) return null;
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    if (year < 1984 || year > 2099) return null;
+    return date;
+  }
+
+  function parseMppDisplayDate(value) {
+    const text = cleanCandidate(value)
+      .replace(/\bat\b/ig, " ")
+      .replace(/,/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Covers common MPP display strings, including MPXJ's task-field sample:
+    //   Tue 07/02/06
+    //   23/08/06 08:00
+    //   29/08/2006 17:00
+    // The weekday, when present, is used to disambiguate MM/DD vs DD/MM.
+    const numeric = /^(?:(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+)?(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?$/i.exec(text);
+    if (numeric) {
+      const weekday = numeric[1] ? WEEKDAY_INDEX[numeric[1].slice(0, 3).toLowerCase()] : null;
+      const a = Number(numeric[2]);
+      const b = Number(numeric[3]);
+      const y = Number(numeric[4]);
+      const candidates = [
+        { date: makeUtcDate(y, b, a), style: "dd/mm" },
+        { date: makeUtcDate(y, a, b), style: "mm/dd" },
+      ].filter((item) => item.date);
+
+      if (weekday != null) {
+        const weekdayHit = candidates.find((item) => item.date.getUTCDay() === weekday);
+        if (weekdayHit) return dateToIsoLocal(weekdayHit.date);
+      }
+
+      if (a > 12) return dateToIsoLocal(makeUtcDate(y, b, a));
+      if (b > 12) return dateToIsoLocal(makeUtcDate(y, a, b));
+
+      // Ambiguous no-weekday dates are usually locale-specific. Prefer MM/DD for
+      // US-authored schedules, but the caller can still recover the original text
+      // from diagnostics if this is wrong.
+      return dateToIsoLocal((candidates.find((item) => item.style === "mm/dd") || candidates[0]).date);
+    }
+
+    const namedMonth = /^(?:(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+)?(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{2}|\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?$/i.exec(text);
+    if (namedMonth) {
+      const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(namedMonth[3].slice(0, 3).toLowerCase()) + 1;
+      const date = makeUtcDate(Number(namedMonth[4]), month, Number(namedMonth[2]));
+      return date ? dateToIsoLocal(date) : "";
+    }
+
+    return "";
+  }
+
+  function parsePercentValue(value) {
+    const text = cleanCandidate(value);
+    const match = /(-?\d+(?:\.\d+)?)\s*%/.exec(text);
+    if (!match) return null;
+    const valueNumber = Number(match[1]);
+    if (!Number.isFinite(valueNumber)) return null;
+    return Math.max(0, Math.min(100, Math.round(valueNumber)));
+  }
+
+  function parseDurationDays(value) {
+    const text = cleanCandidate(value).toLowerCase();
+    let match = /(-?\d+(?:\.\d+)?)\s*(?:d|day|days)\b/.exec(text);
+    if (match) return Math.max(1, Math.round(Number(match[1])));
+    match = /(-?\d+(?:\.\d+)?)\s*(?:w|wk|wks|week|weeks)\b/.exec(text);
+    if (match) return Math.max(1, Math.round(Number(match[1]) * 5));
+    match = /(-?\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/.exec(text);
+    if (match) return Math.max(1, Math.round(Number(match[1]) / 8));
+    return null;
+  }
+
+  function parseCurrencyValue(value) {
+    const text = cleanCandidate(value);
+    const match = /[$€£]?\s*(-?\d[\d,]*(?:\.\d+)?)/.exec(text);
+    if (!match || !/[$€£,]|\.\d{2}/.test(text)) return null;
+    const n = Number(match[1].replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
   }
 
   function isHexGarbage(value) {
@@ -985,22 +1058,91 @@
     return "";
   }
 
+  function addIsoDays(iso, days) {
+    const date = new Date(`${iso}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return iso;
+    date.setUTCDate(date.getUTCDate() + days);
+    return dateToIsoLocal(date);
+  }
+
+  function inferTaskNameFromRow(row) {
+    const values = [...row.fields.values()]
+      .map(cleanCandidate)
+      .filter(Boolean)
+      .filter((value) => !parseMppDisplayDate(value))
+      .filter((value) => parsePercentValue(value) == null)
+      .filter((value) => parseDurationDays(value) == null)
+      .filter((value) => parseCurrencyValue(value) == null)
+      .filter((value) => !badCandidate(value));
+
+    // Prefer explicit task-like labels such as "Task #1", but allow normal work-package names.
+    const taskish = values.find((value) => /task|milestone|phase|review|design|build|test|deploy|launch|submit|approval|release|plan/i.test(value));
+    return taskish || values.sort((a, b) => b.length - a.length)[0] || "";
+  }
+
+  function inferAllDatesFromRow(row) {
+    return [...row.fields.values()]
+      .map((value) => parseMppDisplayDate(value))
+      .filter(Boolean)
+      .filter((value, index, array) => array.indexOf(value) === index)
+      .sort();
+  }
+
+  function inferFirstDateFromRow(row, role = "start", start = "") {
+    const dates = inferAllDatesFromRow(row);
+    if (!dates.length) return "";
+    if (role === "finish") {
+      const afterStart = start ? dates.filter((date) => date >= start) : dates;
+      return afterStart[afterStart.length - 1] || dates[dates.length - 1];
+    }
+    return dates[0];
+  }
+
+  function inferPercentFromRow(row) {
+    const values = [...row.fields.values()];
+    for (const value of values) {
+      const percent = parsePercentValue(value);
+      if (percent != null) return percent;
+    }
+    return null;
+  }
+
+  function inferDurationFromRow(row) {
+    const candidates = [...row.fields.values()]
+      .map(parseDurationDays)
+      .filter((value) => Number.isFinite(value) && value > 0 && value < 10000);
+    return candidates.length ? candidates[0] : null;
+  }
+
+  function inferCostFromRow(row) {
+    const candidates = [...row.fields.values()]
+      .map(parseCurrencyValue)
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    return candidates.length ? candidates[0] : null;
+  }
+
   function parseNativeTaskRows(cfb) {
     const table = parseTaskVarTable(cfb);
     if (!table) return null;
 
     const candidates = [];
     for (const row of [...table.rows.values()].sort((a, b) => a.rowId - b.rowId)) {
-      const name = firstUsefulField(row, TASK_FIELD_NAME_HINTS);
-      const start = firstDateField(row, TASK_FIELD_START_HINTS);
-      const finish = firstDateField(row, TASK_FIELD_FINISH_HINTS);
-      if (!name || !start || !finish) continue;
+      const name = firstUsefulField(row, TASK_FIELD_NAME_HINTS) || inferTaskNameFromRow(row);
+      const start = firstDateField(row, TASK_FIELD_START_HINTS) || inferFirstDateFromRow(row, "start");
+      const finish = firstDateField(row, TASK_FIELD_FINISH_HINTS) || inferFirstDateFromRow(row, "finish", start);
+      const durationDays = inferDurationFromRow(row);
+      const percent = inferPercentFromRow(row);
+      const cost = inferCostFromRow(row);
+      if (!name || !start || (!finish && !durationDays)) continue;
+      const computedFinish = finish || addIsoDays(start, Math.max(1, durationDays || 1) - 1);
       candidates.push({
         rowId: row.rowId,
         name,
         start,
-        finish: finish < start ? start : finish,
-        percent: 0,
+        finish: computedFinish < start ? start : computedFinish,
+        percent: percent ?? 0,
+        durationDays: durationDays || null,
+        cost: cost ?? null,
         outlineLevel: 1,
         source: "TBkndTask VarMeta/Var2Data",
       });
@@ -1257,6 +1399,9 @@
         name: task.name,
         start: task.start,
         finish: task.finish,
+        percent: task.percent || 0,
+        durationDays: task.durationDays || daysBetweenIso(task.start, task.finish),
+        cost: task.cost ?? null,
       })),
       links: selectedLinks.map((link) => ({
         predecessorRow: link.predecessorRow,
@@ -1280,6 +1425,14 @@
         taskVar2DataStream: taskTable.var2DataStream,
         dependencyStream: getEntryByPath(cfb, "TBkndCons/FixedData")?.path || "",
         confidence: selectedTasks.length >= 3 ? "medium-high for this Microsoft Project table-cache layout" : "low",
+        fieldCoverage: {
+          names: selectedTasks.filter((task) => task.name).length,
+          starts: selectedTasks.filter((task) => task.start).length,
+          finishes: selectedTasks.filter((task) => task.finish).length,
+          percents: selectedTasks.filter((task) => Number(task.percent) > 0).length,
+          costs: selectedTasks.filter((task) => task.cost != null).length,
+          durations: selectedTasks.filter((task) => task.durationDays != null).length,
+        },
       },
     };
   }

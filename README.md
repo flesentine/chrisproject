@@ -82,3 +82,16 @@ This MVP intentionally keeps the model small. It does not yet fully support:
 - Complex constraints
 - Calendars beyond a simple 8-hour day
 - Critical path calculation
+
+## Native MPP reader improvement notes
+
+This version adds what we learned from the MPXJ `mpp14task.mpp` field-coverage sample:
+
+- Parses Project display dates like `23/08/06 08:00`, `29/08/06 17:00`, and weekday-prefixed dates such as `Tue 07/02/06`.
+- Uses weekday text, when available, to disambiguate `DD/MM/YY` vs `MM/DD/YY`.
+- Recovers percent-complete values such as `45%` from native task table values.
+- Recovers simple duration hints such as `5d`, `5 days`, `1 week`, and `40h`.
+- Recovers cost-looking values for diagnostics when present.
+- Reports native field coverage in the MPP import banner and diagnostics.
+
+This is still browser-only best-effort MPP decoding. Project XML remains the reliable interchange format, but the native table decoder is now better on task-field-heavy MPP files.
