@@ -4360,3 +4360,323 @@ body.has-cascade-suggestion .gantt-ghost-bar {
   .office-ribbon.command-bar { padding-bottom: 8px; }
   .office-ribbon .command-group { min-width: max-content; }
 }
+
+/* v0.21.0 cleaned ribbon: closer to the Microsoft Project rhythm without the giant wall of buttons. */
+.polished-ribbon.project-ribbon-shell {
+  margin: -8px 0 10px;
+  border-radius: 8px 8px 12px 12px;
+  overflow: visible;
+  background: #f3f6fa;
+}
+
+.polished-ribbon .project-titlebar {
+  grid-template-columns: minmax(100px, 180px) minmax(260px, 1fr) minmax(260px, 520px);
+  min-height: 34px;
+  padding: 3px 10px;
+}
+
+.polished-ribbon .project-titlebar-main {
+  justify-content: center;
+}
+
+.polished-ribbon .title-project-name-label {
+  justify-self: end;
+}
+
+.polished-ribbon .title-project-name {
+  width: min(34vw, 420px);
+  height: 26px;
+  min-height: 26px;
+}
+
+.polished-ribbon .ribbon-tabs {
+  min-height: 34px;
+  padding-left: 8px;
+  background: #f6f8fb;
+}
+
+.polished-ribbon .ribbon-tab {
+  min-height: 32px;
+  padding: 0 13px;
+  font-size: 12px;
+}
+
+.compact-ribbon.office-ribbon.command-bar {
+  min-height: 86px;
+  padding: 0 8px 6px;
+  overflow: visible;
+  border-top: 0;
+}
+
+.ribbon-panel {
+  display: none;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  min-height: 86px;
+}
+
+.ribbon-panel.is-active {
+  display: flex;
+}
+
+.compact-ribbon .compact-group {
+  min-height: 78px;
+  padding: 8px 12px 20px;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.compact-ribbon .command-group-large {
+  min-width: 150px;
+}
+
+.compact-ribbon .large-ribbon-button {
+  display: grid;
+  place-items: center;
+  min-width: 88px;
+  min-height: 54px;
+  line-height: 1.08;
+}
+
+.compact-ribbon .large-ribbon-button strong {
+  display: block;
+  font-size: 13px;
+}
+
+.compact-ribbon .large-ribbon-button small {
+  display: block;
+  color: inherit;
+  opacity: 0.78;
+  font-size: 10px;
+}
+
+.ribbon-menu {
+  position: relative;
+}
+
+.ribbon-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #bcc7d6;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #102033;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.ribbon-menu > summary::-webkit-details-marker { display: none; }
+
+.ribbon-menu[open] > summary,
+.ribbon-menu > summary:hover {
+  background: #eaf3ff;
+  border-color: #7aa7de;
+}
+
+.ribbon-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 140;
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid #b7c5d8;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+}
+
+.ribbon-menu-popover button,
+.ribbon-menu-popover .file-button,
+.ribbon-menu-popover .standalone-converter-link {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
+}
+
+.ribbon-help-menu {
+  min-width: 170px;
+  color: #334155;
+  font-size: 12px;
+}
+
+.ribbon-help-menu span {
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 800;
+}
+
+.ribbon-note-group {
+  flex: 1 1 auto;
+  max-width: 360px;
+}
+
+.ribbon-note {
+  display: block;
+  max-width: 320px;
+  color: #536173;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.ribbon-version-card {
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid #c9d4e4;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102033;
+}
+
+.ribbon-version-card small {
+  color: #64748b;
+  font-weight: 750;
+}
+
+.project-calendar-group {
+  gap: 8px;
+}
+
+.ribbon-field {
+  display: grid;
+  gap: 4px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.ribbon-field input {
+  width: 170px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid #bcc7d6;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #102033;
+  font: inherit;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.ribbon-field.wide-ribbon-field input {
+  width: min(36vw, 360px);
+}
+
+.mini-switcher {
+  gap: 4px;
+  padding: 3px;
+}
+
+.view-slider-group .compact-range {
+  min-width: 145px;
+  width: 145px;
+}
+
+.compact-hero-board.hero-board {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  margin-bottom: 10px;
+  padding: 16px 18px;
+  border-radius: 14px;
+}
+
+.compact-hero-copy h2 {
+  margin: 8px 0 4px;
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.compact-hero-copy p,
+.compact-readiness-card p {
+  margin: 0;
+  max-width: 820px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.compact-readiness-card.readiness-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.compact-readiness-card strong {
+  font-size: 1.45rem;
+}
+
+.summary-grid {
+  margin-bottom: 10px;
+}
+
+.summary-card {
+  min-height: 76px;
+  padding: 14px 18px;
+}
+
+.validation-panel {
+  margin-bottom: 10px;
+}
+
+/* Make Task Information look more like a focused desktop dialog instead of a side drawer. */
+.task-info-modal {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.task-info-panel {
+  border-radius: 10px;
+  border-color: #b7c5d8;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+
+.task-info-header {
+  padding: 12px 16px 10px;
+  background: linear-gradient(180deg, #f8fafc, #eef3f9);
+}
+
+.task-info-tabs {
+  top: 62px;
+  margin-bottom: 12px;
+  background: #f2f5f9;
+}
+
+.task-info-tab {
+  min-height: 31px;
+  border-radius: 5px 5px 0 0;
+  font-size: 12px;
+}
+
+.task-info-form fieldset {
+  border-radius: 8px;
+}
+
+.task-info-actions button {
+  border-radius: 5px;
+}
+
+@media (max-width: 900px) {
+  .polished-ribbon .project-titlebar {
+    grid-template-columns: 1fr;
+  }
+  .polished-ribbon .title-project-name-label,
+  .polished-ribbon .project-titlebar-main,
+  .polished-ribbon .quick-access {
+    justify-self: stretch;
+    justify-content: flex-start;
+  }
+  .polished-ribbon .title-project-name { width: 100%; }
+  .ribbon-panel.is-active { min-width: max-content; }
+  .compact-ribbon.office-ribbon.command-bar { overflow-x: auto; overflow-y: visible; }
+  .compact-hero-board.hero-board { grid-template-columns: 1fr; }
+}

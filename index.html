@@ -9,98 +9,186 @@
 </head>
 <body>
 <div class="app-shell">
-<header aria-label="Project command ribbon" class="project-ribbon-shell">
+<header aria-label="Project command ribbon" class="project-ribbon-shell polished-ribbon">
 <div class="project-titlebar">
-<div aria-label="Quick access toolbar" class="quick-access">
-<span aria-hidden="true" class="project-app-icon">P</span>
-<span aria-hidden="true" class="quick-command">↶</span>
-<span aria-hidden="true" class="quick-command">↷</span>
-<span aria-hidden="true" class="quick-command">💾</span>
+  <div aria-label="Quick access toolbar" class="quick-access">
+    <span aria-hidden="true" class="project-app-icon">P</span>
+    <span class="quick-command" title="Undo placeholder">↶</span>
+    <span class="quick-command" title="Redo placeholder">↷</span>
+    <span class="quick-command" title="Saved locally">💾</span>
+  </div>
+  <div class="project-titlebar-main">
+    <span class="title-product-name">Chris's Discount Project Maker</span>
+    <span class="version-badge" id="appVersionBadge">v0.21.0</span>
+  </div>
+  <label class="title-project-name-label">
+    <span>Project name</span>
+    <input class="title-project-name" id="projectName" type="text" value="New Project"/>
+  </label>
 </div>
-<div class="project-titlebar-main">
-<label class="title-project-name-label">
-<span>Project name</span>
-<input class="title-project-name" id="projectName" type="text" value="New Project"/>
-</label>
-<span class="title-product-name">Chris's Discount Project Maker</span>
-<span class="version-badge" id="appVersionBadge">v0.20.0</span>
-</div>
-<label class="title-project-start">
-<span>Project start</span>
-<input id="projectStart" type="date"/>
-</label>
-</div>
-<nav aria-label="Ribbon tabs" class="ribbon-tabs">
-<button class="ribbon-tab file-tab" type="button">File</button>
-<button class="ribbon-tab is-active" type="button">Task</button>
-<button class="ribbon-tab" type="button">Resource</button>
-<button class="ribbon-tab" type="button">Report</button>
-<button class="ribbon-tab" type="button">Project</button>
-<button class="ribbon-tab" type="button">View</button>
-<button class="ribbon-tab" type="button">Format</button>
-<button class="ribbon-tab" type="button">Help</button>
+<nav aria-label="Ribbon tabs" class="ribbon-tabs" id="ribbonTabs">
+  <button class="ribbon-tab file-tab" data-ribbon-tab="file" type="button">File</button>
+  <button class="ribbon-tab is-active" data-ribbon-tab="task" type="button">Task</button>
+  <button class="ribbon-tab" data-ribbon-tab="resource" type="button">Resource</button>
+  <button class="ribbon-tab" data-ribbon-tab="report" type="button">Report</button>
+  <button class="ribbon-tab" data-ribbon-tab="project" type="button">Project</button>
+  <button class="ribbon-tab" data-ribbon-tab="view" type="button">View</button>
+  <button class="ribbon-tab" data-ribbon-tab="format" type="button">Format</button>
+  <button class="ribbon-tab" data-ribbon-tab="help" type="button">Help</button>
 </nav>
-<section aria-label="Project actions" class="command-bar office-ribbon">
-<div class="command-group">
-<span class="group-label">Plan</span>
-<button id="newProjectBtn" type="button">New</button>
-<button id="sampleBtn" type="button">Load sample</button>
-<button class="primary" id="addTaskBtn" type="button">+ Add task</button>
-<button id="addResourceBtn" type="button">+ Resource</button>
-<button id="taskInfoBtn" type="button">Task info</button>
-<button id="indentTaskBtn" title="Indent selected task" type="button">Indent →</button>
-<button id="outdentTaskBtn" title="Outdent selected task" type="button">← Outdent</button>
-</div>
-<div class="command-group">
-<span class="group-label">Schedule</span>
-<button id="autoScheduleBtn" type="button">Auto schedule</button>
-</div>
-<div aria-label="View controls" class="command-group layout-tools">
-<span class="group-label">View</span>
-<div aria-label="Switch views" class="view-switcher" role="group">
-<button class="is-active" id="scheduleViewBtn" type="button">Gantt Chart</button>
-<button id="resourceViewBtn" type="button">Resource Sheet</button>
-</div>
-<div class="drag-help">
-<strong>Drag to resize</strong>
-<small>Column edges, date headers, or the big splitter. Pull the splitter left to hide data columns.</small>
-</div>
-<label class="range-control compact-range">
-            Day cells <strong id="dayWidthValue">Standard</strong>
-<input id="dayWidthControl" max="120" min="36" step="2" type="range"/>
-</label>
-<label class="range-control compact-range">
-            Row height <strong id="rowHeightValue">Standard</strong>
-<input id="rowHeightControl" max="88" min="44" step="2" type="range"/>
-</label>
-</div>
-<div class="command-group push-right">
-<span class="group-label">Exchange</span>
-<button class="success" id="exportXmlBtn" type="button">Export XML</button>
-<button id="exportCsvBtn" type="button">Export CSV</button>
-<label class="file-button">
-            Import XML
-            <input accept=".xml,text/xml,application/xml" id="importXmlInput" type="file"/>
-</label>
-<label class="file-button mpp-button">
-            Convert MPP locally
-            <input accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" id="importMppInput" type="file"/>
-</label>
-<a class="standalone-converter-link" href="mpp-local-converter.html">Standalone converter</a>
-</div>
+<section aria-label="Project actions" class="command-bar office-ribbon compact-ribbon">
+  <div class="ribbon-panel" data-ribbon-panel="file">
+    <div class="command-group compact-group">
+      <span class="group-label">New</span>
+      <button id="newProjectBtn" type="button">Blank project</button>
+      <button id="sampleBtn" type="button">Sample plan</button>
+    </div>
+    <div class="command-group compact-group">
+      <span class="group-label">Open / Import</span>
+      <details class="ribbon-menu">
+        <summary>Import ▾</summary>
+        <div class="ribbon-menu-popover">
+          <label class="file-button">Import Project XML<input accept=".xml,text/xml,application/xml" id="importXmlInput" type="file"/></label>
+          <label class="file-button mpp-button">Convert MPP locally<input accept=".mpp,application/vnd.ms-project,application/msproj,application/mpp" id="importMppInput" type="file"/></label>
+          <a class="standalone-converter-link" href="mpp-local-converter.html">Standalone converter</a>
+        </div>
+      </details>
+    </div>
+    <div class="command-group compact-group">
+      <span class="group-label">Save / Export</span>
+      <details class="ribbon-menu">
+        <summary>Export ▾</summary>
+        <div class="ribbon-menu-popover">
+          <button class="success" id="exportXmlBtn" type="button">Project XML</button>
+          <button id="exportCsvBtn" type="button">CSV workbook</button>
+        </div>
+      </details>
+    </div>
+  </div>
+  <div class="ribbon-panel is-active" data-ribbon-panel="task">
+    <div class="command-group compact-group command-group-large">
+      <span class="group-label">Insert</span>
+      <button class="primary large-ribbon-button" id="addTaskBtn" type="button"><strong>Task</strong><small>Add row</small></button>
+      <button id="taskInfoBtn" type="button">Information</button>
+    </div>
+    <div class="command-group compact-group">
+      <span class="group-label">Schedule</span>
+      <button id="autoScheduleBtn" type="button">Auto schedule</button>
+      <details class="ribbon-menu">
+        <summary>Dependency help ▾</summary>
+        <div class="ribbon-menu-popover ribbon-help-menu">
+          <strong>Pred examples</strong>
+          <span>1FS</span>
+          <span>1FS+2d</span>
+          <span>2SS-4h</span>
+          <span>3FF+1w</span>
+        </div>
+      </details>
+    </div>
+    <div class="command-group compact-group">
+      <span class="group-label">Outline</span>
+      <button id="indentTaskBtn" title="Indent selected task" type="button">Indent</button>
+      <button id="outdentTaskBtn" title="Outdent selected task" type="button">Outdent</button>
+    </div>
+    <div class="command-group compact-group ribbon-note-group">
+      <span class="group-label">Current view</span>
+      <span class="ribbon-note">Keep rows compact. Use <strong>Information</strong> for resources, constraints, deadlines, notes, and structure.</span>
+    </div>
+  </div>
+  <div class="ribbon-panel" data-ribbon-panel="resource">
+    <div class="command-group compact-group command-group-large">
+      <span class="group-label">Resources</span>
+      <button class="primary large-ribbon-button" id="addResourceBtn" type="button"><strong>Resource</strong><small>Add person/material/cost</small></button>
+    </div>
+    <div class="command-group compact-group">
+      <span class="group-label">View</span>
+      <div aria-label="Switch resource views" class="view-switcher mini-switcher" role="group">
+        <button id="resourceViewBtn" type="button">Resource Sheet</button>
+        <button id="scheduleViewBtn" type="button">Gantt Chart</button>
+      </div>
+    </div>
+    <div class="command-group compact-group ribbon-note-group">
+      <span class="group-label">Assignments</span>
+      <span class="ribbon-note">Assign resources from Task Information → Resources.</span>
+    </div>
+  </div>
+  <div class="ribbon-panel" data-ribbon-panel="report">
+    <div class="command-group compact-group">
+      <span class="group-label">Reports</span>
+      <button data-ribbon-message="Summary cards are already shown above the grid. Baselines and critical path reports are next." type="button">Dashboard</button>
+      <button data-ribbon-message="Use File → Export → CSV workbook for now. Dedicated visual reports come later." type="button">Visual reports</button>
+    </div>
+    <div class="command-group compact-group ribbon-note-group">
+      <span class="group-label">Status</span>
+      <span class="ribbon-note">Current dashboard: tasks, duration, completion, export readiness.</span>
+    </div>
+  </div>
+  <div class="ribbon-panel" data-ribbon-panel="project">
+    <div class="command-group compact-group project-calendar-group">
+      <span class="group-label">Properties</span>
+      <label class="ribbon-field">Project start<input id="projectStart" type="date"/></label>
+    </div>
+    <div class="command-group compact-group project-calendar-group">
+      <span class="group-label">Calendar</span>
+      <label class="ribbon-field">Working days<input id="workingDaysInput" placeholder="Mon,Tue,Wed,Thu,Fri" type="text"/></label>
+      <label class="ribbon-field wide-ribbon-field">Holidays<input id="holidayInput" placeholder="2026-07-04,2026-12-25" type="text"/></label>
+    </div>
+    <div class="command-group compact-group ribbon-note-group">
+      <span class="group-label">Calendar status</span>
+      <span class="ribbon-note" id="calendarStatus">Mon–Fri · 8h/day · no holidays</span>
+    </div>
+  </div>
+  <div class="ribbon-panel" data-ribbon-panel="view">
+    <div class="command-group compact-group">
+      <span class="group-label">Task views</span>
+      <div aria-label="Switch views" class="view-switcher mini-switcher" role="group">
+        <button class="is-active" data-view-proxy="schedule" type="button">Gantt Chart</button>
+        <button data-view-proxy="resources" type="button">Resource Sheet</button>
+      </div>
+    </div>
+    <div class="command-group compact-group view-slider-group">
+      <span class="group-label">Zoom</span>
+      <label class="range-control compact-range">Day cells <strong id="dayWidthValue">Standard</strong><input id="dayWidthControl" max="120" min="36" step="2" type="range"/></label>
+    </div>
+    <div class="command-group compact-group view-slider-group">
+      <span class="group-label">Layout</span>
+      <label class="range-control compact-range">Row height <strong id="rowHeightValue">Standard</strong><input id="rowHeightControl" max="88" min="44" step="2" type="range"/></label>
+    </div>
+  </div>
+  <div class="ribbon-panel" data-ribbon-panel="format">
+    <div class="command-group compact-group">
+      <span class="group-label">Bar styles</span>
+      <button data-ribbon-message="Summary, milestone, deadline, warning, and assignment indicators are already styled. More bar style controls come later." type="button">Bar styles</button>
+      <button data-ribbon-message="Grid formatting is simplified for the compact Entry view. Column resizing still works from header edges." type="button">Grid styles</button>
+    </div>
+    <div class="command-group compact-group ribbon-note-group">
+      <span class="group-label">Tip</span>
+      <span class="ribbon-note">Use the View tab for row height and day-cell zoom.</span>
+    </div>
+  </div>
+  <div class="ribbon-panel" data-ribbon-panel="help">
+    <div class="command-group compact-group">
+      <span class="group-label">About</span>
+      <span class="ribbon-version-card"><strong>Chris's Discount Project Maker</strong><small id="ribbonVersionText">v0.21.0 · cleaned ribbon</small></span>
+    </div>
+    <div class="command-group compact-group ribbon-note-group">
+      <span class="group-label">How to use</span>
+      <span class="ribbon-note">Click a task row or Info to open the Project-style Task Information dialog.</span>
+    </div>
+  </div>
 </section></header>
 <main>
-<section aria-label="Project overview" class="hero-board">
-<div class="hero-copy">
-<div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
-<h2>MS Project energy, discount price.</h2>
-<p>Edit task data and Gantt bars on the same row. Drag bars to move dates, resize duration from the edges, and connect tasks with hover-reveal pull strings. For .mpp files, the site tries a local browser-only conversion first. When the file has embedded Project XML it imports cleanly; otherwise it recovers a best-effort draft and gives you diagnostics.</p>
-</div>
-<aside aria-label="Export readiness" class="readiness-card" id="readinessCard">
-<span class="readiness-label">Export readiness</span>
-<strong id="exportStatus">Ready</strong>
-<p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. MPP gets a local best-effort converter with an XML fallback guide.</p>
-</aside>
+<section aria-label="Project overview" class="hero-board compact-hero-board">
+  <div class="hero-copy compact-hero-copy">
+    <div class="compat-chip" id="compatChip"><span></span> XML export ready</div>
+    <h2>Entry table + Gantt chart</h2>
+    <p>Rows stay compact like Project's Entry table. Click the Indicators/Info cell or double-click a row for full Task Information.</p>
+  </div>
+  <aside aria-label="Export readiness" class="readiness-card compact-readiness-card" id="readinessCard">
+    <span class="readiness-label">Export readiness</span>
+    <strong id="exportStatus">Ready</strong>
+    <p>File, Task, Resource, Project, View, and Format commands are grouped in the ribbon above.</p>
+  </aside>
 </section>
 <section aria-label="Project summary" class="summary-grid">
 <article class="summary-card">
@@ -186,7 +274,7 @@
 </main>
 <footer class="app-footer">
 <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-<span class="footer-status"><span id="appVersionFooter">v0.20.0</span><span id="saveStatus">Saved locally</span></span>
+<span class="footer-status"><span id="appVersionFooter">v0.21.0</span><span id="saveStatus">Saved locally</span></span>
 </footer>
 </div>
 <svg aria-hidden="true" class="link-drag-layer" height="100%" id="linkDragLayer" width="100%">

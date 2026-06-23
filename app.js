@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v3-compact";
-const APP_VERSION = "v0.20.0";
-const APP_VERSION_NAME = "MS Project-style ribbon header";
+const APP_VERSION = "v0.21.0";
+const APP_VERSION_NAME = "Clean Microsoft Project-style ribbon";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
@@ -1288,6 +1288,9 @@ function updateActiveView() {
   if (els.resourceWorkspace) els.resourceWorkspace.hidden = view !== "resources";
   els.scheduleViewBtn?.classList.toggle("is-active", view === "schedule");
   els.resourceViewBtn?.classList.toggle("is-active", view === "resources");
+  document.querySelectorAll("[data-view-proxy]").forEach((proxy) => {
+    proxy.classList.toggle("is-active", proxy.dataset.viewProxy === view);
+  });
 }
 
 function getResourceUsageSummary(resourceUid) {
@@ -4168,3 +4171,55 @@ window.addEventListener("keydown", (event) => {
 
 load();
 render();
+
+
+// v0.21.0: lightweight Project-style ribbon tabs and working menu buttons.
+function setRibbonTab(tabName) {
+  const safeTab = tabName || "task";
+  document.querySelectorAll("[data-ribbon-tab]").forEach((tab) => {
+    tab.classList.toggle("is-active", tab.dataset.ribbonTab === safeTab);
+  });
+  document.querySelectorAll("[data-ribbon-panel]").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.ribbonPanel === safeTab);
+  });
+}
+
+document.querySelectorAll("[data-ribbon-tab]").forEach((tab) => {
+  tab.addEventListener("click", () => setRibbonTab(tab.dataset.ribbonTab));
+});
+
+document.querySelectorAll("[data-view-proxy]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = button.dataset.viewProxy === "resources" ? els.resourceViewBtn : els.scheduleViewBtn;
+    target?.click();
+    document.querySelectorAll("[data-view-proxy]").forEach((proxy) => {
+      proxy.classList.toggle("is-active", proxy.dataset.viewProxy === button.dataset.viewProxy);
+    });
+  });
+});
+
+function showRibbonMessage(message) {
+  if (els.saveStatus) {
+    const previous = els.saveStatus.textContent;
+    els.saveStatus.textContent = message;
+    window.clearTimeout(showRibbonMessage.timer);
+    showRibbonMessage.timer = window.setTimeout(() => {
+      els.saveStatus.textContent = previous || "Saved locally";
+    }, 3800);
+  } else {
+    window.alert(message);
+  }
+}
+
+document.querySelectorAll("[data-ribbon-message]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const message = button.dataset.ribbonMessage || "That ribbon command is on the roadmap.";
+    showRibbonMessage(message);
+  });
+});
+
+document.addEventListener("click", (event) => {
+  document.querySelectorAll(".ribbon-menu[open]").forEach((menu) => {
+    if (!menu.contains(event.target)) menu.removeAttribute("open");
+  });
+});
