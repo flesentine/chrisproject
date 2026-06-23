@@ -1,5 +1,7 @@
 # Chris's Discount Project Maker
 
+**Version:** v0.15.0 — Summary Rollup v2 + version badge
+
 A lightweight Microsoft Project XML-compatible planner with a browser-only local MPP decoder for the Microsoft Project table-cache layout found in modern `.mpp` files.
 
 ## What it does
@@ -141,17 +143,10 @@ Supported lag/lead units:
 Positive values are lag. Negative values are lead. Auto Schedule and cascade scheduling both honor lag/lead and still use the project calendar, so weekends and holidays are skipped. The successor column is calculated from the predecessor links and includes lag/lead too.
 
 
-## WBS editing / indent-outdent
+## Version v0.15.0 — Summary Rollup v2 + version badge
 
-This build adds MS Project-style outline editing:
-
-- Select a task row, then use **Indent** or **Outdent** in the Plan toolbar.
-- Keyboard shortcuts: **Cmd/Ctrl + ]** to indent, **Cmd/Ctrl + [** to outdent.
-- **Alt + Shift + Right/Left** also works.
-- Indenting a task makes it a child of the task above it.
-- Outdenting moves the selected task and its children up one outline level.
-- WBS numbers are regenerated automatically.
-- Parent/summary rows are created automatically when a task gains children.
-- Summary dates, duration, and percent complete continue to roll up from children.
-
-This keeps the editable task structure aligned with imported MPP nesting and exported MSPDI XML outline data.
+- Adds a visible version badge in the top-left brand area and footer so you can confirm the deployed build.
+- Improves summary task rollups so parent tasks calculate Start, Finish, Duration, and % Complete from child/leaf tasks.
+- Summary percent complete is duration-weighted instead of a simple average.
+- Summary rows show a small `rollup` badge and richer tooltips.
+- CSV export includes rollup child/leaf counts for diagnostics.

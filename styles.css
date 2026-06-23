@@ -3331,3 +3331,83 @@ body.has-cascade-suggestion .gantt-ghost-bar {
 .command-group button#outdentTaskBtn {
   white-space: nowrap;
 }
+
+
+/* Version badge and summary rollup v2 --------------------------------------- */
+.brand-meta-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.brand-meta-line .eyebrow { margin: 0; }
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 3px 8px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 999px;
+  background: rgba(231, 240, 255, 0.92);
+  color: var(--brand-dark);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+}
+
+.footer-status {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+#appVersionFooter {
+  color: var(--brand-dark);
+  font-weight: 750;
+}
+
+.summary-rollup-badge {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: 62px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 999px;
+  background: rgba(231, 240, 255, 0.92);
+  color: var(--brand-dark);
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.planner-row.is-summary .percent-track span {
+  background: linear-gradient(90deg, var(--project), #65a30d);
+}
+
+.planner-row.is-summary .gantt-bar {
+  cursor: default;
+}
+
+.gantt-bar.is-summary::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -6px;
+  height: 6px;
+  border-left: 2px solid rgba(38, 97, 156, 0.72);
+  border-right: 2px solid rgba(38, 97, 156, 0.72);
+  border-bottom: 2px solid rgba(38, 97, 156, 0.72);
+  border-radius: 0 0 6px 6px;
+  pointer-events: none;
+}

@@ -1,5 +1,8 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v2";
+const APP_VERSION = "v0.15.0";
+const APP_VERSION_NAME = "Summary Rollup v2 + version badge";
+const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
 const LINK_TYPES = ["FS", "SS", "FF", "SF"];
@@ -64,6 +67,8 @@ const els = {
   timeline: document.getElementById("timeline"),
   validationPanel: document.getElementById("validationPanel"),
   saveStatus: document.getElementById("saveStatus"),
+  appVersionBadge: document.getElementById("appVersionBadge"),
+  appVersionFooter: document.getElementById("appVersionFooter"),
   newProjectBtn: document.getElementById("newProjectBtn"),
   sampleBtn: document.getElementById("sampleBtn"),
   addTaskBtn: document.getElementById("addTaskBtn"),
@@ -824,21 +829,59 @@ function isHiddenByCollapsedParent(index) {
   return false;
 }
 
+function getRollupDescendantTasks(parentIndex) {
+  return getDescendantIndexes(parentIndex)
+    .map((index) => ({ task: state.tasks[index], index }))
+    .filter((row) => row.task);
+}
+
+function getRollupLeafTasks(parentIndex) {
+  const descendants = getRollupDescendantTasks(parentIndex);
+  const leaves = descendants.filter((row) => !isSummaryIndex(row.index)).map((row) => row.task);
+  return leaves.length ? leaves : descendants.map((row) => row.task);
+}
+
+function calculateWeightedPercent(tasks) {
+  const items = (tasks || [])
+    .map((task) => {
+      const fallbackMinutes = workingSpanMinutes(task.start, task.finish);
+      const duration = Math.max(1, normalizeDurationMinutes(task.durationMinutes, fallbackMinutes));
+      return { percent: normalizePercent(task.percent), duration };
+    })
+    .filter((item) => Number.isFinite(item.duration));
+  const totalDuration = items.reduce((sum, item) => sum + item.duration, 0);
+  if (!totalDuration) return 0;
+  return Math.round(items.reduce((sum, item) => sum + item.percent * item.duration, 0) / totalDuration);
+}
+
 function rollupSummaryTasks() {
   for (let i = state.tasks.length - 1; i >= 0; i -= 1) {
     const task = state.tasks[i];
     const descendants = getDescendantIndexes(i);
     const isSummary = Boolean(task.isSummary) || descendants.length > 0;
     task.isSummary = isSummary;
+    task.rollupChildCount = 0;
+    task.rollupLeafCount = 0;
+    task.rollupSource = "";
     if (!isSummary) {
       task.expanded = true;
       continue;
     }
+
     task.expanded = task.expanded !== false;
-    const childIndexes = getDirectChildIndexes(i).length ? getDirectChildIndexes(i) : descendants;
+    const directChildIndexes = getDirectChildIndexes(i);
+    const childIndexes = directChildIndexes.length ? directChildIndexes : descendants;
     const children = childIndexes.map((index) => state.tasks[index]).filter(Boolean);
-    const starts = children.map((child) => dateOnly(child.start)).filter(Boolean);
-    const finishes = children.map((child) => dateOnly(child.finish)).filter(Boolean);
+    const leafChildren = getRollupLeafTasks(i);
+    task.rollupChildCount = children.length;
+    task.rollupLeafCount = leafChildren.length;
+    task.rollupSource = `${children.length} direct child${children.length === 1 ? "" : "ren"}, ${leafChildren.length} leaf task${leafChildren.length === 1 ? "" : "s"}`;
+
+    // MS Project-style summary rows are calculated, not manually scheduled:
+    // earliest child start, latest child finish, working-time span, weighted completion.
+    const rollupPool = leafChildren.length ? leafChildren : children;
+    const starts = rollupPool.map((child) => dateOnly(child.start)).filter(Boolean);
+    const finishes = rollupPool.map((child) => dateOnly(child.finish)).filter(Boolean);
     if (starts.length && finishes.length) {
       const start = new Date(Math.min(...starts.map(Number)));
       const finish = new Date(Math.max(...finishes.map(Number)));
@@ -848,12 +891,11 @@ function rollupSummaryTasks() {
       task.durationMinutes = task.durationDays * getCalendar().minutesPerDay;
       task.isMilestone = false;
     }
-    const weighted = children
-      .map((child) => ({ percent: normalizePercent(child.percent), duration: Math.max(1, normalizeDurationMinutes(child.durationMinutes, workingSpanMinutes(child.start, child.finish))) }))
-      .filter((item) => Number.isFinite(item.duration));
-    const totalDuration = weighted.reduce((sum, item) => sum + item.duration, 0);
-    if (totalDuration > 0) {
-      task.percent = Math.round(weighted.reduce((sum, item) => sum + item.percent * item.duration, 0) / totalDuration);
+
+    if (leafChildren.length) {
+      task.percent = calculateWeightedPercent(leafChildren);
+    } else if (children.length) {
+      task.percent = calculateWeightedPercent(children);
     }
   }
 }
@@ -984,6 +1026,7 @@ function render() {
   renderTaskTable();
   renderGantt();
   renderSummary();
+  renderVersion();
   renderValidation();
   renderScheduleLinkSuggestion();
   renderCascadeImpactSuggestion();
@@ -1005,9 +1048,7 @@ function renderSummary() {
   const duration = min && max ? workDaysBetween(min, max) : 0;
   const leafTasks = tasks.filter((task, index) => !isSummaryIndex(index));
   const percentTasks = leafTasks.length ? leafTasks : tasks;
-  const averagePercent = percentTasks.length
-    ? Math.round(percentTasks.reduce((sum, task) => sum + normalizePercent(task.percent), 0) / percentTasks.length)
-    : 0;
+  const averagePercent = percentTasks.length ? calculateWeightedPercent(percentTasks) : 0;
   const issueCount = validateProject().length;
 
   if (els.taskCount) els.taskCount.textContent = String(tasks.length);
@@ -1023,6 +1064,17 @@ function renderSummary() {
   }
   if (els.readinessCard) {
     els.readinessCard.classList.toggle("has-issues", issueCount > 0);
+  }
+}
+
+function renderVersion() {
+  const text = `${APP_VERSION} · ${APP_VERSION_NAME}`;
+  if (els.appVersionBadge) {
+    els.appVersionBadge.textContent = text;
+    els.appVersionBadge.title = `Build ${APP_BUILD_DATE}`;
+  }
+  if (els.appVersionFooter) {
+    els.appVersionFooter.textContent = `${text} · Build ${APP_BUILD_DATE}`;
   }
 }
 
@@ -1139,6 +1191,8 @@ function renderGantt() {
     if (isMilestone) barClasses.push("is-milestone");
     const barClass = barClasses.join(" ");
     const summaryLocked = isSummary ? ' readonly aria-readonly="true"' : "";
+    const summaryRollupTitle = isSummary ? `Summary rollup from ${task.rollupSource || "child tasks"}. Start, Finish, Duration, and % Complete are calculated from children.` : "";
+    const summaryRollupBadge = isSummary ? `<span class="summary-rollup-badge" title="${escapeXml(summaryRollupTitle)}">rollup</span>` : "";
     const linkText = task.links.length ? formatLinks(task.links) : "";
     const successorText = formatSuccessorLinks(task.id);
     const constraintType = normalizeConstraintType(task.constraintType);
@@ -1179,7 +1233,7 @@ function renderGantt() {
         <div class="planner-fields${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
           <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
           <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
-          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}${taskWarnings.length ? `<span class="constraint-warning-badge" title="${escapeXml(warningTitle)}">!</span>` : ""}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
+          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}${taskWarnings.length ? `<span class="constraint-warning-badge" title="${escapeXml(warningTitle)}">!</span>` : ""}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" title="${escapeXml(summaryRollupTitle || task.name)}" />${summaryRollupBadge}</div></div>
           <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}"${summaryLocked} /></div>
           <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}"${summaryLocked} /></div>
           <div class="planner-cell"><input class="duration-input" data-field="duration" data-index="${index}" value="${escapeXml(formatDuration(task.durationMinutes))}" title="Duration. Examples: 0d milestone, 4h, 3d, 1w"${summaryLocked} /></div>
@@ -1201,7 +1255,7 @@ function renderGantt() {
           ${nonWorkingMarkup}
           ${deadlineMarkup}
           ${ghostMarkup}
-          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish} · ${escapeXml(formatDuration(task.durationMinutes))}">
+          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="${isSummary ? `Summary rollup. ${escapeXml(summaryRollupTitle)} ` : "Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. "}${escapeXml(task.name)}: ${task.start} to ${task.finish} · ${escapeXml(formatDuration(task.durationMinutes))}">
             <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
             <span>${escapeXml(task.name)}</span>
             <em class="link-hint" aria-hidden="true">Drop on S or F</em>
@@ -1299,7 +1353,7 @@ function detectCycles() {
 function renderValidation() {
   const issues = validateProject();
   if (!issues.length) {
-    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, and project calendar.</p></div></div>`;
+    els.validationPanel.innerHTML = `<div class="validation-card"><div><p><strong>Ready to export.</strong> Supported fields are clean: tasks, working-day dates, duration, weighted summary rollups, percent complete, WBS, outline level, predecessors with lag/lead, calculated successors, and project calendar.</p></div></div>`;
     return;
   }
 
@@ -2039,7 +2093,7 @@ function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded"]];
+  const rows = [["ID", "WBS", "Name", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -2058,6 +2112,8 @@ function exportCsv() {
       task.outlineLevel,
       task.isSummary ? "Yes" : "No",
       task.expanded === false ? "No" : "Yes",
+      task.rollupChildCount || 0,
+      task.rollupLeafCount || 0,
     ]);
   });
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");

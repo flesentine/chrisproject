@@ -14,7 +14,7 @@
           <img src="chris-avatar.png" alt="" />
         </div>
         <div>
-          <p class="eyebrow">MS Project XML compatible</p>
+          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.15.0</span></div>
           <h1>Chris's Discount Project Maker</h1>
         </div>
       </div>
@@ -42,7 +42,7 @@
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
           <span class="readiness-label">Export readiness</span>
           <strong id="exportStatus">Ready</strong>
-          <p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. MPP gets a local best-effort converter with an XML fallback guide.</p>
+          <p>Supported: XML tasks, working-day dates, editable duration, weighted summary rollups, percent complete, WBS, outline level, constraints, deadlines, and FS/SS/FF/SF dependency links with lag/lead. MPP gets a local best-effort converter with an XML fallback guide.</p>
         </aside>
       </section>
 
@@ -75,8 +75,6 @@
           <button id="newProjectBtn" type="button">New</button>
           <button id="sampleBtn" type="button">Load sample</button>
           <button id="addTaskBtn" type="button" class="primary">+ Add task</button>
-          <button id="outdentTaskBtn" type="button" title="Outdent selected task (Cmd/Ctrl+[)">← Outdent</button>
-          <button id="indentTaskBtn" type="button" title="Indent selected task (Cmd/Ctrl+])">Indent →</button>
         </div>
         <div class="command-group">
           <span class="group-label">Schedule</span>
@@ -148,7 +146,7 @@
 
     <footer class="app-footer">
       <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-      <span id="saveStatus">Saved locally</span>
+      <span class="footer-status"><span id="appVersionFooter">v0.15.0</span><span id="saveStatus">Saved locally</span></span>
     </footer>
   </div>
 
