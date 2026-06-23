@@ -42,9 +42,9 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.24.0";
-  const STITCH_VERSION_NAME = "ProjectHub canvas theme";
-  const STITCH_PREF_FLAG = "projecthub-stitch-theme-prefs-v1";
+  const STITCH_VERSION = "v0.24.1";
+  const STITCH_VERSION_NAME = "Stitch layout polish";
+  const STITCH_PREF_FLAG = "projecthub-stitch-theme-prefs-v2";
 
   function bootStitchTheme() {
     if (typeof state === "undefined") return;
@@ -66,11 +66,20 @@
   }
 
   function loadStitchThemeCss() {
-    if (document.getElementById("stitchThemeCss")) return;
+    loadCssOnce("stitchThemeCss", `stitch-theme.css?${STITCH_VERSION}`);
+    loadCssOnce("stitchPolishCss", `stitch-polish.css?${STITCH_VERSION}`);
+  }
+
+  function loadCssOnce(id, href) {
+    const existing = document.getElementById(id);
+    if (existing) {
+      existing.href = href;
+      return;
+    }
     const link = document.createElement("link");
-    link.id = "stitchThemeCss";
+    link.id = id;
     link.rel = "stylesheet";
-    link.href = `stitch-theme.css?${STITCH_VERSION}`;
+    link.href = href;
     document.head.appendChild(link);
   }
 
@@ -89,11 +98,17 @@
     const alreadyApplied = localStorage.getItem(STITCH_PREF_FLAG) === "1";
     const totalFieldWidth = typeof getTotalFieldColumnWidth === "function" ? getTotalFieldColumnWidth() : 1250;
     const currentPane = Number(uiPrefs.fieldPaneWidth || totalFieldWidth);
-    const shouldTighten = !alreadyApplied || currentPane > 760;
+    const shouldTighten = !alreadyApplied || currentPane > 660;
     if (!shouldTighten) return;
-    uiPrefs.fieldPaneWidth = Math.min(totalFieldWidth, 560);
+    if (uiPrefs.fieldColumns) {
+      uiPrefs.fieldColumns.name = Math.min(Number(uiPrefs.fieldColumns.name) || 430, 340);
+      uiPrefs.fieldColumns.predecessors = Math.min(Number(uiPrefs.fieldColumns.predecessors) || 138, 112);
+      uiPrefs.fieldColumns.actions = Math.min(Number(uiPrefs.fieldColumns.actions) || 86, 60);
+    }
+    const refreshedTotal = typeof getTotalFieldColumnWidth === "function" ? getTotalFieldColumnWidth() : totalFieldWidth;
+    uiPrefs.fieldPaneWidth = Math.min(refreshedTotal, 620);
     uiPrefs.rowHeight = Math.max(Number(uiPrefs.rowHeight) || 56, 64);
-    uiPrefs.dayWidth = Math.max(Number(uiPrefs.dayWidth) || 58, 58);
+    uiPrefs.dayWidth = Math.max(Number(uiPrefs.dayWidth) || 58, 60);
     document.documentElement.style.setProperty("--stitch-left-pane", `${uiPrefs.fieldPaneWidth}px`);
     localStorage.setItem(STITCH_PREF_FLAG, "1");
     if (typeof saveUiPrefs === "function") saveUiPrefs();
