@@ -1,0 +1,137 @@
+/* v0.24.1 Stitch polish: dock panels instead of floating over the schedule. */
+.projecthub-stitch-theme main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+  gap: 16px;
+  align-items: start;
+  padding-top: 20px;
+}
+
+.projecthub-stitch-theme .hero-board {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+
+.projecthub-stitch-theme .stitch-health-card {
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  margin: 0;
+  align-self: stretch;
+}
+
+.projecthub-stitch-theme .mpp-panel,
+.projecthub-stitch-theme .file-drop-overlay,
+.projecthub-stitch-theme .validation-panel,
+.projecthub-stitch-theme .workspace,
+.projecthub-stitch-theme .resource-workspace {
+  grid-column: 1 / -1;
+}
+
+.projecthub-stitch-theme .unified-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.projecthub-stitch-theme .unified-card .card-header {
+  grid-column: 1 / -1;
+}
+
+.projecthub-stitch-theme .unified-card .planner-shell {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.projecthub-stitch-theme .stitch-task-card {
+  position: sticky;
+  top: 124px;
+  left: auto;
+  grid-column: 2;
+  grid-row: 2;
+  z-index: 2;
+  width: auto;
+  max-height: calc(100vh - 235px);
+  margin: 12px 12px 12px 0;
+  align-self: start;
+  border-radius: 18px;
+  box-shadow: 0 16px 38px rgba(7, 45, 80, 0.25);
+}
+
+.projecthub-stitch-theme .planner-scroll {
+  min-height: 660px;
+  max-height: calc(100vh - 238px);
+}
+
+.projecthub-stitch-theme .planner-fields {
+  width: calc(var(--stitch-left-pane, 620px) - 24px) !important;
+}
+
+.projecthub-stitch-theme .planner-fields-heading {
+  width: var(--stitch-left-pane, 620px) !important;
+}
+
+.projecthub-stitch-theme .planner-fields.is-clipped {
+  box-shadow: 12px 0 18px rgba(15, 23, 42, 0.045);
+}
+
+.projecthub-stitch-theme .pane-splitter {
+  right: 1px;
+  background: linear-gradient(180deg, rgba(13, 59, 102, 0.07), rgba(49, 197, 139, 0.11));
+  border-left: 1px solid rgba(202, 213, 226, 0.8);
+}
+
+.projecthub-stitch-theme .task-name-cell .summary-rollup-badge,
+.projecthub-stitch-theme .task-name-cell .constraint-warning-badge {
+  pointer-events: none;
+}
+
+.projecthub-stitch-theme .stitch-task-card dd,
+.projecthub-stitch-theme .stitch-task-card p,
+.projecthub-stitch-theme .stitch-task-card span {
+  text-shadow: none;
+}
+
+.projecthub-stitch-theme .stitch-task-card .stitch-link-pill {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1320px) {
+  .projecthub-stitch-theme .stitch-task-card {
+    display: block;
+  }
+
+  .projecthub-stitch-theme .unified-card {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 290px);
+  }
+}
+
+@media (max-width: 1080px) {
+  .projecthub-stitch-theme .unified-card {
+    grid-template-columns: 1fr;
+  }
+
+  .projecthub-stitch-theme .stitch-task-card {
+    position: static;
+    grid-column: 1;
+    grid-row: 3;
+    max-height: none;
+    margin: 0 12px 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .projecthub-stitch-theme main {
+    display: block;
+  }
+
+  .projecthub-stitch-theme .stitch-health-card {
+    margin-bottom: 12px;
+  }
+}
