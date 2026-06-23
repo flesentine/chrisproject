@@ -3200,3 +3200,43 @@ body.has-cascade-suggestion .gantt-ghost-bar {
 .unified-card .gantt-row::before {
   background-image: none;
 }
+
+/* Duration engine v2 -------------------------------------------------------
+   Durations are now editable strings: 0d, 4h, 3d, 1w. */
+.planner-cell .duration-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  text-align: center;
+  font-weight: 800;
+  color: #44546a;
+  background: #eef2f7;
+}
+
+.gantt-bar.is-milestone {
+  width: 22px !important;
+  min-width: 22px;
+  border-radius: 4px;
+  transform: rotate(45deg);
+  overflow: visible;
+  background: linear-gradient(135deg, var(--brand-dark), var(--accent));
+}
+
+.gantt-bar.is-milestone::before {
+  display: none;
+}
+
+.gantt-bar.is-milestone span,
+.gantt-bar.is-milestone .link-hint,
+.gantt-bar.is-milestone .resize-handle {
+  display: none;
+}
+
+.gantt-bar.is-milestone .dependency-port {
+  transform: rotate(-45deg);
+}
+
+.planner-row.is-milestone .duration-input {
+  color: var(--brand-dark);
+  background: #e8f1ff;
+}

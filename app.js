@@ -406,22 +406,26 @@ function workDaysBetween(start, finish) {
   return Math.max(1, count);
 }
 
-function setTaskStartKeepDuration(task, start, duration = task?.durationDays || 1) {
+function setTaskStartKeepDuration(task, start, durationMinutes = task?.durationMinutes ?? getCalendar().minutesPerDay) {
   if (!task) return;
+  const minutes = normalizeDurationMinutes(durationMinutes, getCalendar().minutesPerDay);
   const snappedStart = nextWorkingDay(start || state.projectStart || today, true);
-  const finish = addWorkingDays(snappedStart, duration);
+  const finish = finishFromStartByDuration(snappedStart, minutes);
   task.start = toDateInputValue(snappedStart);
   task.finish = toDateInputValue(finish);
-  task.durationDays = workDaysBetween(task.start, task.finish);
+  task.durationMinutes = minutes;
+  task.durationDays = durationMinutesToWorkingDays(minutes);
 }
 
-function setTaskFinishKeepDuration(task, finish, duration = task?.durationDays || 1) {
+function setTaskFinishKeepDuration(task, finish, durationMinutes = task?.durationMinutes ?? getCalendar().minutesPerDay) {
   if (!task) return;
+  const minutes = normalizeDurationMinutes(durationMinutes, getCalendar().minutesPerDay);
   const snappedFinish = previousWorkingDay(finish || task.finish || task.start || state.projectStart || today, true);
-  const start = subtractWorkingDays(snappedFinish, duration);
+  const start = startFromFinishByDuration(snappedFinish, minutes);
   task.start = toDateInputValue(start);
   task.finish = toDateInputValue(snappedFinish);
-  task.durationDays = workDaysBetween(task.start, task.finish);
+  task.durationMinutes = minutes;
+  task.durationDays = durationMinutesToWorkingDays(minutes);
 }
 
 function refreshCalendarControls() {
@@ -530,22 +534,108 @@ function describeLink(link) {
   return `${link.id}${link.type}`;
 }
 
-function durationToDays(durationText) {
-  if (!durationText) return 1;
-  const hours = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/i.exec(durationText);
-  if (hours) {
-    const h = Number(hours[1] || 0);
-    const m = Number(hours[2] || 0);
-    return Math.max(1, Math.round((h + m / 60) / 8));
+function normalizeDurationMinutes(value, fallback = getCalendar().minutesPerDay) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n >= 0) return Math.round(n);
+  const f = Number(fallback);
+  return Number.isFinite(f) && f >= 0 ? Math.round(f) : getCalendar().minutesPerDay;
+}
+
+function durationMinutesToWorkingDays(minutes) {
+  const value = normalizeDurationMinutes(minutes, getCalendar().minutesPerDay);
+  if (value <= 0) return 0;
+  return Math.max(1, Math.ceil(value / getCalendar().minutesPerDay));
+}
+
+function workingSpanMinutes(start, finish) {
+  return workDaysBetween(start, finish) * getCalendar().minutesPerDay;
+}
+
+function durationToMinutes(durationText) {
+  const text = String(durationText || "").trim();
+  if (!text) return getCalendar().minutesPerDay;
+
+  const isoHours = /^PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/i.exec(text);
+  if (isoHours) {
+    const h = Number(isoHours[1] || 0);
+    const m = Number(isoHours[2] || 0);
+    const sec = Number(isoHours[3] || 0);
+    return normalizeDurationMinutes(h * 60 + m + sec / 60, 0);
   }
-  const days = /P(?:(\d+)D)/i.exec(durationText);
-  if (days) return Math.max(1, Number(days[1]));
-  return 1;
+
+  const isoDays = /^P(?:(\d+(?:\.\d+)?)D)$/i.exec(text);
+  if (isoDays) return normalizeDurationMinutes(Number(isoDays[1]) * getCalendar().minutesPerDay, getCalendar().minutesPerDay);
+
+  return parseDurationInput(text, getCalendar().minutesPerDay);
+}
+
+function durationToDays(durationText) {
+  return durationMinutesToWorkingDays(durationToMinutes(durationText));
+}
+
+function minutesToProjectDuration(minutes) {
+  const safeMinutes = normalizeDurationMinutes(minutes, 0);
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  return `PT${hours}H${mins}M0S`;
 }
 
 function daysToProjectDuration(days) {
-  const safeDays = Math.max(1, Number(days) || 1);
-  return `PT${safeDays * 8}H0M0S`;
+  const safeDays = Math.max(0, Number(days) || 0);
+  return minutesToProjectDuration(safeDays * getCalendar().minutesPerDay);
+}
+
+function parseDurationInput(value, fallbackMinutes = getCalendar().minutesPerDay) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return normalizeDurationMinutes(fallbackMinutes, getCalendar().minutesPerDay);
+  if (/^milestone$/.test(text)) return 0;
+
+  const calendar = getCalendar();
+  const weekDays = Math.max(1, calendar.workingDays.length || 5);
+  let total = 0;
+  let matched = false;
+  const tokenPattern = /(-?\d+(?:\.\d+)?)\s*(weeks?|w|days?|d|hours?|hrs?|h|minutes?|mins?|m)?/g;
+  let match;
+  while ((match = tokenPattern.exec(text))) {
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount) || amount < 0) continue;
+    const unit = match[2] || "d";
+    matched = true;
+    if (unit.startsWith("w")) total += amount * weekDays * calendar.minutesPerDay;
+    else if (unit.startsWith("h")) total += amount * 60;
+    else if (unit.startsWith("m") && unit !== "mo") total += amount;
+    else total += amount * calendar.minutesPerDay;
+  }
+
+  if (matched) return normalizeDurationMinutes(total, fallbackMinutes);
+  const numeric = Number(text);
+  if (Number.isFinite(numeric) && numeric >= 0) return normalizeDurationMinutes(numeric * calendar.minutesPerDay, fallbackMinutes);
+  return normalizeDurationMinutes(fallbackMinutes, calendar.minutesPerDay);
+}
+
+function formatDuration(minutes) {
+  const safeMinutes = normalizeDurationMinutes(minutes, getCalendar().minutesPerDay);
+  const calendar = getCalendar();
+  if (safeMinutes === 0) return "0d";
+  const weekMinutes = calendar.minutesPerDay * Math.max(1, calendar.workingDays.length || 5);
+  if (safeMinutes >= weekMinutes && safeMinutes % weekMinutes === 0) return `${safeMinutes / weekMinutes}w`;
+  if (safeMinutes % calendar.minutesPerDay === 0) return `${safeMinutes / calendar.minutesPerDay}d`;
+  if (safeMinutes % 60 === 0) return `${safeMinutes / 60}h`;
+  return `${safeMinutes}m`;
+}
+
+function finishFromStartByDuration(start, durationMinutes) {
+  const snappedStart = nextWorkingDay(start || state.projectStart || today, true);
+  const minutes = normalizeDurationMinutes(durationMinutes, getCalendar().minutesPerDay);
+  if (minutes <= 0) return snappedStart;
+  return addWorkingDays(snappedStart, durationMinutesToWorkingDays(minutes));
+}
+
+function startFromFinishByDuration(finish, durationMinutes) {
+  const snappedFinish = previousWorkingDay(finish || state.projectStart || today, true);
+  const minutes = normalizeDurationMinutes(durationMinutes, getCalendar().minutesPerDay);
+  if (minutes <= 0) return snappedFinish;
+  return subtractWorkingDays(snappedFinish, durationMinutesToWorkingDays(minutes));
 }
 
 function childText(node, localName) {
@@ -564,11 +654,15 @@ function ensureDecorations() {
     task.outlineLevel = normalizeLevel(task.outlineLevel);
     task.name = task.name || `Task ${index + 1}`;
     task.start = task.start || state.projectStart || today;
-    task.finish = task.finish || toDateInputValue(addWorkingDays(task.start, Math.max(1, task.durationDays || 1)));
+    const spanMinutes = dateOnly(task.start) && dateOnly(task.finish) ? workingSpanMinutes(task.start, task.finish) : null;
+    const legacyMinutes = Number.isFinite(Number(task.durationDays)) ? Math.max(0, Number(task.durationDays)) * getCalendar().minutesPerDay : spanMinutes;
+    task.durationMinutes = normalizeDurationMinutes(task.durationMinutes, legacyMinutes ?? getCalendar().minutesPerDay);
+    task.finish = task.finish || toDateInputValue(finishFromStartByDuration(task.start, task.durationMinutes));
     task.percent = normalizePercent(task.percent);
     task.isSummary = Boolean(task.isSummary);
     task.expanded = task.expanded !== false;
-    task.durationDays = workDaysBetween(task.start, task.finish);
+    task.durationDays = durationMinutesToWorkingDays(task.durationMinutes);
+    task.isMilestone = task.durationMinutes === 0;
     task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
 
@@ -646,9 +740,11 @@ function rollupSummaryTasks() {
       task.start = toDateInputValue(start);
       task.finish = toDateInputValue(finish);
       task.durationDays = workDaysBetween(task.start, task.finish);
+      task.durationMinutes = task.durationDays * getCalendar().minutesPerDay;
+      task.isMilestone = false;
     }
     const weighted = children
-      .map((child) => ({ percent: normalizePercent(child.percent), duration: Math.max(1, child.durationDays || workDaysBetween(child.start, child.finish)) }))
+      .map((child) => ({ percent: normalizePercent(child.percent), duration: Math.max(1, normalizeDurationMinutes(child.durationMinutes, workingSpanMinutes(child.start, child.finish))) }))
       .filter((item) => Number.isFinite(item.duration));
     const totalDuration = weighted.reduce((sum, item) => sum + item.duration, 0);
     if (totalDuration > 0) {
@@ -835,14 +931,17 @@ function renderGantt() {
     const startOffset = Math.max(0, daysBetween(min, task.start) - 1);
     const duration = Math.max(1, daysBetween(task.start, task.finish));
     const left = startOffset * dayWidth;
-    const width = Math.max(32, duration * dayWidth - 8);
+    const isMilestone = !isSummaryIndex(index) && normalizeDurationMinutes(task.durationMinutes, getCalendar().minutesPerDay) === 0;
+    const width = isMilestone ? 22 : Math.max(32, duration * dayWidth - 8);
     const isSummary = isSummaryIndex(index);
     const rowClasses = ["planner-row"];
     if (task.percent === 100) rowClasses.push("is-complete");
     if (isSummary) rowClasses.push("is-summary");
+    if (isMilestone) rowClasses.push("is-milestone");
     const barClasses = ["gantt-bar"];
     if (task.percent === 100) barClasses.push("is-complete");
     if (isSummary) barClasses.push("is-summary");
+    if (isMilestone) barClasses.push("is-milestone");
     const barClass = barClasses.join(" ");
     const summaryLocked = isSummary ? ' readonly aria-readonly="true"' : "";
     const linkText = task.links.length ? formatLinks(task.links) : "";
@@ -877,7 +976,7 @@ function renderGantt() {
           <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
           <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}"${summaryLocked} /></div>
           <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}"${summaryLocked} /></div>
-          <div class="planner-cell"><span class="duration-pill">${task.durationDays}d</span></div>
+          <div class="planner-cell"><input class="duration-input" data-field="duration" data-index="${index}" value="${escapeXml(formatDuration(task.durationMinutes))}" title="Duration. Examples: 0d milestone, 4h, 3d, 1w"${summaryLocked} /></div>
           <div class="planner-cell">
             <div class="percent-cell">
               <input type="number" min="0" max="100" data-field="percent" data-index="${index}" value="${task.percent}" aria-label="Percent complete"${summaryLocked} />
@@ -892,7 +991,7 @@ function renderGantt() {
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
           ${nonWorkingMarkup}
           ${ghostMarkup}
-          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish}">
+          <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish} · ${escapeXml(formatDuration(task.durationMinutes))}">
             <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
             <span>${escapeXml(task.name)}</span>
             <em class="link-hint" aria-hidden="true">Drop on S or F</em>
@@ -1005,7 +1104,7 @@ function updateTask(index, field, value) {
   const task = state.tasks[index];
   if (!task) return;
 
-  if (task.isSummary && ["start", "finish", "percent"].includes(field)) {
+  if (task.isSummary && ["start", "finish", "percent", "duration"].includes(field)) {
     render();
     return;
   }
@@ -1016,12 +1115,17 @@ function updateTask(index, field, value) {
     task.links = parseLinksInput(value, task.id);
     task.predecessors = task.links.map((link) => link.id);
   } else if (field === "start") {
-    const oldDuration = task.durationDays || workDaysBetween(task.start, task.finish);
+    const oldDuration = normalizeDurationMinutes(task.durationMinutes, workingSpanMinutes(task.start, task.finish));
     setTaskStartKeepDuration(task, value || state.projectStart, oldDuration);
   } else if (field === "finish") {
     const finish = previousWorkingDay(value || task.start, true);
     task.finish = toDateInputValue(dateOnly(finish) < dateOnly(task.start) ? task.start : finish);
-    task.durationDays = workDaysBetween(task.start, task.finish);
+    task.durationMinutes = workingSpanMinutes(task.start, task.finish);
+    task.durationDays = durationMinutesToWorkingDays(task.durationMinutes);
+    task.isMilestone = task.durationMinutes === 0;
+  } else if (field === "duration") {
+    const minutes = parseDurationInput(value, task.durationMinutes);
+    setTaskStartKeepDuration(task, task.start || state.projectStart, minutes);
   } else {
     task[field] = value;
   }
@@ -1035,8 +1139,9 @@ function addTask() {
     uid: state.nextUid++,
     name: `New Task ${state.tasks.length + 1}`,
     start,
-    finish: toDateInputValue(addWorkingDays(start, 3)),
+    finish: toDateInputValue(finishFromStartByDuration(start, getCalendar().minutesPerDay * 3)),
     durationDays: 3,
+    durationMinutes: getCalendar().minutesPerDay * 3,
     percent: 0,
     predecessors: last ? [last.id] : [],
     links: last ? [{ id: last.id, type: "FS" }] : [],
@@ -1191,7 +1296,7 @@ function buildProjectXml() {
     </Task>`;
 
   const taskXml = state.tasks.map((task) => {
-    const duration = task.durationDays || workDaysBetween(task.start, task.finish);
+    const durationMinutes = normalizeDurationMinutes(task.durationMinutes, (task.durationDays || workDaysBetween(task.start, task.finish)) * getCalendar().minutesPerDay);
     const predecessors = getTaskLinks(task).map((link) => {
       const pred = taskById.get(link.id);
       if (!pred) return "";
@@ -1220,10 +1325,11 @@ function buildProjectXml() {
       <CalendarUID>1</CalendarUID>
       <Start>${toProjectDate(task.start)}</Start>
       <Finish>${toProjectDate(task.finish, true)}</Finish>
-      <Duration>${daysToProjectDuration(duration)}</Duration>
+      <Duration>${minutesToProjectDuration(durationMinutes)}</Duration>
       <DurationFormat>7</DurationFormat>
-      <Work>${daysToProjectDuration(duration)}</Work>
+      <Work>${minutesToProjectDuration(durationMinutes)}</Work>
       <PercentComplete>${task.percent}</PercentComplete>
+      <Milestone>${durationMinutes === 0 ? 1 : 0}</Milestone>
       <Summary>${task.isSummary ? 1 : 0}</Summary>
       <Expanded>${task.expanded === false ? 0 : 1}</Expanded>
       <Manual>1</Manual>${predecessors}
@@ -1313,8 +1419,9 @@ function importProjectXml(text) {
     if (isNull || id === 0 || !name) return;
 
     const start = childText(node, "Start").slice(0, 10) || importedStart;
-    const durationDays = durationToDays(childText(node, "Duration"));
-    const finish = childText(node, "Finish").slice(0, 10) || toDateInputValue(addWorkingDays(start, durationDays));
+    const rawDuration = childText(node, "Duration");
+    const durationMinutes = rawDuration ? durationToMinutes(rawDuration) : getCalendar().minutesPerDay;
+    const finish = childText(node, "Finish").slice(0, 10) || toDateInputValue(finishFromStartByDuration(start, durationMinutes));
     const outlineLevel = normalizeLevel(childText(node, "OutlineLevel") || 1);
     const percent = normalizePercent(childText(node, "PercentComplete") || 0);
     const isSummary = childText(node, "Summary") === "1";
@@ -1327,7 +1434,9 @@ function importProjectXml(text) {
       name,
       start,
       finish,
-      durationDays: workDaysBetween(start, finish),
+      durationDays: durationMinutesToWorkingDays(durationMinutes),
+      durationMinutes,
+      isMilestone: durationMinutes === 0 || childText(node, "Milestone") === "1",
       percent,
       predecessors: [],
       links: [],
@@ -1561,6 +1670,7 @@ function buildMppRecoveredSnapshot() {
       start: taskStart,
       finish: taskFinish,
       durationDays: 2,
+      durationMinutes: getCalendar().minutesPerDay * 2,
       percent: 0,
       predecessors: index > 0 ? [index] : [],
       links: index > 0 ? [{ id: index, type: "FS" }] : [],
@@ -1676,7 +1786,7 @@ function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Start", "Finish", "DurationDays", "PercentComplete", "Predecessors", "Successors", "OutlineLevel", "IsSummary", "Expanded"]];
+  const rows = [["ID", "WBS", "Name", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "OutlineLevel", "IsSummary", "Expanded"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -1684,7 +1794,8 @@ function exportCsv() {
       task.name,
       task.start,
       task.finish,
-      task.durationDays,
+      formatDuration(task.durationMinutes),
+      normalizeDurationMinutes(task.durationMinutes, task.durationDays * getCalendar().minutesPerDay),
       task.percent,
       formatLinks(task.links).replaceAll(",", ";"),
       formatSuccessorLinks(task.id).replaceAll(",", ";"),
@@ -1720,13 +1831,16 @@ function safeFileName(name) {
 function makeSampleTask(uid, name, startOffset, durationDays, percent, links = [], outlineLevel = 1) {
   const projectStart = toDateInputValue(nextWorkingDay(state.projectStart || today, true));
   const start = toDateInputValue(addWorkingDays(projectStart, startOffset + 1));
-  const finish = toDateInputValue(addWorkingDays(start, durationDays));
+  const durationMinutes = Math.max(0, Number(durationDays) || 0) * getCalendar().minutesPerDay;
+  const finish = toDateInputValue(finishFromStartByDuration(start, durationMinutes));
   return {
     uid,
     name,
     start,
     finish,
-    durationDays,
+    durationDays: durationMinutesToWorkingDays(durationMinutes),
+    durationMinutes,
+    isMilestone: durationMinutes === 0,
     percent,
     predecessors: links.map((link) => link.id),
     links,
@@ -1878,7 +1992,8 @@ function formatFriendlyDate(value) {
 }
 
 function calculateLinkAlignedDates(predecessor, successor, type) {
-  const duration = Math.max(1, successor.durationDays || workDaysBetween(successor.start, successor.finish));
+  const durationMinutes = normalizeDurationMinutes(successor.durationMinutes, workingSpanMinutes(successor.start, successor.finish));
+  const durationDays = durationMinutesToWorkingDays(durationMinutes);
   const predStart = dateOnly(predecessor.start);
   const predFinish = dateOnly(predecessor.finish);
   if (!predStart || !predFinish) return null;
@@ -1888,25 +2003,26 @@ function calculateLinkAlignedDates(predecessor, successor, type) {
 
   if (type === "FS") {
     start = addWorkingDaysAfter(predFinish, 1);
-    finish = addWorkingDays(start, duration);
+    finish = finishFromStartByDuration(start, durationMinutes);
   } else if (type === "SS") {
     start = nextWorkingDay(predStart, true);
-    finish = addWorkingDays(start, duration);
+    finish = finishFromStartByDuration(start, durationMinutes);
   } else if (type === "FF") {
     finish = previousWorkingDay(predFinish, true);
-    start = subtractWorkingDays(finish, duration);
+    start = startFromFinishByDuration(finish, durationMinutes);
   } else if (type === "SF") {
     finish = previousWorkingDay(predStart, true);
-    start = subtractWorkingDays(finish, duration);
+    start = startFromFinishByDuration(finish, durationMinutes);
   } else {
     start = addWorkingDaysAfter(predFinish, 1);
-    finish = addWorkingDays(start, duration);
+    finish = finishFromStartByDuration(start, durationMinutes);
   }
 
   return {
     start: toDateInputValue(start),
     finish: toDateInputValue(finish),
-    durationDays: duration,
+    durationDays,
+    durationMinutes,
   };
 }
 
@@ -1925,7 +2041,7 @@ function calculateTaskDatesFromLinks(task, byId) {
   const links = getTaskLinks(task);
   if (!links.length) return null;
 
-  const duration = Math.max(1, task.durationDays || workDaysBetween(task.start, task.finish));
+  const durationMinutes = normalizeDurationMinutes(task.durationMinutes, workingSpanMinutes(task.start, task.finish));
   const startRequirements = [];
   const finishRequirements = [];
 
@@ -1946,24 +2062,28 @@ function calculateTaskDatesFromLinks(task, byId) {
   const latestFinishRequirement = latestDate(finishRequirements);
   if (!latestStartRequirement && !latestFinishRequirement) return null;
 
-  const finishDrivenStart = latestFinishRequirement ? subtractWorkingDays(latestFinishRequirement, duration) : null;
+  const finishDrivenStart = latestFinishRequirement ? startFromFinishByDuration(latestFinishRequirement, durationMinutes) : null;
   const desiredStart = latestDate([latestStartRequirement, finishDrivenStart]) || dateOnly(task.start) || dateOnly(state.projectStart) || dateOnly(today);
-  const desiredFinish = addWorkingDays(desiredStart, duration);
+  const desiredFinish = finishFromStartByDuration(desiredStart, durationMinutes);
 
   return {
     start: toDateInputValue(desiredStart),
     finish: toDateInputValue(desiredFinish),
-    durationDays: duration,
+    durationDays: durationMinutesToWorkingDays(durationMinutes),
+    durationMinutes,
   };
 }
 
 function applyDatesToTask(task, dates) {
   if (!task || !dates) return false;
-  const changed = task.start !== dates.start || task.finish !== dates.finish || task.durationDays !== dates.durationDays;
+  const nextDurationMinutes = normalizeDurationMinutes(dates.durationMinutes, task.durationMinutes);
+  const changed = task.start !== dates.start || task.finish !== dates.finish || task.durationMinutes !== nextDurationMinutes;
   if (!changed) return false;
   task.start = dates.start;
   task.finish = dates.finish;
-  task.durationDays = dates.durationDays;
+  task.durationMinutes = nextDurationMinutes;
+  task.durationDays = durationMinutesToWorkingDays(nextDurationMinutes);
+  task.isMilestone = nextDurationMinutes === 0;
   return true;
 }
 
@@ -2075,7 +2195,7 @@ function calculateCascadeImpact(sourceTaskId) {
     .map((task) => {
       const original = originalById.get(task.id);
       if (!original) return null;
-      const changed = original.start !== task.start || original.finish !== task.finish || original.durationDays !== task.durationDays;
+      const changed = original.start !== task.start || original.finish !== task.finish || original.durationMinutes !== task.durationMinutes;
       if (!changed) return null;
       return {
         id: task.id,
@@ -2084,11 +2204,13 @@ function calculateCascadeImpact(sourceTaskId) {
           start: original.start,
           finish: original.finish,
           durationDays: original.durationDays,
+          durationMinutes: original.durationMinutes,
         },
         to: {
           start: task.start,
           finish: task.finish,
           durationDays: task.durationDays,
+          durationMinutes: task.durationMinutes,
         },
       };
     })
@@ -2102,7 +2224,9 @@ function applyCascadeImpact(changes) {
     if (!task) return;
     task.start = change.to.start;
     task.finish = change.to.finish;
-    task.durationDays = change.to.durationDays;
+    task.durationMinutes = normalizeDurationMinutes(change.to.durationMinutes, change.to.durationDays * getCalendar().minutesPerDay);
+    task.durationDays = durationMinutesToWorkingDays(task.durationMinutes);
+    task.isMilestone = task.durationMinutes === 0;
   });
 }
 
@@ -2182,7 +2306,9 @@ function finishCascadeImpactChoice(choice) {
     if (source && request.originalDates) {
       source.start = request.originalDates.start;
       source.finish = request.originalDates.finish;
-      source.durationDays = request.originalDates.durationDays;
+      source.durationMinutes = normalizeDurationMinutes(request.originalDates.durationMinutes, request.originalDates.durationDays * getCalendar().minutesPerDay);
+      source.durationDays = durationMinutesToWorkingDays(source.durationMinutes);
+      source.isMilestone = source.durationMinutes === 0;
     }
   }
 
@@ -2333,6 +2459,7 @@ function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
     start: successor.start,
     finish: successor.finish,
     durationDays: successor.durationDays,
+    durationMinutes: successor.durationMinutes,
   };
 
   successor.links = previousLinks.filter((link) => link.id !== predecessor.id);
@@ -2365,7 +2492,9 @@ function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
       if (choice === "move") {
         successor.start = proposedDates.start;
         successor.finish = proposedDates.finish;
-        successor.durationDays = proposedDates.durationDays;
+        successor.durationMinutes = normalizeDurationMinutes(proposedDates.durationMinutes, proposedDates.durationDays * getCalendar().minutesPerDay);
+        successor.durationDays = durationMinutesToWorkingDays(successor.durationMinutes);
+        successor.isMilestone = successor.durationMinutes === 0;
         cascadeScheduleFromTask(successor.id, { silent: true });
         return;
       }
@@ -2375,7 +2504,9 @@ function addDependencyLink(sourceIndex, targetIndex, type, anchor = null) {
         successor.predecessors = previousLinks.map((link) => link.id);
         successor.start = previousDates.start;
         successor.finish = previousDates.finish;
-        successor.durationDays = previousDates.durationDays;
+        successor.durationMinutes = normalizeDurationMinutes(previousDates.durationMinutes, previousDates.durationDays * getCalendar().minutesPerDay);
+        successor.durationDays = durationMinutesToWorkingDays(successor.durationMinutes);
+        successor.isMilestone = successor.durationMinutes === 0;
       }
 
       render();
@@ -2476,7 +2607,7 @@ function beginGanttDrag(event) {
     currentY: event.clientY,
     originalStart: startDate,
     originalFinish: finishDate,
-    originalWorkDuration: workDaysBetween(startDate, finishDate),
+    originalDurationMinutes: normalizeDurationMinutes(task.durationMinutes, workingSpanMinutes(startDate, finishDate)),
     linkTargetIndex: null,
   };
 
@@ -2495,21 +2626,25 @@ function updateGanttDrag(event) {
   if (!task) return;
 
   if (activeBarDrag.mode === "move") {
-    const duration = activeBarDrag.originalWorkDuration || workDaysBetween(activeBarDrag.originalStart, activeBarDrag.originalFinish);
+    const durationMinutes = normalizeDurationMinutes(activeBarDrag.originalDurationMinutes, workingSpanMinutes(activeBarDrag.originalStart, activeBarDrag.originalFinish));
     const proposedStart = nextWorkingDay(addDays(activeBarDrag.originalStart, deltaDays), true);
     task.start = toDateInputValue(proposedStart);
-    task.finish = toDateInputValue(addWorkingDays(proposedStart, duration));
+    task.finish = toDateInputValue(finishFromStartByDuration(proposedStart, durationMinutes));
+    task.durationMinutes = durationMinutes;
   } else if (activeBarDrag.mode === "resize-finish") {
     const finish = previousWorkingDay(addDays(activeBarDrag.originalFinish, deltaDays), true);
     task.start = toDateInputValue(activeBarDrag.originalStart);
     task.finish = toDateInputValue(dateOnly(finish) < activeBarDrag.originalStart ? activeBarDrag.originalStart : finish);
+    task.durationMinutes = workingSpanMinutes(task.start, task.finish);
   } else if (activeBarDrag.mode === "resize-start") {
     const start = nextWorkingDay(addDays(activeBarDrag.originalStart, deltaDays), true);
     task.start = toDateInputValue(dateOnly(start) > activeBarDrag.originalFinish ? activeBarDrag.originalFinish : start);
     task.finish = toDateInputValue(activeBarDrag.originalFinish);
+    task.durationMinutes = workingSpanMinutes(task.start, task.finish);
   }
 
-  task.durationDays = workDaysBetween(task.start, task.finish);
+  task.durationDays = durationMinutesToWorkingDays(task.durationMinutes);
+  task.isMilestone = task.durationMinutes === 0;
   pendingCascadeChoice = null;
   renderGantt();
   renderSummary();
@@ -2524,7 +2659,8 @@ function endGanttDrag() {
   const originalDates = drag.originalStart && drag.originalFinish ? {
     start: toDateInputValue(drag.originalStart),
     finish: toDateInputValue(drag.originalFinish),
-    durationDays: workDaysBetween(drag.originalStart, drag.originalFinish),
+    durationDays: durationMinutesToWorkingDays(drag.originalDurationMinutes),
+    durationMinutes: normalizeDurationMinutes(drag.originalDurationMinutes, workingSpanMinutes(drag.originalStart, drag.originalFinish)),
   } : null;
 
   activeBarDrag = null;
@@ -2535,7 +2671,7 @@ function endGanttDrag() {
     return;
   }
 
-  const taskChanged = task.start !== originalDates.start || task.finish !== originalDates.finish || task.durationDays !== originalDates.durationDays;
+  const taskChanged = task.start !== originalDates.start || task.finish !== originalDates.finish || task.durationMinutes !== originalDates.durationMinutes;
   if (!taskChanged) {
     render();
     return;

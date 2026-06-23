@@ -107,30 +107,31 @@ The task-name, predecessor, date, percent, and outline-level editors now expand 
 - **Succ** means successors: tasks that depend on the current row. This column is calculated automatically from the Pred column on other rows, so it is read-only.
 - Empty dependency fields now show `none` instead of the old confusing `connect` placeholder.
 
-## Real calendar engine
+## Editable duration engine
 
-This version adds a real working-day calendar instead of treating every calendar day as work.
+This version adds the next scheduling layer after the working-day calendar.
 
 What changed:
 
-- Standard calendar defaults to **Monday–Friday**.
-- Tasks skip weekends when calculating finish dates from duration.
-- Holidays/non-working exceptions can be entered as comma-separated `YYYY-MM-DD` dates.
-- The Gantt header and rows shade non-working days.
-- New tasks start on the next working day.
-- FS/SS/FF/SF scheduling uses working days.
-- Summary-task duration rolls up by working days.
-- Exported Project XML now includes a Standard calendar with weekdays and holiday exceptions.
+- The **Dur** field is now editable instead of just a pill.
+- Accepted duration examples:
+  - `0d` for a milestone
+  - `4h` for a half-day task on an 8-hour calendar
+  - `3d` for three working days
+  - `1w` for one working week based on the project calendar
+  - `90m` for minute-level duration storage
+- Changing **Start** keeps the task duration and recalculates Finish.
+- Changing **Finish** recalculates the duration.
+- Changing **Dur** recalculates Finish from Start.
+- Milestones render as a diamond on the Gantt.
+- XML export now writes real hour/minute duration values and milestone flags.
+- CSV export includes both friendly Duration and raw DurationMinutes.
 
-Acceptance test:
+Acceptance tests:
 
 ```text
-A 5-day task starting Friday should finish next Thursday, not Tuesday.
-```
-
-Use the Calendar controls near the top of the app:
-
-```text
-Workdays: Mon,Tue,Wed,Thu,Fri
-Holidays: 2026-07-04,2026-12-25
+Task starts Monday, Dur = 5d, finishes Friday.
+Task starts Friday, Dur = 5d, skips the weekend.
+Task Dur = 0d, start and finish match, and the Gantt shows a milestone diamond.
+Task Dur = 4h, XML exports PT4H0M0S.
 ```
