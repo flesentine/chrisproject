@@ -95,3 +95,8 @@ The app now supports project nesting:
 - Summary start, finish, duration, and percent complete roll up from child tasks.
 - Imported Project XML preserves `<Summary>`, `<Expanded>`, and `<OutlineLevel>` fields.
 - Native `.mpp` decoding now uses the MPP task-order table where available, then infers outline groups from summary rows.
+
+
+## Field width display improvement
+
+The task-name, predecessor, date, percent, and outline-level editors now expand to fill their resized columns. The task-name column also has a much higher maximum width, so widening the column actually shows more of long imported MPP task names instead of leaving a small input floating inside a big cell.

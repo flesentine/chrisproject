@@ -3046,3 +3046,61 @@ body.has-cascade-suggestion .gantt-ghost-bar {
 .gantt-bar.is-summary::before {
   background: rgba(255, 255, 255, 0.18);
 }
+
+
+/* Full-width field display patch ------------------------------------------------
+   When a data column is widened, the editor inside it should grow with the
+   column. Earlier builds left the task-name input at its old intrinsic width,
+   so a wide column still showed a short clipped field. */
+.planner-cell {
+  min-width: 0;
+}
+
+.planner-cell input,
+.planner-cell select,
+.planner-cell .percent-cell,
+.planner-cell .task-name-cell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.task-name-cell {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.task-name-cell .name-input,
+.planner-cell .name-input {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.summary-toggle,
+.summary-toggle-spacer {
+  flex: 0 0 24px;
+}
+
+.planner-cell input[data-field="predecessors"],
+.planner-cell input[data-field="outlineLevel"],
+.planner-cell input[type="date"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.planner-cell .percent-cell input,
+.planner-cell .percent-track {
+  width: 100%;
+}
+
+/* Let wide columns feel worth resizing instead of stopping too early. */
+.field-heading-cell[data-column-key="name"] > span,
+.field-heading-cell[data-column-key="predecessors"] > span,
+.field-heading-cell[data-column-key="wbs"] > span {
+  text-overflow: clip;
+}

@@ -14,13 +14,13 @@ const PROJECT_TO_LINK_TYPE = { 0: "FF", 1: "FS", 2: "SS", 3: "SF" };
 
 const FIELD_COLUMNS = [
   { key: "id", label: "ID", defaultWidth: 48, min: 40, max: 76 },
-  { key: "wbs", label: "WBS", defaultWidth: 64, min: 48, max: 120 },
-  { key: "name", label: "Task name", defaultWidth: 240, min: 170, max: 620 },
+  { key: "wbs", label: "WBS", defaultWidth: 72, min: 48, max: 180 },
+  { key: "name", label: "Task name", defaultWidth: 320, min: 190, max: 1100 },
   { key: "start", label: "Start", defaultWidth: 128, min: 112, max: 170 },
   { key: "finish", label: "Finish", defaultWidth: 128, min: 112, max: 170 },
   { key: "duration", label: "Dur", defaultWidth: 58, min: 48, max: 90 },
   { key: "percent", label: "%", defaultWidth: 86, min: 70, max: 130 },
-  { key: "predecessors", label: "Pred", defaultWidth: 126, min: 92, max: 220 },
+  { key: "predecessors", label: "Pred", defaultWidth: 150, min: 92, max: 360 },
   { key: "level", label: "Lvl", defaultWidth: 62, min: 52, max: 90 },
   { key: "actions", label: "", defaultWidth: 60, min: 44, max: 82 },
 ];
