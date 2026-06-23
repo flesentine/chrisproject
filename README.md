@@ -1,6 +1,13 @@
-# Chris's Discount Project Maker — v0.25.1
+# Chris's Discount Project Maker — v0.25.3
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
+
+## v0.25.3 changes
+
+- Moves the old top ribbon/header commands into the ProjectHub sidebar.
+- Keeps the top header clean as branding only, like the Stitch reference screen.
+- Adds sidebar command drawers for Home, Files, Grid, Tasks, Board, Gantt, Calendar, Reports, and Settings.
+- Adds cleaner sidebar command styling and preserves the real buttons underneath so existing import, export, baseline, task, resource, and schedule logic still works.
 
 ## v0.25.1 changes
 
@@ -20,4 +27,4 @@ Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
 ## Use
 
-Open `index.html` locally or host the folder on GitHub Pages. Use Project → Set Baseline after your plan is approved, then update Task Information → Progress as work happens. The ProjectHub canvas shows task cards, hover details, partial completion, remaining work, and late/early warnings against the baseline.
+Open `index.html` locally or host the folder on GitHub Pages. Use the ProjectHub sidebar for file, task, resource, Gantt, calendar, report, and settings commands. Use Project → Set Baseline from the sidebar after your plan is approved, then update Task Information → Progress as work happens.
