@@ -1,6 +1,6 @@
 # Chris's Discount Project Maker
 
-A lightweight Microsoft Project XML-compatible planner with a browser-only local MPP conversion attempt.
+A lightweight Microsoft Project XML-compatible planner with a browser-only local MPP decoder for the Microsoft Project table-cache layout found in modern `.mpp` files.
 
 ## What it does
 
@@ -25,12 +25,17 @@ The converter does the best practical static-web approach:
 1. Reads the native OLE/compound-file container used by many `.mpp` files.
 2. Searches internal streams for embedded Microsoft Project XML / MSPDI.
 3. If XML is found, imports the schedule directly.
-4. If no XML is found, mines the binary streams for likely task names and creates a best-effort draft schedule.
-5. Lets you download diagnostics, recovered text, or draft XML.
+4. If no XML is found, tries a real native table-cache decode:
+   - `TBkndTask/VarMeta`
+   - `TBkndTask/Var2Data`
+   - `TBkndCons/FixedData`
+5. Converts recovered tasks, dates, and FS/SS/FF/SF links into Project XML and imports it.
+6. If that table-cache decode is not available, falls back to recovered text / draft XML.
+7. Lets you download diagnostics, recovered text, or converted XML.
 
 ## Honest limitation
 
-This is not full Microsoft Project native `.mpp` parity. Native `.mpp` files can store schedule data in private binary tables that browser JavaScript cannot reliably decode yet. MPXJ is the proven open-source reader for real `.mpp` compatibility, but it is Java-based and normally needs a local app or backend.
+This is still not full Microsoft Project native `.mpp` parity. It now decodes the table-cache layout in the uploaded Panasonic-style Project 16 `.mpp` file and similar files, but `.mpp` has multiple private binary layouts. MPXJ remains the proven open-source reader for broad `.mpp` compatibility, but it is Java-based and normally needs a local app or backend.
 
 So the reliable interchange format remains:
 

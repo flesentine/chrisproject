@@ -1042,12 +1042,15 @@ async function importProjectMppLocal(file) {
       importProjectXml(result.projectXml);
       const taskCount = result.project?.taskCount ?? state.tasks.length;
       const compressionText = result.embeddedXml?.compressed ? ` after ${escapeXml(result.embeddedXml.compression || "compressed")} decompression` : "";
-      const streamText = result.embeddedXml?.stream ? ` Found Project XML in <code>${escapeXml(result.embeddedXml.stream)}</code>${compressionText}.` : "";
+      const streamText = result.nativeTable
+        ? ` Decoded native MPP task table streams: ${result.nativeTable.taskCount} task${result.nativeTable.taskCount === 1 ? "" : "s"} and ${result.nativeTable.linkCount} link${result.nativeTable.linkCount === 1 ? "" : "s"}.`
+        : result.embeddedXml?.stream ? ` Found Project XML in <code>${escapeXml(result.embeddedXml.stream)}</code>${compressionText}.` : "";
+      const reviewText = result.nativeTable ? " <strong>Review this import before treating it as source of truth.</strong>" : "";
       setMppPanel(
-        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}` +
+        `Imported ${taskCount} task${taskCount === 1 ? "" : "s"} from <code>${escapeXml(file.name)}</code>.${streamText}${reviewText}` +
         `<div class="mpp-actions"><button type="button" class="primary" data-mpp-action="download-xml">Download converted XML</button><button type="button" data-mpp-action="diagnostics">Download diagnostics</button><button type="button" data-mpp-action="dismiss">Dismiss</button></div>`,
         "ok",
-        "MPP converted locally"
+        result.nativeTable ? "MPP decoded locally" : "MPP converted locally"
       );
       return;
     }

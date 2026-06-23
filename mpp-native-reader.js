@@ -1,5 +1,5 @@
 /*
-  NativeMppReader v0.3
+  NativeMppReader v0.4
   Browser-only Microsoft Project .mpp reader foundation.
 
   What this does:
@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "0.3.0";
+  const VERSION = "0.4.0";
   const CFB_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
   const ENDOFCHAIN = -2;
   const MAX_TEXT_SCAN_BYTES = 2 * 1024 * 1024;
@@ -834,6 +834,457 @@
     };
   }
 
+
+  const TASK_FIELD_NAME_HINTS = [
+    0x0b408054,
+    0x0b60805b,
+    0x0b408046,
+    0x0b408049,
+    0x0b40000e,
+  ];
+
+  const TASK_FIELD_START_HINTS = [
+    0x0b40804b,
+  ];
+
+  const TASK_FIELD_FINISH_HINTS = [
+    0x0b40804a,
+  ];
+
+  const LINK_TYPE_BY_PROJECT_CODE = {
+    0: "FF",
+    1: "FS",
+    2: "SF",
+    3: "SS",
+  };
+
+  function escapeXmlValue(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+  }
+
+  function dateToIsoLocal(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function parseMppDisplayDate(value) {
+    const text = cleanCandidate(value);
+    const match = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/i.exec(text);
+    if (!match) return "";
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    let year = Number(match[3]);
+    if (year < 100) year += year >= 80 ? 1900 : 2000;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (Number.isNaN(date.getTime()) || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+    return dateToIsoLocal(date);
+  }
+
+  function isHexGarbage(value) {
+    const text = String(value || "").trim();
+    return /^[0-9a-f]{4,}$/i.test(text);
+  }
+
+  function readLengthPrefixedValue(bytes, offset) {
+    if (!bytes || offset == null || offset < 0 || offset + 4 > bytes.length) return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const length = readUInt32(view, offset);
+    if (!Number.isFinite(length) || length < 0 || length > bytes.length - offset - 4 || length > 1024 * 1024) return null;
+    const raw = bytes.slice(offset + 4, offset + 4 + length);
+    if (!raw.length) return "";
+
+    if (raw.length % 2 === 0 && looksMostlyUtf16(raw)) {
+      return textDecoderUtf16.decode(raw).replace(/\0+$/g, "").trim();
+    }
+
+    if (looksMostlyAnsi(raw)) {
+      return textDecoderUtf8.decode(raw).replace(/\0+$/g, "").trim();
+    }
+
+    if (raw.length === 4) {
+      const rawView = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+      const intValue = rawView.getInt32(0, true);
+      if (intValue === -1 || intValue === 0) return "";
+      return String(intValue);
+    }
+
+    if (raw.length === 8) {
+      const rawView = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+      const maybeNumber = rawView.getFloat64(0, true);
+      if (Number.isFinite(maybeNumber) && Math.abs(maybeNumber) > 0.000001 && Math.abs(maybeNumber) < 1000000000) {
+        return String(maybeNumber);
+      }
+    }
+
+    return "";
+  }
+
+  function getEntryByPath(cfb, suffix) {
+    const normalizedSuffix = String(suffix || "").toLowerCase();
+    return cfb.entries.find((entry) => entry.type === 2 && String(entry.path || "").toLowerCase().endsWith(normalizedSuffix)) || null;
+  }
+
+  function parseTaskVarTable(cfb) {
+    const varMetaEntry = getEntryByPath(cfb, "TBkndTask/VarMeta");
+    const var2DataEntry = getEntryByPath(cfb, "TBkndTask/Var2Data");
+    if (!varMetaEntry || !var2DataEntry) return null;
+
+    const varMeta = cfb.getStream(varMetaEntry);
+    const var2Data = cfb.getStream(var2DataEntry);
+    if (varMeta.length < 32 || var2Data.length < 8) return null;
+
+    const view = new DataView(varMeta.buffer, varMeta.byteOffset, varMeta.byteLength);
+    const rows = new Map();
+
+    for (let offset = 0x20; offset + 12 <= varMeta.length; offset += 12) {
+      const fieldId = readUInt32(view, offset);
+      const rowId = readUInt32(view, offset + 4);
+      const valueOffset = readUInt32(view, offset + 8);
+      if (!fieldId || valueOffset >= var2Data.length) continue;
+      const value = readLengthPrefixedValue(var2Data, valueOffset);
+      if (value == null) continue;
+      const row = rows.get(rowId) || { rowId, fields: new Map() };
+      row.fields.set(fieldId, value);
+      rows.set(rowId, row);
+    }
+
+    return {
+      rows,
+      varMetaStream: varMetaEntry.path,
+      var2DataStream: var2DataEntry.path,
+      varMetaSize: varMeta.length,
+      var2DataSize: var2Data.length,
+    };
+  }
+
+  function firstUsefulField(row, fieldIds) {
+    for (const fieldId of fieldIds) {
+      const raw = row.fields.get(fieldId);
+      const text = cleanCandidate(raw);
+      if (!text || isHexGarbage(text)) continue;
+      if (/^(No Deadline|No Program Date|No Program Baseline Date|Late|Future|On-Time|On-Time \(Or Early\))$/i.test(text)) continue;
+      if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}\/\d{1,2}\/\d{2,4}$/i.test(text)) continue;
+      return text;
+    }
+    return "";
+  }
+
+  function firstDateField(row, fieldIds) {
+    for (const fieldId of fieldIds) {
+      const iso = parseMppDisplayDate(row.fields.get(fieldId));
+      if (iso) return iso;
+    }
+    return "";
+  }
+
+  function parseNativeTaskRows(cfb) {
+    const table = parseTaskVarTable(cfb);
+    if (!table) return null;
+
+    const candidates = [];
+    for (const row of [...table.rows.values()].sort((a, b) => a.rowId - b.rowId)) {
+      const name = firstUsefulField(row, TASK_FIELD_NAME_HINTS);
+      const start = firstDateField(row, TASK_FIELD_START_HINTS);
+      const finish = firstDateField(row, TASK_FIELD_FINISH_HINTS);
+      if (!name || !start || !finish) continue;
+      candidates.push({
+        rowId: row.rowId,
+        name,
+        start,
+        finish: finish < start ? start : finish,
+        percent: 0,
+        outlineLevel: 1,
+        source: "TBkndTask VarMeta/Var2Data",
+      });
+    }
+
+    return { ...table, candidates };
+  }
+
+  function parseNativeDependencyRows(cfb) {
+    const fixedDataEntry = getEntryByPath(cfb, "TBkndCons/FixedData");
+    if (!fixedDataEntry) return [];
+    const bytes = cfb.getStream(fixedDataEntry);
+    if (bytes.length < 20) return [];
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const links = [];
+    for (let offset = 0; offset + 20 <= bytes.length; offset += 20) {
+      const linkId = readUInt32(view, offset);
+      const predecessorRow = readUInt32(view, offset + 4);
+      const successorRow = readUInt32(view, offset + 8);
+      const typeCode = readUInt32(view, offset + 12);
+      const lagAndFormat = readUInt32(view, offset + 16);
+      if (!linkId || !predecessorRow || !successorRow || predecessorRow === successorRow) continue;
+      if (predecessorRow > 1000000 || successorRow > 1000000) continue;
+      links.push({
+        linkId,
+        predecessorRow,
+        successorRow,
+        typeCode,
+        type: LINK_TYPE_BY_PROJECT_CODE[typeCode] || "FS",
+        lagAndFormat,
+        source: fixedDataEntry.path,
+      });
+    }
+    return links;
+  }
+
+  function buildComponents(links, candidateRowIds) {
+    const parent = new Map();
+    const find = (value) => {
+      if (!parent.has(value)) parent.set(value, value);
+      const current = parent.get(value);
+      if (current !== value) parent.set(value, find(current));
+      return parent.get(value);
+    };
+    const union = (a, b) => {
+      const rootA = find(a);
+      const rootB = find(b);
+      if (rootA !== rootB) parent.set(rootB, rootA);
+    };
+    links.forEach((link) => {
+      if (candidateRowIds.has(link.predecessorRow) && candidateRowIds.has(link.successorRow)) {
+        union(link.predecessorRow, link.successorRow);
+      }
+    });
+    const groups = new Map();
+    for (const rowId of parent.keys()) {
+      const root = find(rowId);
+      const group = groups.get(root) || [];
+      group.push(rowId);
+      groups.set(root, group);
+    }
+    return [...groups.values()].map((rows) => rows.sort((a, b) => a - b));
+  }
+
+  function chooseActiveNativeTasks(candidates, links) {
+    if (!candidates.length) return [];
+    const byRow = new Map(candidates.map((task) => [task.rowId, task]));
+    const rowIds = new Set(byRow.keys());
+    const components = buildComponents(links, rowIds);
+    if (components.length) {
+      const scored = components
+        .map((rows) => {
+          const tasks = rows.map((row) => byRow.get(row)).filter(Boolean);
+          const maxFinish = tasks.reduce((max, task) => task.finish > max ? task.finish : max, "");
+          return { rows, tasks, maxFinish, minRow: Math.min(...rows), maxRow: Math.max(...rows) };
+        })
+        .filter((item) => item.tasks.length)
+        .sort((a, b) => b.maxFinish.localeCompare(a.maxFinish) || b.maxRow - a.maxRow || b.tasks.length - a.tasks.length);
+      if (scored.length) {
+        const activeMin = scored[0].minRow;
+        return candidates.filter((task) => task.rowId >= activeMin).sort((a, b) => a.rowId - b.rowId);
+      }
+    }
+
+    const latest = new Map();
+    for (const task of candidates) {
+      const key = `${task.name.toLowerCase()}|${task.start}|${task.finish}`;
+      const existing = latest.get(key);
+      if (!existing || task.rowId > existing.rowId) latest.set(key, task);
+    }
+    return [...latest.values()].sort((a, b) => a.rowId - b.rowId);
+  }
+
+  function daysBetweenIso(startIso, finishIso) {
+    const start = new Date(`${startIso}T00:00:00Z`);
+    const finish = new Date(`${finishIso}T00:00:00Z`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime())) return 1;
+    return Math.max(1, Math.round((finish - start) / 86400000) + 1);
+  }
+
+  function daysToProjectDuration(days) {
+    return `PT${Math.max(1, Number(days) || 1) * 8}H0M0S`;
+  }
+
+  function toProjectDate(iso, endOfDay = false) {
+    const safe = /^\d{4}-\d{2}-\d{2}$/.test(String(iso || "")) ? iso : new Date().toISOString().slice(0, 10);
+    return `${safe}T${endOfDay ? "17:00:00" : "08:00:00"}`;
+  }
+
+  function buildNativeTableProjectXml(projectName, tasks, links) {
+    const created = new Date().toISOString().replace(/\.\d{3}Z$/, "");
+    const projectStart = tasks.reduce((min, task) => task.start < min ? task.start : min, tasks[0]?.start || new Date().toISOString().slice(0, 10));
+    const projectFinish = tasks.reduce((max, task) => task.finish > max ? task.finish : max, tasks[0]?.finish || projectStart);
+    const rowToTask = new Map(tasks.map((task, index) => [task.rowId, { ...task, id: index + 1, uid: index + 1 }]));
+    const incomingLinks = new Map();
+    links.forEach((link) => {
+      const pred = rowToTask.get(link.predecessorRow);
+      const succ = rowToTask.get(link.successorRow);
+      if (!pred || !succ || pred.id === succ.id) return;
+      const list = incomingLinks.get(succ.id) || [];
+      if (!list.some((item) => item.predUid === pred.uid && item.typeCode === link.typeCode)) {
+        list.push({ predUid: pred.uid, typeCode: link.typeCode, type: link.type });
+      }
+      incomingLinks.set(succ.id, list);
+    });
+
+    const rootDuration = daysBetweenIso(projectStart, projectFinish);
+    const rootTask = `
+    <Task>
+      <UID>0</UID>
+      <ID>0</ID>
+      <Name>${escapeXmlValue(projectName)}</Name>
+      <Type>1</Type>
+      <IsNull>0</IsNull>
+      <CreateDate>${created}</CreateDate>
+      <WBS>0</WBS>
+      <OutlineNumber>0</OutlineNumber>
+      <OutlineLevel>0</OutlineLevel>
+      <Priority>500</Priority>
+      <Start>${toProjectDate(projectStart)}</Start>
+      <Finish>${toProjectDate(projectFinish, true)}</Finish>
+      <Duration>${daysToProjectDuration(rootDuration)}</Duration>
+      <DurationFormat>7</DurationFormat>
+      <Work>PT0H0M0S</Work>
+      <Summary>1</Summary>
+      <Manual>1</Manual>
+    </Task>`;
+
+    const taskXml = tasks.map((task, index) => {
+      const id = index + 1;
+      const uid = id;
+      const duration = daysBetweenIso(task.start, task.finish);
+      const predecessors = (incomingLinks.get(id) || []).map((link) => `
+      <PredecessorLink>
+        <PredecessorUID>${link.predUid}</PredecessorUID>
+        <Type>${Number.isFinite(link.typeCode) ? link.typeCode : 1}</Type>
+        <CrossProject>0</CrossProject>
+        <LinkLag>0</LinkLag>
+        <LagFormat>7</LagFormat>
+      </PredecessorLink>`).join("");
+      return `
+    <Task>
+      <UID>${uid}</UID>
+      <ID>${id}</ID>
+      <Name>${escapeXmlValue(task.name)}</Name>
+      <Type>1</Type>
+      <IsNull>0</IsNull>
+      <CreateDate>${created}</CreateDate>
+      <WBS>${id}</WBS>
+      <OutlineNumber>${id}</OutlineNumber>
+      <OutlineLevel>${task.outlineLevel || 1}</OutlineLevel>
+      <Priority>500</Priority>
+      <Start>${toProjectDate(task.start)}</Start>
+      <Finish>${toProjectDate(task.finish, true)}</Finish>
+      <Duration>${daysToProjectDuration(duration)}</Duration>
+      <DurationFormat>7</DurationFormat>
+      <Work>${daysToProjectDuration(duration)}</Work>
+      <PercentComplete>${task.percent || 0}</PercentComplete>
+      <Manual>1</Manual>${predecessors}
+    </Task>`;
+    }).join("");
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Project xmlns="http://schemas.microsoft.com/project" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd">
+  <SaveVersion>12</SaveVersion>
+  <Name>${escapeXmlValue(projectName)}</Name>
+  <Title>${escapeXmlValue(projectName)}</Title>
+  <Subject>Recovered locally from native MPP table streams</Subject>
+  <CreationDate>${created}</CreationDate>
+  <ScheduleFromStart>1</ScheduleFromStart>
+  <StartDate>${toProjectDate(projectStart)}</StartDate>
+  <FinishDate>${toProjectDate(projectFinish, true)}</FinishDate>
+  <FYStartDate>1</FYStartDate>
+  <CriticalSlackLimit>0</CriticalSlackLimit>
+  <CurrencyDigits>2</CurrencyDigits>
+  <CurrencySymbol>$</CurrencySymbol>
+  <CurrencyCode>USD</CurrencyCode>
+  <CurrencySymbolPosition>0</CurrencySymbolPosition>
+  <CalendarUID>1</CalendarUID>
+  <DefaultStartTime>08:00:00</DefaultStartTime>
+  <DefaultFinishTime>17:00:00</DefaultFinishTime>
+  <MinutesPerDay>480</MinutesPerDay>
+  <MinutesPerWeek>2400</MinutesPerWeek>
+  <DaysPerMonth>20</DaysPerMonth>
+  <DefaultTaskType>1</DefaultTaskType>
+  <DefaultFixedCostAccrual>3</DefaultFixedCostAccrual>
+  <DurationFormat>7</DurationFormat>
+  <WorkFormat>2</WorkFormat>
+  <EditableActualCosts>0</EditableActualCosts>
+  <HonorConstraints>0</HonorConstraints>
+  <InsertedProjectsLikeSummary>1</InsertedProjectsLikeSummary>
+  <MultipleCriticalPaths>0</MultipleCriticalPaths>
+  <NewTasksEffortDriven>0</NewTasksEffortDriven>
+  <NewTasksEstimated>1</NewTasksEstimated>
+  <SplitsInProgressTasks>1</SplitsInProgressTasks>
+  <TaskUpdatesResource>1</TaskUpdatesResource>
+  <FiscalYearStart>0</FiscalYearStart>
+  <WeekStartDay>1</WeekStartDay>
+  <AutoAddNewResourcesAndTasks>1</AutoAddNewResourcesAndTasks>
+  <StatusDate>${toProjectDate(projectStart)}</StatusDate>
+  <CurrentDate>${toProjectDate(new Date().toISOString().slice(0, 10))}</CurrentDate>
+  <MicrosoftProjectServerURL>0</MicrosoftProjectServerURL>
+  <Autolink>0</Autolink>
+  <NewTaskStartDate>0</NewTaskStartDate>
+  <ProjectExternallyEdited>0</ProjectExternallyEdited>
+  <ExtendedCreationDate>${created}</ExtendedCreationDate>
+  <ActualsInSync>0</ActualsInSync>
+  <RemoveFileProperties>0</RemoveFileProperties>
+  <AdminProject>0</AdminProject>
+  <Tasks>${rootTask}${taskXml}
+  </Tasks>
+</Project>`;
+  }
+
+  function parseNativeMppTaskTables(cfb, fileName, metadata = {}) {
+    const taskTable = parseNativeTaskRows(cfb);
+    if (!taskTable || !taskTable.candidates.length) return null;
+
+    const links = parseNativeDependencyRows(cfb);
+    const selectedTasks = chooseActiveNativeTasks(taskTable.candidates, links);
+    if (!selectedTasks.length) return null;
+
+    const selectedRows = new Set(selectedTasks.map((task) => task.rowId));
+    const selectedLinks = links.filter((link) => selectedRows.has(link.predecessorRow) && selectedRows.has(link.successorRow));
+    const projectName = metadata?.title || metadata?.subject || String(fileName || "Recovered MPP").replace(/\.mpp$/i, "") || "Recovered MPP";
+    const projectXml = buildNativeTableProjectXml(projectName, selectedTasks, selectedLinks);
+    const project = {
+      name: projectName,
+      start: selectedTasks.reduce((min, task) => task.start < min ? task.start : min, selectedTasks[0].start),
+      taskCount: selectedTasks.length,
+      tasks: selectedTasks.map((task, index) => ({
+        id: index + 1,
+        rowId: task.rowId,
+        name: task.name,
+        start: task.start,
+        finish: task.finish,
+      })),
+      links: selectedLinks.map((link) => ({
+        predecessorRow: link.predecessorRow,
+        successorRow: link.successorRow,
+        type: link.type,
+        typeCode: link.typeCode,
+      })),
+    };
+
+    return {
+      projectXml,
+      project,
+      table: {
+        strategy: "native-task-table-cache",
+        taskCount: selectedTasks.length,
+        linkCount: selectedLinks.length,
+        candidateTaskCount: taskTable.candidates.length,
+        selectedRowStart: Math.min(...selectedTasks.map((task) => task.rowId)),
+        selectedRowEnd: Math.max(...selectedTasks.map((task) => task.rowId)),
+        taskVarMetaStream: taskTable.varMetaStream,
+        taskVar2DataStream: taskTable.var2DataStream,
+        dependencyStream: getEntryByPath(cfb, "TBkndCons/FixedData")?.path || "",
+        confidence: selectedTasks.length >= 3 ? "medium-high for this Microsoft Project table-cache layout" : "low",
+      },
+    };
+  }
+
+
   function parseProjectXmlPreview(xmlText) {
     if (typeof DOMParser === "undefined") return null;
     const xml = new DOMParser().parseFromString(xmlText, "application/xml");
@@ -880,6 +1331,7 @@
       candidateStrings: (result.candidateStrings || []).slice(0, 80),
       dateHints: (result.dateHints || []).slice(0, 40),
       draftProject: result.draftProject,
+      nativeTable: result.nativeTable,
       streamBuckets: result.draftProject?.streamBuckets || [],
       recoveryStats: result.recoveryStats,
       warnings: result.warnings,
@@ -931,6 +1383,7 @@
       candidateStrings: [],
       dateHints: [],
       draftProject: null,
+      nativeTable: null,
       warnings: [],
     };
 
@@ -961,6 +1414,20 @@
       result.projectXml = xmlHit.xml;
       result.embeddedXml = { stream: xmlHit.stream, size: xmlHit.xml.length };
       result.project = parseProjectXmlPreview(xmlHit.xml);
+      return result;
+    }
+
+    const nativeTableHit = parseNativeMppTaskTables(cfb, fileName, result.metadata);
+    if (nativeTableHit?.projectXml) {
+      result.projectXml = nativeTableHit.projectXml;
+      result.project = nativeTableHit.project;
+      result.nativeTable = nativeTableHit.table;
+      result.embeddedXml = {
+        stream: nativeTableHit.table.strategy,
+        size: nativeTableHit.projectXml.length,
+        nativeTable: true,
+      };
+      result.warnings.push(`Recovered ${nativeTableHit.table.taskCount} task${nativeTableHit.table.taskCount === 1 ? "" : "s"} and ${nativeTableHit.table.linkCount} dependency link${nativeTableHit.table.linkCount === 1 ? "" : "s"} from native MPP table streams. Review before using as a source of truth.`);
       return result;
     }
 

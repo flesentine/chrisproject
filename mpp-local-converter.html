@@ -37,7 +37,7 @@
       <div>
         <span class="badge">100% local browser attempt</span>
         <h1>MPP → Project XML converter</h1>
-        <p>This page tries the best static-web conversion possible. It reads the .mpp locally, searches for embedded Project XML, and if that is not available it recovers a draft task list from text hints. No upload. No server. No account.</p>
+        <p>This page tries the best static-web conversion possible. It reads the .mpp locally, searches for embedded Project XML, then tries to decode native Project task table streams. If that is not available it recovers a draft task list from text hints. No upload. No server. No account.</p>
       </div>
       <a class="button" href="index.html">← Back to planner</a>
     </section>
@@ -116,7 +116,11 @@
         lastResult = await window.NativeMppReader.read(file);
         if (lastResult.projectXml) {
           lastXml = lastResult.projectXml;
-          show(`<h2>Converted from embedded Project XML</h2><p>Found import-ready Project XML inside <strong>${escapeXml(file.name)}</strong>. Tasks detected: ${lastResult.project?.taskCount ?? 'unknown'}.</p><div class="actions"><button class="primary" id="downloadXml">Download XML</button><button id="downloadDiag">Download diagnostics</button><a class="button" href="index.html">Open planner</a></div>`, 'ok');
+          const nativeText = lastResult.nativeTable
+            ? `Decoded native MPP table streams: <strong>${lastResult.nativeTable.taskCount}</strong> tasks and <strong>${lastResult.nativeTable.linkCount}</strong> links.`
+            : `Found import-ready Project XML inside <strong>${escapeXml(file.name)}</strong>.`;
+          const heading = lastResult.nativeTable ? 'Decoded native MPP table cache' : 'Converted from embedded Project XML';
+          show(`<h2>${heading}</h2><p>${nativeText} Tasks detected: ${lastResult.project?.taskCount ?? 'unknown'}. Review the result before using it as source of truth.</p><div class="actions"><button class="primary" id="downloadXml">Download XML</button><button id="downloadDiag">Download diagnostics</button><a class="button" href="index.html">Open planner</a></div>`, 'ok');
           return;
         }
         const count = lastResult.draftProject?.taskCount || 0;
