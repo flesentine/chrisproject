@@ -11,6 +11,20 @@ const LINK_TYPE_LABELS = {
 };
 const LINK_TYPE_TO_PROJECT = { FF: 0, FS: 1, SS: 2, SF: 3 };
 const PROJECT_TO_LINK_TYPE = { 0: "FF", 1: "FS", 2: "SS", 3: "SF" };
+const CONSTRAINT_TYPES = ["ASAP", "ALAP", "MSO", "MFO", "SNET", "SNLT", "FNET", "FNLT"];
+const CONSTRAINT_LABELS = {
+  ASAP: "As Soon As Possible",
+  ALAP: "As Late As Possible",
+  MSO: "Must Start On",
+  MFO: "Must Finish On",
+  SNET: "Start No Earlier Than",
+  SNLT: "Start No Later Than",
+  FNET: "Finish No Earlier Than",
+  FNLT: "Finish No Later Than",
+};
+const CONSTRAINT_TO_PROJECT = { ASAP: 0, ALAP: 1, MSO: 2, MFO: 3, SNET: 4, SNLT: 5, FNET: 6, FNLT: 7 };
+const PROJECT_TO_CONSTRAINT = { 0: "ASAP", 1: "ALAP", 2: "MSO", 3: "MFO", 4: "SNET", 5: "SNLT", 6: "FNET", 7: "FNLT" };
+const CONSTRAINTS_REQUIRING_DATE = new Set(["MSO", "MFO", "SNET", "SNLT", "FNET", "FNLT"]);
 
 const DAY_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAME_TO_INDEX = new Map(DAY_SHORT_NAMES.map((name, index) => [name.toLowerCase(), index]));
@@ -33,6 +47,9 @@ const FIELD_COLUMNS = [
   { key: "percent", label: "%", defaultWidth: 86, min: 70, max: 130 },
   { key: "predecessors", label: "Pred", defaultWidth: 150, min: 92, max: 360 },
   { key: "successors", label: "Succ", defaultWidth: 150, min: 92, max: 360 },
+  { key: "constraint", label: "Constraint", defaultWidth: 170, min: 130, max: 250 },
+  { key: "constraintDate", label: "Const date", defaultWidth: 132, min: 112, max: 170 },
+  { key: "deadline", label: "Deadline", defaultWidth: 132, min: 112, max: 170 },
   { key: "level", label: "Lvl", defaultWidth: 62, min: 52, max: 90 },
   { key: "actions", label: "", defaultWidth: 60, min: 44, max: 82 },
 ];
@@ -467,6 +484,45 @@ function normalizePercent(value) {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
+function normalizeDateValue(value) {
+  const d = dateOnly(value);
+  return d ? toDateInputValue(d) : "";
+}
+
+function normalizeConstraintType(value) {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (!raw) return "ASAP";
+  if (CONSTRAINT_TYPES.includes(raw)) return raw;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric) && PROJECT_TO_CONSTRAINT[numeric]) return PROJECT_TO_CONSTRAINT[numeric];
+  const compact = raw.replace(/[^A-Z]/g, "");
+  const aliases = {
+    ASSOONASPOSSIBLE: "ASAP",
+    ASLATEASPOSSIBLE: "ALAP",
+    MUSTSTARTON: "MSO",
+    MUSTFINISHON: "MFO",
+    STARTNOEARLIERTHAN: "SNET",
+    STARTNOLATERTHAN: "SNLT",
+    FINISHNOEARLIERTHAN: "FNET",
+    FINISHNOLATERTHAN: "FNLT",
+  };
+  return aliases[compact] || "ASAP";
+}
+
+function constraintNeedsDate(type) {
+  return CONSTRAINTS_REQUIRING_DATE.has(normalizeConstraintType(type));
+}
+
+function formatConstraintType(type) {
+  const normalized = normalizeConstraintType(type);
+  return CONSTRAINT_LABELS[normalized] || CONSTRAINT_LABELS.ASAP;
+}
+
+function renderConstraintOptions(selected) {
+  const normalized = normalizeConstraintType(selected);
+  return CONSTRAINT_TYPES.map((type) => `<option value="${type}"${type === normalized ? " selected" : ""}>${escapeXml(CONSTRAINT_LABELS[type])}</option>`).join("");
+}
+
 function normalizeLevel(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 1;
@@ -705,6 +761,9 @@ function ensureDecorations() {
     task.expanded = task.expanded !== false;
     task.durationDays = durationMinutesToWorkingDays(task.durationMinutes);
     task.isMilestone = task.durationMinutes === 0;
+    task.constraintType = normalizeConstraintType(task.constraintType);
+    task.constraintDate = normalizeDateValue(task.constraintDate);
+    task.deadline = normalizeDateValue(task.deadline);
     task.links = normalizeTaskLinks(task).filter((link) => link.id !== task.id);
     task.predecessors = task.links.map((link) => link.id);
 
@@ -912,6 +971,11 @@ function renderGantt() {
 
   const starts = tasks.map((t) => dateOnly(t.start)).filter(Boolean);
   const finishes = tasks.map((t) => dateOnly(t.finish)).filter(Boolean);
+  tasks.map((t) => dateOnly(t.deadline)).filter(Boolean).forEach((deadline) => finishes.push(deadline));
+  tasks.map((t) => dateOnly(t.constraintDate)).filter(Boolean).forEach((constraintDate) => {
+    starts.push(constraintDate);
+    finishes.push(constraintDate);
+  });
   if (pendingScheduleChoice?.proposedDates) {
     const proposedStart = dateOnly(pendingScheduleChoice.proposedDates.start);
     const proposedFinish = dateOnly(pendingScheduleChoice.proposedDates.finish);
@@ -976,10 +1040,13 @@ function renderGantt() {
     const isMilestone = !isSummaryIndex(index) && normalizeDurationMinutes(task.durationMinutes, getCalendar().minutesPerDay) === 0;
     const width = isMilestone ? 22 : Math.max(32, duration * dayWidth - 8);
     const isSummary = isSummaryIndex(index);
+    const taskWarnings = getTaskConstraintWarnings(task);
+    const warningTitle = taskWarnings.join(" ");
     const rowClasses = ["planner-row"];
     if (task.percent === 100) rowClasses.push("is-complete");
     if (isSummary) rowClasses.push("is-summary");
     if (isMilestone) rowClasses.push("is-milestone");
+    if (taskWarnings.length) rowClasses.push("has-warning");
     const barClasses = ["gantt-bar"];
     if (task.percent === 100) barClasses.push("is-complete");
     if (isSummary) barClasses.push("is-summary");
@@ -988,10 +1055,21 @@ function renderGantt() {
     const summaryLocked = isSummary ? ' readonly aria-readonly="true"' : "";
     const linkText = task.links.length ? formatLinks(task.links) : "";
     const successorText = formatSuccessorLinks(task.id);
+    const constraintType = normalizeConstraintType(task.constraintType);
+    const constraintDate = normalizeDateValue(task.constraintDate);
+    const deadline = normalizeDateValue(task.deadline);
     const linkPreview = pendingScheduleChoice?.successor?.id === task.id ? pendingScheduleChoice.proposedDates : null;
     const primaryCascadeChange = pendingCascadeChoice?.changes?.[0] || null;
     const cascadePreview = primaryCascadeChange?.id === task.id ? primaryCascadeChange.to : null;
     const pendingPreview = linkPreview || cascadePreview;
+    let deadlineMarkup = "";
+    const deadlineDate = dateOnly(deadline);
+    if (deadlineDate) {
+      const deadlineOffset = Math.max(0, daysBetween(min, deadlineDate) - 1);
+      const deadlineLeft = deadlineOffset * dayWidth + Math.round(dayWidth / 2);
+      const missedDeadline = dateOnly(task.finish) > deadlineDate;
+      deadlineMarkup = `<i class="deadline-marker ${missedDeadline ? "is-missed" : ""}" style="left:${deadlineLeft}px" title="Deadline: ${escapeXml(formatFriendlyDate(deadlineDate))}${missedDeadline ? " · missed" : ""}" aria-hidden="true"></i>`;
+    }
     let ghostMarkup = "";
     if (pendingPreview) {
       const ghostStartOffset = Math.max(0, daysBetween(min, pendingPreview.start) - 1);
@@ -1015,7 +1093,7 @@ function renderGantt() {
         <div class="planner-fields${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
           <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
           <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
-          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
+          <div class="planner-cell name-cell"><div class="task-name-cell" style="--indent:${indent}px">${isSummary ? `<button type="button" class="summary-toggle" data-action="toggle-summary" data-index="${index}" title="${task.expanded === false ? "Expand" : "Collapse"} summary task" aria-label="${task.expanded === false ? "Expand" : "Collapse"} ${escapeXml(task.name)}">${task.expanded === false ? "▸" : "▾"}</button>` : `<span class="summary-toggle-spacer" aria-hidden="true"></span>`}${taskWarnings.length ? `<span class="constraint-warning-badge" title="${escapeXml(warningTitle)}">!</span>` : ""}<input class="name-input" data-field="name" data-index="${index}" value="${escapeXml(task.name)}" /></div></div>
           <div class="planner-cell"><input type="date" data-field="start" data-index="${index}" value="${escapeXml(task.start)}"${summaryLocked} /></div>
           <div class="planner-cell"><input type="date" data-field="finish" data-index="${index}" value="${escapeXml(task.finish)}"${summaryLocked} /></div>
           <div class="planner-cell"><input class="duration-input" data-field="duration" data-index="${index}" value="${escapeXml(formatDuration(task.durationMinutes))}" title="Duration. Examples: 0d milestone, 4h, 3d, 1w"${summaryLocked} /></div>
@@ -1027,11 +1105,15 @@ function renderGantt() {
           </div>
           <div class="planner-cell"><input data-field="predecessors" data-index="${index}" value="${escapeXml(linkText)}" placeholder="none" title="Predecessors: tasks this row waits for. Type 1FS, 2SS, 3FF, 4SF, or add lag/lead like 1FS+2d or 2SS-4h. Pull strings on the Gantt bars for quick links." /></div>
           <div class="planner-cell"><input class="readonly-link-field" value="${escapeXml(successorText)}" placeholder="none" readonly aria-readonly="true" title="Successors: calculated from other rows that list this task as a predecessor. Edit those rows' Pred fields to change this." /></div>
+          <div class="planner-cell"><select class="constraint-select" data-field="constraintType" data-index="${index}" title="Scheduling constraint. Deadlines warn only; constraints can move tasks during Auto schedule.">${renderConstraintOptions(constraintType)}</select></div>
+          <div class="planner-cell"><input type="date" data-field="constraintDate" data-index="${index}" value="${escapeXml(constraintDate)}" title="Constraint date. Used by Must Start On, Must Finish On, Start/Finish No Earlier/Later Than."${constraintNeedsDate(constraintType) ? "" : " disabled"} /></div>
+          <div class="planner-cell"><input type="date" data-field="deadline" data-index="${index}" value="${escapeXml(deadline)}" title="Deadline. Does not move the task; it warns if finish goes past this date." /></div>
           <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
           ${nonWorkingMarkup}
+          ${deadlineMarkup}
           ${ghostMarkup}
           <div class="${barClass}" data-index="${index}" style="left:${left}px;width:${width}px;--done:${task.percent}%" title="Drag to move. Pull edges to resize. Pull a string from S or F to another task string to create SS, SF, FS, or FF automatically. ${escapeXml(task.name)}: ${task.start} to ${task.finish} · ${escapeXml(formatDuration(task.durationMinutes))}">
             <button type="button" class="dependency-port dependency-port-start" data-index="${index}" data-link-endpoint="S" aria-label="Create dependency from the start of ${escapeXml(task.name)}" title="Pull start string"></button>
@@ -1059,6 +1141,8 @@ function validateProject() {
       if (dateOnly(task.start) && !isWorkingDay(task.start)) issues.push(`Task ${task.id} starts on a non-working day. The calendar engine will snap new edits to working days.`);
       if (dateOnly(task.finish) && !isWorkingDay(task.finish)) issues.push(`Task ${task.id} finishes on a non-working day. The calendar engine will snap new edits to working days.`);
     }
+
+    getTaskConstraintWarnings(task).forEach((warning) => issues.push(`Task ${task.id}: ${warning}`));
 
     task.links.forEach((link) => {
       const predId = link.id;
@@ -1153,6 +1237,16 @@ function updateTask(index, field, value) {
 
   if (field === "percent") task.percent = normalizePercent(value);
   else if (field === "outlineLevel") task.outlineLevel = normalizeLevel(value);
+  else if (field === "constraintType") {
+    task.constraintType = normalizeConstraintType(value);
+    if (!constraintNeedsDate(task.constraintType)) task.constraintDate = "";
+  }
+  else if (field === "constraintDate") {
+    task.constraintDate = normalizeDateValue(value);
+  }
+  else if (field === "deadline") {
+    task.deadline = normalizeDateValue(value);
+  }
   else if (field === "predecessors") {
     task.links = parseLinksInput(value, task.id);
     task.predecessors = task.links.map((link) => link.id);
@@ -1190,6 +1284,9 @@ function addTask() {
     outlineLevel: last ? last.outlineLevel : 1,
     isSummary: false,
     expanded: true,
+    constraintType: "ASAP",
+    constraintDate: "",
+    deadline: "",
   });
   render();
 }
@@ -1383,6 +1480,9 @@ function buildProjectXml() {
       <DurationFormat>7</DurationFormat>
       <Work>${minutesToProjectDuration(durationMinutes)}</Work>
       <PercentComplete>${task.percent}</PercentComplete>
+      <ConstraintType>${CONSTRAINT_TO_PROJECT[normalizeConstraintType(task.constraintType)] ?? 0}</ConstraintType>${task.constraintDate ? `
+      <ConstraintDate>${toProjectDate(task.constraintDate)}</ConstraintDate>` : ""}${task.deadline ? `
+      <Deadline>${toProjectDate(task.deadline, true)}</Deadline>` : ""}
       <Milestone>${durationMinutes === 0 ? 1 : 0}</Milestone>
       <Summary>${task.isSummary ? 1 : 0}</Summary>
       <Expanded>${task.expanded === false ? 0 : 1}</Expanded>
@@ -1419,7 +1519,7 @@ function buildProjectXml() {
   <DurationFormat>7</DurationFormat>
   <WorkFormat>2</WorkFormat>
   <EditableActualCosts>0</EditableActualCosts>
-  <HonorConstraints>0</HonorConstraints>
+  <HonorConstraints>1</HonorConstraints>
   <InsertedProjectsLikeSummary>1</InsertedProjectsLikeSummary>
   <MultipleCriticalPaths>0</MultipleCriticalPaths>
   <NewTasksEffortDriven>0</NewTasksEffortDriven>
@@ -1480,6 +1580,9 @@ function importProjectXml(text) {
     const percent = normalizePercent(childText(node, "PercentComplete") || 0);
     const isSummary = childText(node, "Summary") === "1";
     const expanded = childText(node, "Expanded") !== "0";
+    const constraintType = normalizeConstraintType(childText(node, "ConstraintType") || "ASAP");
+    const constraintDate = normalizeDateValue(childText(node, "ConstraintDate").slice(0, 10));
+    const deadline = normalizeDateValue(childText(node, "Deadline").slice(0, 10));
 
     rawTasks.push({
       uid: Number.isFinite(uid) && uid > 0 ? uid : state.nextUid++,
@@ -1497,6 +1600,9 @@ function importProjectXml(text) {
       outlineLevel,
       isSummary,
       expanded,
+      constraintType,
+      constraintDate,
+      deadline,
     });
   });
 
@@ -1841,7 +1947,7 @@ function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "OutlineLevel", "IsSummary", "Expanded"]];
+  const rows = [["ID", "WBS", "Name", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
@@ -1854,6 +1960,9 @@ function exportCsv() {
       task.percent,
       formatLinks(task.links).replaceAll(",", ";"),
       formatSuccessorLinks(task.id).replaceAll(",", ";"),
+      formatConstraintType(task.constraintType),
+      task.constraintDate || "",
+      task.deadline || "",
       task.outlineLevel,
       task.isSummary ? "Yes" : "No",
       task.expanded === false ? "No" : "Yes",
@@ -1900,6 +2009,9 @@ function makeSampleTask(uid, name, startOffset, durationDays, percent, links = [
     predecessors: links.map((link) => link.id),
     links,
     outlineLevel,
+    constraintType: "ASAP",
+    constraintDate: "",
+    deadline: "",
   };
 }
 
@@ -2076,18 +2188,82 @@ function calculateLinkAlignedDates(predecessor, successor, linkOrType) {
     finish = finishFromStartByDuration(start, durationMinutes);
   }
 
-  return {
+  return applyConstraintsToDates(successor, {
     start: toDateInputValue(start),
     finish: toDateInputValue(finish),
     durationDays,
     durationMinutes,
-  };
+  });
 }
 
 function datesAlreadyMatch(task, proposedDates) {
   return proposedDates && task.start === proposedDates.start && task.finish === proposedDates.finish;
 }
 
+
+function applyConstraintsToDates(task, dates = null) {
+  if (!task) return null;
+  const type = normalizeConstraintType(task.constraintType);
+  const constraintDate = dateOnly(task.constraintDate);
+  const deadlineDate = dateOnly(task.deadline);
+  const durationMinutes = normalizeDurationMinutes(dates?.durationMinutes ?? task.durationMinutes, workingSpanMinutes(dates?.start || task.start, dates?.finish || task.finish));
+  let start = dateOnly(dates?.start || task.start || state.projectStart || today);
+  let finish = dateOnly(dates?.finish || task.finish || finishFromStartByDuration(start, durationMinutes));
+  if (!start || !finish) return dates;
+  let constrained = false;
+
+  function setStart(value) {
+    start = nextWorkingDay(value, true);
+    finish = finishFromStartByDuration(start, durationMinutes);
+    constrained = true;
+  }
+
+  function setFinish(value) {
+    finish = previousWorkingDay(value, true);
+    start = startFromFinishByDuration(finish, durationMinutes);
+    constrained = true;
+  }
+
+  if (type === "SNET" && constraintDate && start < constraintDate) setStart(constraintDate);
+  else if (type === "SNLT" && constraintDate && start > constraintDate) setStart(constraintDate);
+  else if (type === "FNET" && constraintDate && finish < constraintDate) setFinish(constraintDate);
+  else if (type === "FNLT" && constraintDate && finish > constraintDate) setFinish(constraintDate);
+  else if (type === "MSO" && constraintDate && toDateInputValue(start) !== toDateInputValue(constraintDate)) setStart(constraintDate);
+  else if (type === "MFO" && constraintDate && toDateInputValue(finish) !== toDateInputValue(constraintDate)) setFinish(constraintDate);
+  else if (type === "ALAP") {
+    const anchor = constraintDate || deadlineDate;
+    if (anchor && finish < anchor) setFinish(anchor);
+  }
+
+  if (!constrained && !dates) return null;
+  return {
+    start: toDateInputValue(start),
+    finish: toDateInputValue(finish),
+    durationDays: durationMinutesToWorkingDays(durationMinutes),
+    durationMinutes,
+  };
+}
+
+function getTaskConstraintWarnings(task) {
+  const warnings = [];
+  if (!task) return warnings;
+  const type = normalizeConstraintType(task.constraintType);
+  const constraintDate = dateOnly(task.constraintDate);
+  const deadlineDate = dateOnly(task.deadline);
+  const start = dateOnly(task.start);
+  const finish = dateOnly(task.finish);
+  if (constraintNeedsDate(type) && !constraintDate) warnings.push(`${formatConstraintType(type)} needs a constraint date.`);
+  if (constraintDate && !isWorkingDay(constraintDate)) warnings.push(`Constraint date ${formatFriendlyDate(constraintDate)} is non-working; scheduling snaps to the nearest working day.`);
+  if (deadlineDate && !isWorkingDay(deadlineDate)) warnings.push(`Deadline ${formatFriendlyDate(deadlineDate)} is non-working.`);
+  if (type === "SNET" && start && constraintDate && start < constraintDate) warnings.push(`Starts before its ${formatConstraintType(type)} date (${formatFriendlyDate(constraintDate)}).`);
+  if (type === "SNLT" && start && constraintDate && start > constraintDate) warnings.push(`Starts after its ${formatConstraintType(type)} date (${formatFriendlyDate(constraintDate)}).`);
+  if (type === "FNET" && finish && constraintDate && finish < constraintDate) warnings.push(`Finishes before its ${formatConstraintType(type)} date (${formatFriendlyDate(constraintDate)}).`);
+  if (type === "FNLT" && finish && constraintDate && finish > constraintDate) warnings.push(`Finishes after its ${formatConstraintType(type)} date (${formatFriendlyDate(constraintDate)}).`);
+  if (type === "MSO" && start && constraintDate && toDateInputValue(start) !== toDateInputValue(constraintDate)) warnings.push(`Must start on ${formatFriendlyDate(constraintDate)}.`);
+  if (type === "MFO" && finish && constraintDate && toDateInputValue(finish) !== toDateInputValue(constraintDate)) warnings.push(`Must finish on ${formatFriendlyDate(constraintDate)}.`);
+  if (deadlineDate && finish && finish > deadlineDate) warnings.push(`Misses deadline ${formatFriendlyDate(deadlineDate)}.`);
+  return warnings;
+}
 
 function latestDate(dates) {
   const valid = dates.filter(Boolean).map((date) => dateOnly(date)).filter(Boolean);
@@ -2097,7 +2273,7 @@ function latestDate(dates) {
 
 function calculateTaskDatesFromLinks(task, byId) {
   const links = getTaskLinks(task);
-  if (!links.length) return null;
+  if (!links.length) return applyConstraintsToDates(task, null);
 
   const durationMinutes = normalizeDurationMinutes(task.durationMinutes, workingSpanMinutes(task.start, task.finish));
   const startRequirements = [];
@@ -2124,12 +2300,12 @@ function calculateTaskDatesFromLinks(task, byId) {
   const desiredStart = latestDate([latestStartRequirement, finishDrivenStart]) || dateOnly(task.start) || dateOnly(state.projectStart) || dateOnly(today);
   const desiredFinish = finishFromStartByDuration(desiredStart, durationMinutes);
 
-  return {
+  return applyConstraintsToDates(task, {
     start: toDateInputValue(desiredStart),
     finish: toDateInputValue(desiredFinish),
     durationDays: durationMinutesToWorkingDays(durationMinutes),
     durationMinutes,
-  };
+  });
 }
 
 function applyDatesToTask(task, dates) {
@@ -2853,7 +3029,7 @@ window.addEventListener("resize", applyUiPrefs);
 
 els.taskBody.addEventListener("change", (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
   const index = Number(target.dataset.index);
   const field = target.dataset.field;
   if (field) updateTask(index, field, target.value);

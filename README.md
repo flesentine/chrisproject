@@ -139,3 +139,30 @@ Supported lag/lead units:
 - `w` working weeks
 
 Positive values are lag. Negative values are lead. Auto Schedule and cascade scheduling both honor lag/lead and still use the project calendar, so weekends and holidays are skipped. The successor column is calculated from the predecessor links and includes lag/lead too.
+
+## Constraints and deadlines
+
+This build adds a first Project-style constraint engine:
+
+- **As Soon As Possible** — default, no constraint date needed.
+- **As Late As Possible** — if a deadline or constraint date exists, schedules as late as that anchor allows.
+- **Must Start On** — locks the task start to the constraint date.
+- **Must Finish On** — locks the task finish to the constraint date.
+- **Start No Earlier Than** — prevents auto-schedule from pulling the start before the constraint date.
+- **Start No Later Than** — warns/pulls toward the latest allowed start date.
+- **Finish No Earlier Than** — prevents auto-schedule from pulling the finish before the constraint date.
+- **Finish No Later Than** — warns/pulls toward the latest allowed finish date.
+- **Deadline** — shows a dashed deadline marker on the Gantt and warns if the task finishes late. It does not move the task by itself.
+
+Project XML import/export now preserves `<ConstraintType>`, `<ConstraintDate>`, `<Deadline>`, and sets `<HonorConstraints>1</HonorConstraints>`.
+
+Good quick test:
+
+```text
+Task 2 Pred = 1FS+2d
+Task 2 Constraint = Start No Earlier Than
+Task 2 Constraint Date = a later working day
+Click Auto Schedule
+```
+
+Task 2 should move to satisfy both the dependency and the constraint. If a dependency and a hard constraint fight, the validation panel calls it out instead of silently hiding the problem.
