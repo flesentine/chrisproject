@@ -42,7 +42,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.25.0";
+  const STITCH_VERSION = "v0.25.1";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
@@ -71,6 +71,7 @@
     document.body.classList.add("projecthub-stitch-theme");
     loadCssOnce("stitchThemeCss", `stitch-theme.css?${STITCH_VERSION}`);
     loadCssOnce("stitchCanvasCss", `stitch-canvas.css?${STITCH_VERSION}`);
+    loadCssOnce("stitchCanvasFixCss", `stitch-canvas-fix.css?${STITCH_VERSION}`);
     loadScriptOnce("stitchCanvasJs", `stitch-canvas.js?${STITCH_VERSION}`);
   }
 
