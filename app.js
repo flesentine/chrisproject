@@ -67,6 +67,8 @@ const els = {
   newProjectBtn: document.getElementById("newProjectBtn"),
   sampleBtn: document.getElementById("sampleBtn"),
   addTaskBtn: document.getElementById("addTaskBtn"),
+  indentTaskBtn: document.getElementById("indentTaskBtn"),
+  outdentTaskBtn: document.getElementById("outdentTaskBtn"),
   autoScheduleBtn: document.getElementById("autoScheduleBtn"),
   workingDaysInput: document.getElementById("workingDaysInput"),
   holidayInput: document.getElementById("holidayInput"),
@@ -130,6 +132,7 @@ let activeDependencyDrag = null;
 let pendingDependencyChoice = null;
 let pendingScheduleChoice = null;
 let pendingCascadeChoice = null;
+let selectedTaskIndex = null;
 let lastMppFileName = null;
 let lastMppResult = null;
 let fileDragDepth = 0;
@@ -746,6 +749,7 @@ function childrenByName(node, localName) {
 }
 
 function ensureDecorations() {
+  repairOutlineHierarchy();
   const counters = [];
   state.tasks.forEach((task, index) => {
     task.id = index + 1;
@@ -859,6 +863,87 @@ function getVisibleTaskRows() {
     .map((task, index) => ({ task, index }))
     .filter((row) => !isHiddenByCollapsedParent(row.index));
 }
+
+function clampSelectedTaskIndex() {
+  if (!state.tasks.length) {
+    selectedTaskIndex = null;
+    return;
+  }
+  if (!Number.isInteger(selectedTaskIndex) || selectedTaskIndex < 0 || selectedTaskIndex >= state.tasks.length) {
+    selectedTaskIndex = 0;
+  }
+}
+
+function selectTask(index) {
+  const numeric = Number(index);
+  if (!Number.isInteger(numeric) || numeric < 0 || numeric >= state.tasks.length) return;
+  selectedTaskIndex = numeric;
+}
+
+function getSelectedTaskIndex() {
+  clampSelectedTaskIndex();
+  return selectedTaskIndex;
+}
+
+function getSubtreeIndexes(rootIndex) {
+  const root = state.tasks[rootIndex];
+  if (!root) return [];
+  const rootLevel = normalizeLevel(root.outlineLevel);
+  const indexes = [rootIndex];
+  for (let i = rootIndex + 1; i < state.tasks.length; i += 1) {
+    const level = normalizeLevel(state.tasks[i].outlineLevel);
+    if (level <= rootLevel) break;
+    indexes.push(i);
+  }
+  return indexes;
+}
+
+function shiftOutlineSubtree(rootIndex, delta) {
+  const indexes = getSubtreeIndexes(rootIndex);
+  indexes.forEach((index) => {
+    const task = state.tasks[index];
+    task.outlineLevel = normalizeLevel((task.outlineLevel || 1) + delta);
+  });
+}
+
+function repairOutlineHierarchy() {
+  let previousLevel = 1;
+  state.tasks.forEach((task, index) => {
+    let level = normalizeLevel(task.outlineLevel);
+    if (index === 0) level = 1;
+    level = Math.min(level, previousLevel + 1);
+    task.outlineLevel = normalizeLevel(level);
+    previousLevel = task.outlineLevel;
+  });
+}
+
+function indentSelectedTask() {
+  const index = getSelectedTaskIndex();
+  if (index == null || index <= 0) return;
+  const task = state.tasks[index];
+  const previous = state.tasks[index - 1];
+  if (!task || !previous) return;
+  const currentLevel = normalizeLevel(task.outlineLevel);
+  const previousLevel = normalizeLevel(previous.outlineLevel);
+  const maxAllowed = Math.min(10, previousLevel + 1);
+  if (currentLevel >= maxAllowed) return;
+  shiftOutlineSubtree(index, 1);
+  previous.expanded = true;
+  repairOutlineHierarchy();
+  render();
+}
+
+function outdentSelectedTask() {
+  const index = getSelectedTaskIndex();
+  const task = state.tasks[index];
+  if (!task) return;
+  const currentLevel = normalizeLevel(task.outlineLevel);
+  if (currentLevel <= 1) return;
+  shiftOutlineSubtree(index, -1);
+  repairOutlineHierarchy();
+  render();
+}
+
 
 function save() {
   ensureDecorations();
@@ -1047,6 +1132,7 @@ function renderGantt() {
     if (isSummary) rowClasses.push("is-summary");
     if (isMilestone) rowClasses.push("is-milestone");
     if (taskWarnings.length) rowClasses.push("has-warning");
+    if (selectedTaskIndex === index) rowClasses.push("is-selected");
     const barClasses = ["gantt-bar"];
     if (task.percent === 100) barClasses.push("is-complete");
     if (isSummary) barClasses.push("is-summary");
@@ -1089,7 +1175,7 @@ function renderGantt() {
     }
     const indent = Math.max(0, task.outlineLevel - 1) * 18;
     return `
-      <div class="${rowClasses.join(" ")}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
+      <div class="${rowClasses.join(" ")}" data-row-index="${index}" style="--row-height:${rowHeight}px;width:${totalWidth}px">
         <div class="planner-fields${fieldClipClass}" style="width:${leftPaneWidth}px;grid-template-columns:${fieldGridTemplate}">
           <div class="planner-cell"><span class="id-pill">${task.id}</span></div>
           <div class="planner-cell muted-cell">${escapeXml(task.wbs)}</div>
@@ -1108,7 +1194,7 @@ function renderGantt() {
           <div class="planner-cell"><select class="constraint-select" data-field="constraintType" data-index="${index}" title="Scheduling constraint. Deadlines warn only; constraints can move tasks during Auto schedule.">${renderConstraintOptions(constraintType)}</select></div>
           <div class="planner-cell"><input type="date" data-field="constraintDate" data-index="${index}" value="${escapeXml(constraintDate)}" title="Constraint date. Used by Must Start On, Must Finish On, Start/Finish No Earlier/Later Than."${constraintNeedsDate(constraintType) ? "" : " disabled"} /></div>
           <div class="planner-cell"><input type="date" data-field="deadline" data-index="${index}" value="${escapeXml(deadline)}" title="Deadline. Does not move the task; it warns if finish goes past this date." /></div>
-          <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" /></div>
+          <div class="planner-cell"><input type="number" min="1" max="10" data-field="outlineLevel" data-index="${index}" value="${task.outlineLevel}" aria-label="Outline level" title="Outline level / WBS depth. Use Indent/Outdent buttons or Cmd/Ctrl+[ and Cmd/Ctrl+] for safer WBS editing." /></div>
           <div class="planner-cell action-cell"><button type="button" class="delete-btn" data-action="delete" data-index="${index}" title="Delete task" aria-label="Delete task">×</button></div>
         </div>
         <div class="gantt-row" style="width:${chartWidthPx}px;--row-height:${rowHeight}px;--bar-height:${barHeight}px;--bar-top:${barTop}px;background-size:${dayWidth}px ${rowHeight}px">
@@ -1230,6 +1316,8 @@ function updateTask(index, field, value) {
   const task = state.tasks[index];
   if (!task) return;
 
+  selectTask(index);
+
   if (task.isSummary && ["start", "finish", "percent", "duration"].includes(field)) {
     render();
     return;
@@ -1271,6 +1359,7 @@ function updateTask(index, field, value) {
 function addTask() {
   const last = state.tasks[state.tasks.length - 1];
   const start = toDateInputValue(last ? addWorkingDaysAfter(last.finish, 1) : nextWorkingDay(state.projectStart, true));
+  const newIndex = state.tasks.length;
   state.tasks.push({
     uid: state.nextUid++,
     name: `New Task ${state.tasks.length + 1}`,
@@ -1288,12 +1377,15 @@ function addTask() {
     constraintDate: "",
     deadline: "",
   });
+  selectedTaskIndex = newIndex;
   render();
 }
 
 function deleteTask(index) {
   const deletedId = state.tasks[index]?.id;
   state.tasks.splice(index, 1);
+  if (selectedTaskIndex === index) selectedTaskIndex = Math.min(index, state.tasks.length - 1);
+  else if (selectedTaskIndex > index) selectedTaskIndex -= 1;
   state.tasks.forEach((task) => {
     task.links = normalizeTaskLinks(task)
       .filter((link) => link.id !== deletedId)
@@ -3027,15 +3119,27 @@ els.dayWidthControl?.addEventListener("input", (event) => handleUiRangeChange("d
 els.rowHeightControl?.addEventListener("input", (event) => handleUiRangeChange("rowHeight", event.target.value));
 window.addEventListener("resize", applyUiPrefs);
 
+
+els.taskBody.addEventListener("focusin", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const row = target.closest(".planner-row[data-row-index]");
+  if (row) selectTask(Number(row.dataset.rowIndex));
+});
+
 els.taskBody.addEventListener("change", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
   const index = Number(target.dataset.index);
+  selectTask(index);
   const field = target.dataset.field;
   if (field) updateTask(index, field, target.value);
 });
 
 els.taskBody.addEventListener("click", (event) => {
+  const row = event.target.closest(".planner-row[data-row-index]");
+  if (row) selectTask(Number(row.dataset.rowIndex));
+
   const toggle = event.target.closest("button[data-action='toggle-summary']");
   if (toggle) {
     const task = state.tasks[Number(toggle.dataset.index)];
@@ -3088,6 +3192,8 @@ els.newProjectBtn.addEventListener("click", () => {
 
 els.sampleBtn.addEventListener("click", () => loadSample(true));
 els.addTaskBtn.addEventListener("click", addTask);
+els.indentTaskBtn?.addEventListener("click", indentSelectedTask);
+els.outdentTaskBtn?.addEventListener("click", outdentSelectedTask);
 els.autoScheduleBtn.addEventListener("click", autoSchedule);
 els.exportXmlBtn.addEventListener("click", () => downloadText(buildProjectXml(), `${safeFileName(state.projectName)}.xml`, "application/xml"));
 els.exportCsvBtn.addEventListener("click", exportCsv);
@@ -3182,6 +3288,29 @@ els.dependencyModal?.addEventListener("click", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
+  const isMacShortcut = event.metaKey && !event.ctrlKey;
+  const isPcShortcut = event.ctrlKey && !event.metaKey;
+  if ((isMacShortcut || isPcShortcut) && event.key === "]") {
+    event.preventDefault();
+    indentSelectedTask();
+    return;
+  }
+  if ((isMacShortcut || isPcShortcut) && event.key === "[") {
+    event.preventDefault();
+    outdentSelectedTask();
+    return;
+  }
+  if (event.altKey && event.shiftKey && event.key === "ArrowRight") {
+    event.preventDefault();
+    indentSelectedTask();
+    return;
+  }
+  if (event.altKey && event.shiftKey && event.key === "ArrowLeft") {
+    event.preventDefault();
+    outdentSelectedTask();
+    return;
+  }
+
   if (event.key === "Escape" && pendingCascadeChoice) {
     finishCascadeImpactChoice("keep");
     return;

@@ -140,29 +140,18 @@ Supported lag/lead units:
 
 Positive values are lag. Negative values are lead. Auto Schedule and cascade scheduling both honor lag/lead and still use the project calendar, so weekends and holidays are skipped. The successor column is calculated from the predecessor links and includes lag/lead too.
 
-## Constraints and deadlines
 
-This build adds a first Project-style constraint engine:
+## WBS editing / indent-outdent
 
-- **As Soon As Possible** — default, no constraint date needed.
-- **As Late As Possible** — if a deadline or constraint date exists, schedules as late as that anchor allows.
-- **Must Start On** — locks the task start to the constraint date.
-- **Must Finish On** — locks the task finish to the constraint date.
-- **Start No Earlier Than** — prevents auto-schedule from pulling the start before the constraint date.
-- **Start No Later Than** — warns/pulls toward the latest allowed start date.
-- **Finish No Earlier Than** — prevents auto-schedule from pulling the finish before the constraint date.
-- **Finish No Later Than** — warns/pulls toward the latest allowed finish date.
-- **Deadline** — shows a dashed deadline marker on the Gantt and warns if the task finishes late. It does not move the task by itself.
+This build adds MS Project-style outline editing:
 
-Project XML import/export now preserves `<ConstraintType>`, `<ConstraintDate>`, `<Deadline>`, and sets `<HonorConstraints>1</HonorConstraints>`.
+- Select a task row, then use **Indent** or **Outdent** in the Plan toolbar.
+- Keyboard shortcuts: **Cmd/Ctrl + ]** to indent, **Cmd/Ctrl + [** to outdent.
+- **Alt + Shift + Right/Left** also works.
+- Indenting a task makes it a child of the task above it.
+- Outdenting moves the selected task and its children up one outline level.
+- WBS numbers are regenerated automatically.
+- Parent/summary rows are created automatically when a task gains children.
+- Summary dates, duration, and percent complete continue to roll up from children.
 
-Good quick test:
-
-```text
-Task 2 Pred = 1FS+2d
-Task 2 Constraint = Start No Earlier Than
-Task 2 Constraint Date = a later working day
-Click Auto Schedule
-```
-
-Task 2 should move to satisfy both the dependency and the constraint. If a dependency and a hard constraint fight, the validation panel calls it out instead of silently hiding the problem.
+This keeps the editable task structure aligned with imported MPP nesting and exported MSPDI XML outline data.

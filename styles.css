@@ -3311,3 +3311,23 @@ body.has-cascade-suggestion .gantt-ghost-bar {
 .field-heading-cell[data-column-key="deadline"] > span {
   text-overflow: clip;
 }
+
+/* WBS editing controls ------------------------------------------------------ */
+.planner-row.is-selected {
+  background: #eef6ff;
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.planner-row.is-selected .planner-fields {
+  background: #eef6ff;
+}
+
+.task-name-cell {
+  padding-left: var(--indent, 0px);
+  width: 100%;
+}
+
+.command-group button#indentTaskBtn,
+.command-group button#outdentTaskBtn {
+  white-space: nowrap;
+}
