@@ -1,6 +1,17 @@
-# Chris's Discount Project Maker — v0.22.0
+# Chris's Discount Project Maker — v0.23.0
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
+
+## v0.23.0 changes
+
+- Added Progress / actuals tracking as the next MS Project-style build slice.
+- Adds Actual Start, Actual Finish, Actual Duration, Remaining Duration, % Work Complete, and Status Date.
+- Polishes % Complete display with task-sheet chips and Gantt progress labels.
+- Shows progress fill directly on Gantt bars, including remaining-duration labels for in-progress work.
+- Rolls summary progress up from child leaf tasks, including actual dates, actual duration, remaining duration, and % work complete.
+- Flags tasks that are late or early against the saved baseline with row/bar warnings and indicators.
+- Project XML export now writes StatusDate and task actual fields; Project XML import reads them back.
+- CSV export is now an actuals-focused export with baseline variance and late/early warning columns.
 
 ## v0.22.0 changes
 
@@ -15,4 +26,4 @@ Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
 ## Use
 
-Open `index.html` locally or host the folder on GitHub Pages. Use Project → Set Baseline after your plan is approved, then move tasks to see variance and ghost bars.
+Open `index.html` locally or host the folder on GitHub Pages. Use Project → Set Baseline after your plan is approved, then update Task Information → Progress as work happens. The Gantt chart will show partial completion, remaining work, and late/early warnings against the baseline.
