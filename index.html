@@ -14,7 +14,7 @@
           <img src="chris-avatar.png" alt="" />
         </div>
         <div>
-          <div class="brand-meta-line"><p class="eyebrow">MS Project XML compatible</p><span id="appVersionBadge" class="version-badge">v0.15.0</span></div>
+          <p class="eyebrow">MS Project XML compatible</p>
           <h1>Chris's Discount Project Maker</h1>
         </div>
       </div>
@@ -42,7 +42,7 @@
         <aside class="readiness-card" id="readinessCard" aria-label="Export readiness">
           <span class="readiness-label">Export readiness</span>
           <strong id="exportStatus">Ready</strong>
-          <p>Supported: XML tasks, working-day dates, editable duration, weighted summary rollups, percent complete, WBS, outline level, constraints, deadlines, and FS/SS/FF/SF dependency links with lag/lead. MPP gets a local best-effort converter with an XML fallback guide.</p>
+          <p>Supported: XML tasks, dates, duration, percent complete, WBS, outline level, and FS/SS/FF/SF dependency links. MPP gets a local best-effort converter with an XML fallback guide.</p>
         </aside>
       </section>
 
@@ -75,6 +75,9 @@
           <button id="newProjectBtn" type="button">New</button>
           <button id="sampleBtn" type="button">Load sample</button>
           <button id="addTaskBtn" type="button" class="primary">+ Add task</button>
+          <button id="taskInfoBtn" type="button">Task info</button>
+          <button id="indentTaskBtn" type="button" title="Indent selected task">Indent →</button>
+          <button id="outdentTaskBtn" type="button" title="Outdent selected task">← Outdent</button>
         </div>
         <div class="command-group">
           <span class="group-label">Schedule</span>
@@ -146,7 +149,7 @@
 
     <footer class="app-footer">
       <span>Compatibility target: Microsoft Project XML / MSPDI. MPP conversion runs locally in the browser as best-effort; XML remains the reliable round-trip format.</span>
-      <span class="footer-status"><span id="appVersionFooter">v0.15.0</span><span id="saveStatus">Saved locally</span></span>
+      <span id="saveStatus">Saved locally</span>
     </footer>
   </div>
 
@@ -186,6 +189,117 @@
         </button>
       </div>
       <p class="dependency-tip">No typing needed. Connector-to-connector dragging chooses FS, SS, FF, or SF for you.</p>
+    </section>
+  </div>
+
+
+  <div id="taskInfoModal" class="task-info-modal" hidden>
+    <div class="task-info-backdrop" data-task-info-action="close"></div>
+    <section class="task-info-panel" role="dialog" aria-modal="true" aria-labelledby="taskInfoTitle" aria-describedby="taskInfoMeta">
+      <header class="task-info-header">
+        <div>
+          <p class="eyebrow">Task Information</p>
+          <h2 id="taskInfoTitle">Task</h2>
+          <p id="taskInfoMeta" class="task-info-meta">Select a task to inspect details.</p>
+        </div>
+        <button id="taskInfoCloseBtn" class="dependency-close" type="button" data-task-info-action="close" aria-label="Close task information">×</button>
+      </header>
+
+      <form id="taskInfoForm" class="task-info-form">
+        <p id="tiRollupNotice" class="task-info-notice" hidden></p>
+
+        <fieldset>
+          <legend>General</legend>
+          <label class="wide-field">
+            Task name
+            <input id="tiName" type="text" />
+          </label>
+          <div class="task-info-grid">
+            <label>
+              Start
+              <input id="tiStart" type="date" />
+            </label>
+            <label>
+              Finish
+              <input id="tiFinish" type="date" />
+            </label>
+            <label>
+              Duration
+              <input id="tiDuration" type="text" placeholder="3d, 4h, 1w, 0d" />
+            </label>
+            <label>
+              % Complete
+              <input id="tiPercent" type="number" min="0" max="100" />
+            </label>
+          </div>
+          <label class="checkbox-line">
+            <input id="tiMilestone" type="checkbox" />
+            Milestone / zero-duration task
+          </label>
+          <label class="wide-field">
+            Notes
+            <textarea id="tiNotes" rows="4" placeholder="Task notes, assumptions, handoff details, risks..."></textarea>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Dependencies</legend>
+          <label class="wide-field">
+            Predecessors
+            <input id="tiPredecessors" type="text" placeholder="1FS, 2SS+2d, 3FF-4h" />
+          </label>
+          <label class="wide-field">
+            Successors
+            <input id="tiSuccessors" type="text" readonly aria-readonly="true" placeholder="none" />
+          </label>
+          <p class="task-info-help">Predecessors are editable here. Successors are calculated from other tasks that point to this one.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Advanced scheduling</legend>
+          <div class="task-info-grid">
+            <label>
+              Constraint
+              <select id="tiConstraintType"></select>
+            </label>
+            <label>
+              Constraint date
+              <input id="tiConstraintDate" type="date" />
+            </label>
+            <label>
+              Deadline
+              <input id="tiDeadline" type="date" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Structure</legend>
+          <div class="task-info-grid">
+            <label>
+              WBS
+              <input id="tiWbs" type="text" readonly aria-readonly="true" />
+            </label>
+            <label>
+              Outline level
+              <input id="tiOutlineLevel" type="number" readonly aria-readonly="true" />
+            </label>
+            <label class="wide-field">
+              Parent
+              <input id="tiParent" type="text" readonly aria-readonly="true" />
+            </label>
+            <label class="wide-field">
+              Summary / rollup
+              <input id="tiSummary" type="text" readonly aria-readonly="true" />
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="task-info-actions">
+          <button id="taskInfoCancelBtn" type="button" data-task-info-action="close">Cancel</button>
+          <button id="taskInfoSaveBtn" type="submit" class="primary" data-task-info-action="save">Save task info</button>
+        </div>
+      </form>
     </section>
   </div>
 

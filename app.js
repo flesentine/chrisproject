@@ -1,7 +1,7 @@
 const STORAGE_KEY = "projectxml-planner-v1";
 const UI_PREFS_KEY = "chris-discount-project-maker-ui-v2";
-const APP_VERSION = "v0.15.0";
-const APP_VERSION_NAME = "Summary Rollup v2 + version badge";
+const APP_VERSION = "v0.16.0";
+const APP_VERSION_NAME = "Task Information panel";
 const APP_BUILD_DATE = "2026-06-23";
 const MS_PROJECT_NS = "http://schemas.microsoft.com/project";
 const MS_PROJECT_SCHEMA_LOCATION = "http://schemas.microsoft.com/project http://schemas.microsoft.com/project/2007/mspdi_pj12.xsd";
@@ -72,6 +72,7 @@ const els = {
   newProjectBtn: document.getElementById("newProjectBtn"),
   sampleBtn: document.getElementById("sampleBtn"),
   addTaskBtn: document.getElementById("addTaskBtn"),
+  taskInfoBtn: document.getElementById("taskInfoBtn"),
   indentTaskBtn: document.getElementById("indentTaskBtn"),
   outdentTaskBtn: document.getElementById("outdentTaskBtn"),
   autoScheduleBtn: document.getElementById("autoScheduleBtn"),
@@ -105,6 +106,30 @@ const els = {
   scheduleLinkTitle: document.getElementById("scheduleLinkTitle"),
   scheduleLinkCopy: document.getElementById("scheduleLinkCopy"),
   scheduleLinkPreview: document.getElementById("scheduleLinkPreview"),
+  taskInfoModal: document.getElementById("taskInfoModal"),
+  taskInfoTitle: document.getElementById("taskInfoTitle"),
+  taskInfoMeta: document.getElementById("taskInfoMeta"),
+  taskInfoForm: document.getElementById("taskInfoForm"),
+  taskInfoCloseBtn: document.getElementById("taskInfoCloseBtn"),
+  taskInfoCancelBtn: document.getElementById("taskInfoCancelBtn"),
+  taskInfoSaveBtn: document.getElementById("taskInfoSaveBtn"),
+  tiName: document.getElementById("tiName"),
+  tiStart: document.getElementById("tiStart"),
+  tiFinish: document.getElementById("tiFinish"),
+  tiDuration: document.getElementById("tiDuration"),
+  tiPercent: document.getElementById("tiPercent"),
+  tiMilestone: document.getElementById("tiMilestone"),
+  tiNotes: document.getElementById("tiNotes"),
+  tiPredecessors: document.getElementById("tiPredecessors"),
+  tiSuccessors: document.getElementById("tiSuccessors"),
+  tiConstraintType: document.getElementById("tiConstraintType"),
+  tiConstraintDate: document.getElementById("tiConstraintDate"),
+  tiDeadline: document.getElementById("tiDeadline"),
+  tiWbs: document.getElementById("tiWbs"),
+  tiOutlineLevel: document.getElementById("tiOutlineLevel"),
+  tiParent: document.getElementById("tiParent"),
+  tiSummary: document.getElementById("tiSummary"),
+  tiRollupNotice: document.getElementById("tiRollupNotice"),
   linkSuggestion: document.getElementById("linkSuggestion"),
   cascadeSuggestion: document.getElementById("cascadeSuggestion"),
   linkDragLayer: document.getElementById("linkDragLayer"),
@@ -138,6 +163,7 @@ let pendingDependencyChoice = null;
 let pendingScheduleChoice = null;
 let pendingCascadeChoice = null;
 let selectedTaskIndex = null;
+let taskInfoIndex = null;
 let lastMppFileName = null;
 let lastMppResult = null;
 let fileDragDepth = 0;
@@ -760,6 +786,7 @@ function ensureDecorations() {
     task.id = index + 1;
     task.outlineLevel = normalizeLevel(task.outlineLevel);
     task.name = task.name || `Task ${index + 1}`;
+    task.notes = task.notes || "";
     task.start = task.start || state.projectStart || today;
     const spanMinutes = dateOnly(task.start) && dateOnly(task.finish) ? workingSpanMinutes(task.start, task.finish) : null;
     const legacyMinutes = Number.isFinite(Number(task.durationDays)) ? Math.max(0, Number(task.durationDays)) * getCalendar().minutesPerDay : spanMinutes;
@@ -1030,6 +1057,7 @@ function render() {
   renderValidation();
   renderScheduleLinkSuggestion();
   renderCascadeImpactSuggestion();
+  refreshTaskInfoPanel();
   save();
 }
 
@@ -1267,6 +1295,141 @@ function renderGantt() {
       </div>`;
   }).join("");
 }
+
+function getParentTaskLabel(index) {
+  const task = state.tasks[index];
+  if (!task) return "None";
+  const level = normalizeLevel(task.outlineLevel);
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const candidate = state.tasks[i];
+    if (normalizeLevel(candidate?.outlineLevel) < level) {
+      return `${candidate.id} · ${candidate.name}`;
+    }
+  }
+  return "None";
+}
+
+function getTaskInfoSummaryLabel(index) {
+  const task = state.tasks[index];
+  if (!task) return "No task selected";
+  if (!isSummaryIndex(index)) return "No — regular task";
+  const children = task.rollupChildCount || getDirectChildIndexes(index).length;
+  const leaves = task.rollupLeafCount || getRollupLeafTasks(index).length;
+  return `Yes — ${children} direct child${children === 1 ? "" : "ren"}, ${leaves} leaf task${leaves === 1 ? "" : "s"}`;
+}
+
+function openTaskInfo(index = getSelectedTaskIndex()) {
+  const numeric = Number(index);
+  if (!Number.isInteger(numeric) || numeric < 0 || numeric >= state.tasks.length) return;
+  taskInfoIndex = numeric;
+  selectTask(numeric);
+  ensureDecorations();
+  rollupSummaryTasks();
+  refreshTaskInfoPanel(true);
+  if (els.taskInfoModal) els.taskInfoModal.hidden = false;
+  setTimeout(() => els.tiName?.focus(), 0);
+  renderGantt();
+}
+
+function closeTaskInfo() {
+  taskInfoIndex = null;
+  if (els.taskInfoModal) els.taskInfoModal.hidden = true;
+}
+
+function refreshTaskInfoPanel(force = false) {
+  if (!els.taskInfoModal || els.taskInfoModal.hidden && !force) return;
+  if (!Number.isInteger(taskInfoIndex) || taskInfoIndex < 0 || taskInfoIndex >= state.tasks.length) {
+    closeTaskInfo();
+    return;
+  }
+  const task = state.tasks[taskInfoIndex];
+  const isSummary = isSummaryIndex(taskInfoIndex);
+  const durationText = formatDuration(task.durationMinutes);
+  const linksText = formatLinks(task.links || []);
+  const successorsText = formatSuccessorLinks(task.id);
+  const constraintType = normalizeConstraintType(task.constraintType);
+
+  if (els.taskInfoTitle) els.taskInfoTitle.textContent = `Task ${task.id}: ${task.name}`;
+  if (els.taskInfoMeta) els.taskInfoMeta.textContent = `${task.wbs || "—"} · ${formatFriendlyDate(task.start)} → ${formatFriendlyDate(task.finish)} · ${durationText}`;
+  if (els.tiName) els.tiName.value = task.name || "";
+  if (els.tiStart) els.tiStart.value = normalizeDateValue(task.start);
+  if (els.tiFinish) els.tiFinish.value = normalizeDateValue(task.finish);
+  if (els.tiDuration) els.tiDuration.value = durationText;
+  if (els.tiPercent) els.tiPercent.value = normalizePercent(task.percent);
+  if (els.tiMilestone) els.tiMilestone.checked = normalizeDurationMinutes(task.durationMinutes, 0) === 0;
+  if (els.tiNotes) els.tiNotes.value = task.notes || "";
+  if (els.tiPredecessors) els.tiPredecessors.value = linksText;
+  if (els.tiSuccessors) els.tiSuccessors.value = successorsText;
+  if (els.tiConstraintType) els.tiConstraintType.innerHTML = renderConstraintOptions(constraintType);
+  if (els.tiConstraintDate) {
+    els.tiConstraintDate.value = normalizeDateValue(task.constraintDate);
+    els.tiConstraintDate.disabled = !constraintNeedsDate(constraintType);
+  }
+  if (els.tiDeadline) els.tiDeadline.value = normalizeDateValue(task.deadline);
+  if (els.tiWbs) els.tiWbs.value = task.wbs || "";
+  if (els.tiOutlineLevel) els.tiOutlineLevel.value = normalizeLevel(task.outlineLevel);
+  if (els.tiParent) els.tiParent.value = getParentTaskLabel(taskInfoIndex);
+  if (els.tiSummary) els.tiSummary.value = getTaskInfoSummaryLabel(taskInfoIndex);
+  if (els.tiRollupNotice) {
+    els.tiRollupNotice.hidden = !isSummary;
+    els.tiRollupNotice.textContent = isSummary
+      ? "Summary task dates, duration, and percent complete are rollups from children. Edit the child tasks to change those values."
+      : "";
+  }
+
+  [els.tiStart, els.tiFinish, els.tiDuration, els.tiPercent, els.tiMilestone].forEach((field) => {
+    if (field) field.disabled = isSummary;
+  });
+}
+
+function applyTaskInfoForm() {
+  if (!Number.isInteger(taskInfoIndex) || taskInfoIndex < 0 || taskInfoIndex >= state.tasks.length) return;
+  const task = state.tasks[taskInfoIndex];
+  const isSummary = isSummaryIndex(taskInfoIndex);
+  const oldStart = normalizeDateValue(task.start);
+  const oldFinish = normalizeDateValue(task.finish);
+  const oldDurationText = formatDuration(task.durationMinutes);
+  const wasMilestone = normalizeDurationMinutes(task.durationMinutes, 0) === 0;
+
+  task.name = (els.tiName?.value || "").trim() || `Task ${task.id}`;
+  task.notes = els.tiNotes?.value || "";
+  task.links = parseLinksInput(els.tiPredecessors?.value || "", task.id);
+  task.predecessors = task.links.map((link) => link.id);
+  task.constraintType = normalizeConstraintType(els.tiConstraintType?.value || task.constraintType);
+  task.constraintDate = constraintNeedsDate(task.constraintType) ? normalizeDateValue(els.tiConstraintDate?.value) : "";
+  task.deadline = normalizeDateValue(els.tiDeadline?.value);
+
+  if (!isSummary) {
+    const newStart = normalizeDateValue(els.tiStart?.value) || oldStart || state.projectStart || today;
+    const newFinish = normalizeDateValue(els.tiFinish?.value) || oldFinish || newStart;
+    const durationText = (els.tiDuration?.value || oldDurationText).trim();
+    const durationChanged = durationText !== oldDurationText;
+    const milestoneChecked = Boolean(els.tiMilestone?.checked);
+    const milestoneChanged = milestoneChecked !== wasMilestone;
+    const startChanged = newStart !== oldStart;
+    const finishChanged = newFinish !== oldFinish;
+
+    if (durationChanged || milestoneChanged) {
+      const minutes = milestoneChecked ? 0 : parseDurationInput(durationText, task.durationMinutes || getCalendar().minutesPerDay);
+      setTaskStartKeepDuration(task, newStart, minutes);
+    } else if (startChanged && !finishChanged) {
+      setTaskStartKeepDuration(task, newStart, task.durationMinutes);
+    } else if (finishChanged) {
+      const snappedStart = toDateInputValue(nextWorkingDay(newStart, true));
+      const snappedFinish = toDateInputValue(previousWorkingDay(newFinish, true));
+      task.start = snappedStart;
+      task.finish = dateOnly(snappedFinish) < dateOnly(snappedStart) ? snappedStart : snappedFinish;
+      task.durationMinutes = workingSpanMinutes(task.start, task.finish);
+      task.durationDays = durationMinutesToWorkingDays(task.durationMinutes);
+      task.isMilestone = task.durationMinutes === 0;
+    }
+    task.percent = normalizePercent(els.tiPercent?.value ?? task.percent);
+  }
+
+  repairOutlineHierarchy();
+  render();
+}
+
 function validateProject() {
   ensureDecorations();
   const issues = [];
@@ -1417,6 +1580,7 @@ function addTask() {
   state.tasks.push({
     uid: state.nextUid++,
     name: `New Task ${state.tasks.length + 1}`,
+    notes: "",
     start,
     finish: toDateInputValue(finishFromStartByDuration(start, getCalendar().minutesPerDay * 3)),
     durationDays: 3,
@@ -1611,7 +1775,8 @@ function buildProjectXml() {
     <Task>
       <UID>${task.uid}</UID>
       <ID>${task.id}</ID>
-      <Name>${escapeXml(task.name)}</Name>
+      <Name>${escapeXml(task.name)}</Name>${task.notes ? `
+      <Notes>${escapeXml(task.notes)}</Notes>` : ""}
       <Type>1</Type>
       <IsNull>0</IsNull>
       <CreateDate>${created}</CreateDate>
@@ -1735,6 +1900,7 @@ function importProjectXml(text) {
       importedId: id,
       node,
       name,
+      notes: childText(node, "Notes"),
       start,
       finish,
       durationDays: durationMinutesToWorkingDays(durationMinutes),
@@ -2093,12 +2259,13 @@ function exportCsv() {
   ensureDecorations();
   rollupSummaryTasks();
   ensureDecorations();
-  const rows = [["ID", "WBS", "Name", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
+  const rows = [["ID", "WBS", "Name", "Notes", "Start", "Finish", "Duration", "DurationMinutes", "PercentComplete", "Predecessors", "Successors", "ConstraintType", "ConstraintDate", "Deadline", "OutlineLevel", "IsSummary", "Expanded", "RollupChildren", "RollupLeafTasks"]];
   state.tasks.forEach((task) => {
     rows.push([
       task.id,
       task.wbs,
       task.name,
+      task.notes || "",
       task.start,
       task.finish,
       formatDuration(task.durationMinutes),
@@ -2148,6 +2315,7 @@ function makeSampleTask(uid, name, startOffset, durationDays, percent, links = [
   return {
     uid,
     name,
+    notes: "",
     start,
     finish,
     durationDays: durationMinutesToWorkingDays(durationMinutes),
@@ -3192,6 +3360,11 @@ els.taskBody.addEventListener("change", (event) => {
   if (field) updateTask(index, field, target.value);
 });
 
+els.taskBody.addEventListener("dblclick", (event) => {
+  const row = event.target.closest(".planner-row[data-row-index]");
+  if (row) openTaskInfo(Number(row.dataset.rowIndex));
+});
+
 els.taskBody.addEventListener("click", (event) => {
   const row = event.target.closest(".planner-row[data-row-index]");
   if (row) selectTask(Number(row.dataset.rowIndex));
@@ -3248,6 +3421,7 @@ els.newProjectBtn.addEventListener("click", () => {
 
 els.sampleBtn.addEventListener("click", () => loadSample(true));
 els.addTaskBtn.addEventListener("click", addTask);
+els.taskInfoBtn?.addEventListener("click", () => openTaskInfo());
 els.indentTaskBtn?.addEventListener("click", indentSelectedTask);
 els.outdentTaskBtn?.addEventListener("click", outdentSelectedTask);
 els.autoScheduleBtn.addEventListener("click", autoSchedule);
@@ -3330,6 +3504,29 @@ window.addEventListener("scroll", () => {
   drawPendingConnectorLine();
 }, true);
 
+els.taskInfoModal?.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-task-info-action]")?.dataset.taskInfoAction;
+  if (!action) return;
+  if (action === "close") closeTaskInfo();
+  if (action === "save") {
+    applyTaskInfoForm();
+    closeTaskInfo();
+  }
+});
+
+els.tiConstraintType?.addEventListener("change", () => {
+  if (!els.tiConstraintDate || !els.tiConstraintType) return;
+  const needsDate = constraintNeedsDate(normalizeConstraintType(els.tiConstraintType.value));
+  els.tiConstraintDate.disabled = !needsDate;
+  if (!needsDate) els.tiConstraintDate.value = "";
+});
+
+els.taskInfoForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  applyTaskInfoForm();
+  closeTaskInfo();
+});
+
 els.scheduleLinkModal?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-schedule-action]");
   if (!button) return;
@@ -3367,6 +3564,10 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (event.key === "Escape" && els.taskInfoModal && !els.taskInfoModal.hidden) {
+    closeTaskInfo();
+    return;
+  }
   if (event.key === "Escape" && pendingCascadeChoice) {
     finishCascadeImpactChoice("keep");
     return;

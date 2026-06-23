@@ -1,7 +1,5 @@
 # Chris's Discount Project Maker
 
-**Version:** v0.15.0 — Summary Rollup v2 + version badge
-
 A lightweight Microsoft Project XML-compatible planner with a browser-only local MPP decoder for the Microsoft Project table-cache layout found in modern `.mpp` files.
 
 ## What it does
@@ -142,11 +140,17 @@ Supported lag/lead units:
 
 Positive values are lag. Negative values are lead. Auto Schedule and cascade scheduling both honor lag/lead and still use the project calendar, so weekends and holidays are skipped. The successor column is calculated from the predecessor links and includes lag/lead too.
 
+## Task Information panel
 
-## Version v0.15.0 — Summary Rollup v2 + version badge
+Version `v0.16.0` adds a Microsoft Project-style **Task info** panel.
 
-- Adds a visible version badge in the top-left brand area and footer so you can confirm the deployed build.
-- Improves summary task rollups so parent tasks calculate Start, Finish, Duration, and % Complete from child/leaf tasks.
-- Summary percent complete is duration-weighted instead of a simple average.
-- Summary rows show a small `rollup` badge and richer tooltips.
-- CSV export includes rollup child/leaf counts for diagnostics.
+Open it by selecting a row and clicking **Task info**, or by double-clicking a task row. The panel gives the crowded grid a proper place for full task details:
+
+- General task details: name, start, finish, duration, percent complete, milestone, and notes
+- Dependency details: editable predecessors and read-only calculated successors
+- Advanced scheduling: constraint type, constraint date, and deadline
+- Structure details: WBS, outline level, parent task, and summary/rollup status
+
+Summary tasks keep their rollup fields read-only in the panel. Their start, finish, duration, and percent complete still come from their child tasks.
+
+Task notes now round-trip through Project XML using `<Notes>` when present.
