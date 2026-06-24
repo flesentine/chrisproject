@@ -1,6 +1,6 @@
 @import url("stitch-sidebar-icons.css?v0.25.2");
 
-/* v0.25.2 Stitch canvas hotfixes. */
+/* v0.25.4 Stitch canvas dependency logic hotfixes. */
 .stitch-gantt-row {
   position: absolute;
   left: 0;
@@ -8,6 +8,7 @@
 
 .stitch-gantt-bar {
   pointer-events: none;
+  z-index: 3;
 }
 
 .stitch-detail-popover {
@@ -18,4 +19,149 @@
 .projecthub-stitch-theme .column-resize-handle,
 .projecthub-stitch-theme .date-resize-handle {
   display: none !important;
+}
+
+.projecthub-stitch-theme.stitch-show-classic-links .planner-shell {
+  display: block !important;
+}
+
+.projecthub-stitch-theme.stitch-show-classic-links #stitchCanvas {
+  display: none !important;
+}
+
+.stitch-logic-canvas {
+  grid-template-columns: minmax(560px, 0.98fr) minmax(520px, 1.02fr);
+}
+
+.stitch-logic-toolbar {
+  display: grid;
+  grid-template-columns: 24px minmax(220px, 1fr) 110px 110px;
+  gap: 12px;
+  align-items: center;
+}
+
+.stitch-logic-toolbar strong {
+  color: #334155;
+  font-size: 13px;
+}
+
+.stitch-task-card-row.is-logic-row {
+  grid-template-columns: 24px minmax(230px, 1fr) 110px 110px;
+  align-items: center;
+}
+
+.stitch-task-card-row.is-logic-row .stitch-task-meta {
+  grid-template-columns: minmax(90px, 1fr) minmax(90px, 0.8fr) auto auto;
+}
+
+.stitch-logic-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stitch-logic-badge {
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid #cfd7e2;
+  border-radius: 7px;
+  color: #1f2937;
+  background: #eef2f6;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.stitch-logic-badge:hover {
+  transform: none;
+  color: #0d3b66;
+  background: #e6f1f8;
+  border-color: #b9ccd8;
+  box-shadow: none;
+}
+
+.stitch-task-card-row.is-active .stitch-logic-badge {
+  color: #07345d;
+  background: rgba(255, 255, 255, 0.88);
+  border-color: transparent;
+}
+
+.stitch-logic-empty {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stitch-task-card-row.is-active .stitch-logic-empty {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.stitch-classic-link-btn {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #dbe4ee;
+  border-radius: 9px;
+  color: #334155;
+  background: #fff;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stitch-classic-link-btn:hover,
+.stitch-classic-link-btn.is-active {
+  transform: none;
+  color: #fff;
+  background: linear-gradient(135deg, #0d3b66, #31c58b);
+  border-color: transparent;
+  box-shadow: 0 8px 18px rgba(13, 59, 102, 0.16);
+}
+
+.stitch-dependency-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.stitch-dependency-path {
+  fill: none;
+  stroke: rgba(45, 58, 66, 0.62);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stitch-dependency-dot {
+  fill: #2d3a42;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+.stitch-detail-popover strong {
+  color: #fff;
+}
+
+@media (max-width: 1180px) {
+  .stitch-logic-canvas {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .stitch-logic-toolbar,
+  .stitch-task-card-row.is-logic-row {
+    grid-template-columns: 24px minmax(180px, 1fr);
+  }
+
+  .stitch-logic-toolbar strong:nth-of-type(2),
+  .stitch-logic-toolbar strong:nth-of-type(3),
+  .stitch-logic-cell {
+    display: none;
+  }
 }
