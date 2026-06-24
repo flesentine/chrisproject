@@ -1,6 +1,13 @@
-# Chris's Discount Project Maker — v0.26.0
+# Chris's Discount Project Maker — v0.27.0
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
+
+## v0.27.0 changes
+
+- Expanded the Task tab into a fuller Microsoft Project-style Task ribbon.
+- Adds View, Clipboard, Font, Schedule, Tasks, Insert, Properties, and Editing groups modeled after the real Project Task ribbon.
+- Wires working commands to existing app behavior: Gantt/Resource view switch, add task, task information, auto schedule, indent/outdent via existing controls, percent complete buttons, notes/details tabs, scroll to selected task, find task, copy/paste task copy, move task earlier/later, milestone insert, and summary placeholder insert.
+- Adds placeholders/toasts for commands that need later feature work, including font styling, format painter, deliverable, add to timeline, and fill down.
 
 ## v0.26.0 changes
 
@@ -11,15 +18,6 @@ Static Microsoft Project-inspired planner that runs on GitHub Pages.
 - Kept the newer blue/green visual polish, progress fills, baseline styling, and cleaner header treatment.
 - Hid the experimental ProjectHub card canvas so the serious scheduling functionality stays front and center.
 
-## v0.25.4 changes
-
-- Restored dependency logic to the Stitch canvas instead of hiding it behind the old grid.
-- Added Predecessors and Successors columns to the ProjectHub Task List pane.
-- Added dependency badges that open Task Information for editing predecessor/successor details.
-- Drew dependency connector lines between Gantt bars in the Stitch Gantt pane.
-- Updated the hover detail card with Network Logic, including predecessor and successor task names/types.
-- Added a Classic links button that toggles back to the original grid/Gantt editor when rubberband dependency linking is needed.
-
 ## Use
 
-Open `index.html` locally or host the folder on GitHub Pages. Use the restored MS Project-style schedule grid for real planning, dependency links, predecessor/successor columns, baselines, progress, actuals, resources, XML import/export, and CSV export.
+Open `index.html` locally or host the folder on GitHub Pages. Use the restored MS Project-style schedule grid for real planning, dependency links, predecessor/successor columns, baselines, progress, actuals, resources, XML import/export, and CSV export. Use the Task tab for the full ribbon command surface.
