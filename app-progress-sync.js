@@ -348,7 +348,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.30.0";
+  const STITCH_VERSION = "v0.31.0";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
@@ -390,6 +390,7 @@
     loadScriptOnce("msProjectTaskRibbonJs", `ms-project-task-ribbon.js?${STITCH_VERSION}`);
     loadScriptOnce("msProjectRibbonCollapseJs", `ms-project-ribbon-collapse.js?${STITCH_VERSION}`);
     loadScriptOnce("msProjectProjectRibbonJs", `ms-project-project-ribbon.js?${STITCH_VERSION}`);
+    loadScriptOnce("criticalPathJs", `app-critical-path.js?${STITCH_VERSION}`);
   }
 
   if (document.readyState === "loading") {
