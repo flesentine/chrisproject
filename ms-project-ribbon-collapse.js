@@ -1,6 +1,7 @@
 (() => {
   const COLLAPSE_KEY = "ms-project-ribbon-collapsed-v1";
   const VIEW_ASSET_VERSION = "v0.29.0";
+  const GANTT_FORMAT_VERSION = "v0.30.0";
 
   function boot() {
     const tabs = document.getElementById("ribbonTabs");
@@ -11,6 +12,7 @@
     }
     installToggle(tabs);
     loadViewRibbonAssets();
+    loadGanttFormatAssets();
     applyCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
   }
 
@@ -37,6 +39,11 @@
   function loadViewRibbonAssets() {
     loadCss("msProjectViewRibbonCss", `ms-project-view-ribbon.css?${VIEW_ASSET_VERSION}`);
     loadScript("msProjectViewRibbonJs", `ms-project-view-ribbon.js?${VIEW_ASSET_VERSION}`);
+  }
+
+  function loadGanttFormatAssets() {
+    loadCss("msProjectGanttFormatRibbonCss", `ms-project-gantt-format-ribbon.css?${GANTT_FORMAT_VERSION}`);
+    loadScript("msProjectGanttFormatRibbonJs", `ms-project-gantt-format-ribbon.js?${GANTT_FORMAT_VERSION}`);
   }
 
   function loadCss(id, href) {
