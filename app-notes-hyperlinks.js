@@ -280,3 +280,12 @@
     return typeof escapeXml === "function" ? escapeXml(value) : String(value ?? "").replace(/[&<>\"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
   }
 })();
+
+(() => {
+  if (document.getElementById("resourceLevelingScript")) return;
+  const script = document.createElement("script");
+  script.id = "resourceLevelingScript";
+  script.src = "app-resource-leveling.js?v0.40.0";
+  script.defer = true;
+  document.body.appendChild(script);
+})();
