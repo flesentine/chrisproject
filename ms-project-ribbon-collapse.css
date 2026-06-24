@@ -1,0 +1,53 @@
+/* v0.27.1 collapsible MS Project ribbon. */
+.ms-ribbon-collapse-toggle {
+  margin-left: auto;
+  align-self: stretch;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid #c8ccd2;
+  border-radius: 0;
+  color: #243447;
+  background: #eef2f6;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.ms-ribbon-collapse-toggle:hover {
+  transform: none;
+  color: #0d3b66;
+  background: #e4ebf4;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme.ms-ribbon-collapsed .office-ribbon {
+  display: none !important;
+}
+
+.projecthub-stitch-theme.ms-ribbon-collapsed .ribbon-tab.is-active {
+  box-shadow: inset 0 -3px 0 #31c58b;
+}
+
+.projecthub-stitch-theme.ms-ribbon-collapsed .planner-scroll {
+  max-height: calc(100vh - 88px);
+  min-height: calc(100vh - 88px);
+}
+
+.projecthub-stitch-theme.ms-ribbon-collapsed .resource-sheet-shell {
+  max-height: calc(100vh - 112px);
+}
+
+.projecthub-stitch-theme.ms-ribbon-collapsed .unified-card > .card-header {
+  min-height: 30px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+@media (max-width: 900px) {
+  .ms-ribbon-collapse-toggle {
+    position: sticky;
+    right: 0;
+  }
+}
