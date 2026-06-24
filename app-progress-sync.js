@@ -42,7 +42,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.25.4";
+  const STITCH_VERSION = "v0.26.0";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
@@ -72,6 +72,7 @@
     loadCssOnce("stitchCanvasCss", `stitch-canvas.css?${STITCH_VERSION}`);
     loadCssOnce("stitchCanvasFixCss", `stitch-canvas-fix.css?${STITCH_VERSION}`);
     loadCssOnce("stitchSidebarCommandsCss", `stitch-sidebar-commands.css?${STITCH_VERSION}`);
+    loadCssOnce("msProjectClassicCss", `ms-project-classic.css?${STITCH_VERSION}`);
     loadScriptOnce("stitchCanvasJs", `stitch-canvas.js?${STITCH_VERSION}`);
     loadScriptOnce("stitchSidebarCommandsJs", `stitch-sidebar-commands.js?${STITCH_VERSION}`);
   }
