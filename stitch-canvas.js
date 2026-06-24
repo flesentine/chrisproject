@@ -1,5 +1,5 @@
 (() => {
-  const STITCH_CANVAS_VERSION = "v0.25.0";
+  const STITCH_CANVAS_VERSION = "v0.25.4";
   const WEEK_WIDTH = 64;
   let hoverHideTimer = null;
   let activeHoverIndex = null;
@@ -66,19 +66,19 @@
     const host = document.querySelector(".unified-card");
     if (!host) return;
     const canvas = document.createElement("section");
-    canvas.className = "stitch-canvas";
+    canvas.className = "stitch-canvas stitch-logic-canvas";
     canvas.id = "stitchCanvas";
-    canvas.setAttribute("aria-label", "ProjectHub task list and Gantt chart");
+    canvas.setAttribute("aria-label", "ProjectHub task logic and dependencies view");
     canvas.innerHTML = `
       <article class="stitch-pane stitch-task-pane">
         <header class="stitch-pane-header"><h3>Task List</h3><span class="stitch-more">•••</span></header>
-        <div class="stitch-task-toolbar"><span class="stitch-check-all"></span><strong>Task</strong></div>
+        <div class="stitch-task-toolbar stitch-logic-toolbar"><span class="stitch-check-all"></span><strong>Task</strong><strong>Predecessors</strong><strong>Successors</strong></div>
         <div class="stitch-task-list" id="stitchTaskList"></div>
         <aside class="stitch-detail-popover" id="stitchDetailPopover" aria-live="polite"></aside>
       </article>
       <article class="stitch-pane stitch-gantt-pane">
         <header class="stitch-pane-header"><h3>Gantt Chart View</h3><span class="stitch-more">•••</span></header>
-        <div class="stitch-gantt-toolbar"><span class="stitch-pill-tab">Timeline</span><span class="stitch-pill-tab is-green">Weeks</span></div>
+        <div class="stitch-gantt-toolbar"><span class="stitch-pill-tab">Timeline</span><span class="stitch-pill-tab is-green">Weeks</span><button class="stitch-classic-link-btn" type="button" data-stitch-action="classic-links">Classic links</button></div>
         <div class="stitch-gantt-shell" id="stitchGanttShell"><div class="stitch-gantt-content" id="stitchGanttContent"></div></div>
       </article>`;
     host.appendChild(canvas);
@@ -99,13 +99,13 @@
 
   function updateCopy() {
     const title = document.querySelector(".hero-copy h2");
-    if (title) title.textContent = "Interactive Project Canvas View";
+    if (title) title.textContent = "Task Logic & Dependencies View";
     const copy = document.querySelector(".hero-copy p");
-    if (copy) copy.textContent = "ProjectHub-style task cards, hover details, and Gantt timing in one clean canvas.";
+    if (copy) copy.textContent = "ProjectHub-style task cards with predecessor/successor logic, dependency lines, hover details, and access to the classic rubberband link editor.";
   }
 
   function updateVersionLabels() {
-    const label = `${STITCH_CANVAS_VERSION} · ProjectHub two-pane canvas`;
+    const label = `${STITCH_CANVAS_VERSION} · ProjectHub dependency canvas`;
     const badge = document.getElementById("appVersionBadge");
     const footer = document.getElementById("appVersionFooter");
     const ribbon = document.getElementById("ribbonVersionText");
@@ -131,13 +131,13 @@
     const percent = getProjectPercent(leafTasks.length ? leafTasks : tasks);
     const late = countLate(tasks);
     const warningCount = countWarnings(tasks);
+    const logicCount = tasks.reduce((sum, task) => sum + getLinks(task).length, 0);
     const status = late ? "Needs Attention" : warningCount ? "Watch" : "On Track";
     const statusClass = late ? "is-bad" : warningCount ? "is-warn" : "is-good";
-    const budget = getBudgetText(tasks);
     card.innerHTML = `
       <strong>Project Health</strong>
       <p>Progress: ${percent}% <span class="${statusClass}">(${status})</span></p>
-      <p>${escapeHtml(budget)}</p>
+      <p>Logic: ${logicCount} link${logicCount === 1 ? "" : "s"}</p>
       <p>Risks: <span class="${late ? "is-bad" : "is-good"}">${late} High</span>, <span class="${warningCount ? "is-warn" : "is-good"}">${warningCount} Medium</span></p>`;
   }
 
@@ -159,11 +159,13 @@
     const status = getStatus(percent);
     const complete = percent >= 100;
     const assignees = getAssigneeText(task);
-    const classes = ["stitch-task-card-row"];
+    const classes = ["stitch-task-card-row", "is-logic-row"];
     if (active) classes.push("is-active");
     if (complete) classes.push("is-complete");
     const chipClass = complete ? "is-complete" : percent > 0 ? "is-progress" : "";
     const title = task.name || `Task ${index + 1}`;
+    const predecessorText = formatPredecessorBadges(task);
+    const successorText = formatSuccessorBadges(task.id);
     return `
       <div class="${classes.join(" ")}" data-stitch-index="${index}" tabindex="0" role="button" aria-label="${escapeHtml(title)}">
         <span class="stitch-check">✓</span>
@@ -176,10 +178,11 @@
             <span>${escapeHtml(assignees)}</span>
             <span class="stitch-progress-track" style="--pct:${percent}%"><span></span></span>
             <span>${percent}%</span>
+            <span class="stitch-link-mini" title="Open Task Information">⌁</span>
           </div>
         </div>
-        <span class="stitch-arrow">→</span>
-        <span class="stitch-link-mini">⌁</span>
+        <div class="stitch-logic-cell predecessor-cell">${predecessorText}</div>
+        <div class="stitch-logic-cell successor-cell">${successorText}</div>
       </div>`;
   }
 
@@ -201,6 +204,7 @@
     const todayLeft = todayDate ? Math.max(0, Math.floor(daysDiff(bounds.min, todayDate) / 7) * WEEK_WIDTH) : -9999;
     const monthMarkup = renderMonthRow(weeks);
     const weekMarkup = weeks.map((week) => `<div class="stitch-week-cell" style="width:${WEEK_WIDTH}px">${week.date.getDate()}</div>`).join("");
+    const barMeta = [];
     const rowsMarkup = rows.map(({ task, index }, order) => {
       const start = parseDate(task.start);
       const finish = parseDate(task.finish);
@@ -210,12 +214,14 @@
       const percent = pct(task.percent);
       const top = order * rowHeight;
       const name = task.name || `Task ${index + 1}`;
+      barMeta.push({ id: Number(task.id), index, order, left, width: barWidth, y: barsTop + top + 28 });
       return `
         <div class="stitch-gantt-row" style="top:${top}px;width:${width}px"></div>
         <div class="stitch-gantt-bar" data-stitch-index="${index}" style="top:${top + 11}px;left:${left}px;width:${barWidth}px;--pct:${percent}%" title="${escapeHtml(name)} · ${percent}%">
           <span>${escapeHtml(name)} (${percent}%)</span>
         </div>`;
     }).join("");
+    const dependencyMarkup = renderDependencyLines(rows, barMeta, width, contentHeight);
     content.style.width = `${width}px`;
     content.style.height = `${contentHeight}px`;
     content.innerHTML = `
@@ -223,7 +229,31 @@
       <div class="stitch-week-row" style="width:${width}px">${weekMarkup}</div>
       <div class="stitch-grid-layer" style="--week-width:${WEEK_WIDTH}px"></div>
       <div class="stitch-today-band" style="left:${todayLeft}px;--week-width:${WEEK_WIDTH}px"></div>
+      ${dependencyMarkup}
       <div class="stitch-gantt-bars" style="height:${rows.length * rowHeight}px;width:${width}px">${rowsMarkup}</div>`;
+  }
+
+  function renderDependencyLines(rows, barMeta, width, height) {
+    const byId = new Map(barMeta.map((meta) => [Number(meta.id), meta]));
+    const paths = [];
+    rows.forEach(({ task }) => {
+      const target = byId.get(Number(task.id));
+      if (!target) return;
+      getLinks(task).forEach((link) => {
+        const source = byId.get(Number(link.id));
+        if (!source) return;
+        const type = String(link.type || "FS").toUpperCase();
+        const fromX = type.startsWith("S") ? source.left : source.left + source.width;
+        const toX = type.endsWith("F") ? target.left + target.width : target.left;
+        const fromY = source.y;
+        const toY = target.y;
+        const elbow = Math.max(fromX + 18, Math.min(toX - 18, fromX + 42));
+        const path = `M ${fromX} ${fromY} C ${elbow} ${fromY}, ${elbow} ${toY}, ${toX} ${toY}`;
+        paths.push(`<path class="stitch-dependency-path" d="${path}"/><circle class="stitch-dependency-dot" cx="${toX}" cy="${toY}" r="3"/>`);
+      });
+    });
+    if (!paths.length) return "";
+    return `<svg class="stitch-dependency-layer" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true">${paths.join("")}</svg>`;
   }
 
   function renderMonthRow(weeks) {
@@ -271,19 +301,19 @@
     const status = `${getStatus(percent)} · ${percent}% complete`;
     const due = friendlyDate(task.finish || task.deadline);
     const assignees = getAssigneeText(task);
-    const deps = task.links?.length && typeof formatLinks === "function" ? formatLinks(task.links) : "None";
+    const predecessorText = formatLinksDetailed(getLinks(task), "predecessor");
+    const successorText = formatLinksDetailed(getSuccessorLinks(task.id), "successor");
     const notes = String(task.notes || "No description yet. Add notes in Task Information to fill this panel.").trim();
     return `
-      <p class="stitch-detail-kicker">Task</p>
+      <p class="stitch-detail-kicker">Task Logic</p>
       <h3>${escapeHtml(title)}</h3>
       <dl>
         <div><dt>Status</dt><dd>${escapeHtml(status)}</dd></div>
         <div><dt>Due</dt><dd>${escapeHtml(due)}</dd></div>
         <div><dt>Assignees</dt><dd>${escapeHtml(assignees)}</dd></div>
-        <div><dt>Dependencies</dt><dd>${escapeHtml(deps)}</dd></div>
         <div><dt>Description</dt><dd>${escapeHtml(notes)}</dd></div>
         <div><dt>Resource Allocation</dt><dd>${resourceMarkup(task)}</dd></div>
-        <div><dt>Predecessors</dt><dd>${escapeHtml(deps)} 🔗</dd></div>
+        <div><dt>Network Logic</dt><dd><strong>Predecessor:</strong><br>${predecessorText}<br><br><strong>Successor:</strong><br>${successorText}</dd></div>
       </dl>`;
   }
 
@@ -299,7 +329,7 @@
   }
 
   function handleCanvasHover(event) {
-    const row = event.target.closest("[data-stitch-index]");
+    const row = event.target.closest(".stitch-task-card-row[data-stitch-index]");
     if (!row || !document.getElementById("stitchCanvas")?.contains(row)) return;
     const index = Number(row.dataset.stitchIndex);
     if (Number.isInteger(index) && index !== activeHoverIndex) showDetailFor(index, row);
@@ -312,7 +342,21 @@
   }
 
   function handleCanvasClick(event) {
-    const row = event.target.closest("[data-stitch-index]");
+    const classic = event.target.closest("[data-stitch-action='classic-links']");
+    if (classic) {
+      document.body.classList.toggle("stitch-show-classic-links");
+      classic.classList.toggle("is-active", document.body.classList.contains("stitch-show-classic-links"));
+      return;
+    }
+    const linkBadge = event.target.closest("[data-logic-open]");
+    if (linkBadge) {
+      event.preventDefault();
+      event.stopPropagation();
+      const index = Number(linkBadge.dataset.logicOpen);
+      if (Number.isInteger(index) && typeof openTaskInfo === "function") openTaskInfo(index);
+      return;
+    }
+    const row = event.target.closest(".stitch-task-card-row[data-stitch-index]");
     if (!row) return;
     const index = Number(row.dataset.stitchIndex);
     if (!Number.isInteger(index)) return;
@@ -321,7 +365,7 @@
   }
 
   function handleCanvasDblClick(event) {
-    const row = event.target.closest("[data-stitch-index]");
+    const row = event.target.closest(".stitch-task-card-row[data-stitch-index]");
     if (!row) return;
     const index = Number(row.dataset.stitchIndex);
     if (Number.isInteger(index) && typeof openTaskInfo === "function") openTaskInfo(index);
@@ -331,6 +375,46 @@
     const inProgress = rows.find(({ task, index }) => pct(task.percent) > 0 && pct(task.percent) < 100 && !(typeof isSummaryIndex === "function" && isSummaryIndex(index)));
     if (inProgress) return inProgress.index;
     return rows[0]?.index ?? 0;
+  }
+
+  function getLinks(task) {
+    if (Array.isArray(task?.links)) return task.links;
+    if (Array.isArray(task?.predecessors)) return task.predecessors.map((id) => ({ id, type: "FS", lagMinutes: 0 }));
+    return [];
+  }
+
+  function getSuccessorLinks(taskId) {
+    const id = Number(taskId);
+    return (state.tasks || []).flatMap((candidate) => getLinks(candidate)
+      .filter((link) => Number(link.id) === id)
+      .map((link) => ({ id: candidate.id, type: link.type || "FS", lagMinutes: link.lagMinutes || 0, task: candidate })));
+  }
+
+  function formatPredecessorBadges(task) {
+    const links = getLinks(task);
+    if (!links.length) return `<span class="stitch-logic-empty">—</span>`;
+    return links.slice(0, 3).map((link) => logicBadge(`${link.id}${String(link.type || "FS").toUpperCase()}`, task.id)).join("");
+  }
+
+  function formatSuccessorBadges(taskId) {
+    const links = getSuccessorLinks(taskId);
+    if (!links.length) return `<span class="stitch-logic-empty">—</span>`;
+    return links.slice(0, 3).map((link) => logicBadge(`${link.id}${String(link.type || "FS").toUpperCase()}`, taskId)).join("");
+  }
+
+  function logicBadge(label, openTaskId) {
+    const index = (state.tasks || []).findIndex((task) => Number(task.id) === Number(openTaskId));
+    return `<button type="button" class="stitch-logic-badge" data-logic-open="${index}" title="Open Task Information to edit dependency">${escapeHtml(label)}</button>`;
+  }
+
+  function formatLinksDetailed(links, kind) {
+    if (!links.length) return `No ${kind}s.`;
+    return links.map((link) => {
+      const task = link.task || (state.tasks || []).find((item) => Number(item.id) === Number(link.id));
+      const type = String(link.type || "FS").toUpperCase();
+      const name = task?.name || `Task ${link.id}`;
+      return `[${link.id}] ${escapeHtml(name)} (${type})`;
+    }).join("<br>");
   }
 
   function getStatus(percent) {
@@ -364,16 +448,6 @@
       const finish = parseDate(task.finish);
       return count + (warnings || (deadline && finish && finish > deadline) ? 1 : 0);
     }, 0);
-  }
-
-  function getBudgetText(tasks) {
-    const cost = tasks.reduce((sum, task) => {
-      if (typeof summarizeTaskAssignments !== "function") return sum;
-      return sum + (Number(summarizeTaskAssignments(task).totalCost) || 0);
-    }, 0);
-    if (!cost) return "Budget: Costs module next";
-    const formatted = typeof formatMoney === "function" ? formatMoney(cost) : `$${Math.round(cost).toLocaleString()}`;
-    return `Budget: ${formatted} used`;
   }
 
   function getAssigneeText(task) {
