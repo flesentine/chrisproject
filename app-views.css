@@ -1,0 +1,367 @@
+.ms-view-picker-group {
+  min-width: 520px;
+}
+
+.ms-view-picker {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ms-view-button {
+  min-width: 92px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 5px 7px;
+  padding: 7px 9px;
+  border: 1px solid #d9e2ee;
+  border-radius: 10px;
+  background: #fff;
+  color: #243043;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.ms-view-button span {
+  font-size: 14px;
+}
+
+.ms-view-button strong {
+  font-size: 11px;
+  line-height: 1.05;
+}
+
+.ms-view-button small {
+  grid-column: 2;
+  color: #667085;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.ms-view-button.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ms-view-button.is-later {
+  border-style: dashed;
+}
+
+.ms-project-view-workspace .ms-view-card {
+  min-height: 520px;
+}
+
+.ms-view-content {
+  overflow: hidden;
+}
+
+.ms-view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d9e2ee;
+  border-radius: 14px;
+  background: #f8fafc;
+  margin-bottom: 12px;
+}
+
+.ms-view-toolbar strong {
+  font-size: 14px;
+}
+
+.ms-view-toolbar span {
+  color: #667085;
+  font-size: 12px;
+  margin-right: auto;
+}
+
+.ms-view-toolbar button,
+.ms-view-empty button,
+.ms-network-placeholder button,
+.ms-view-table button {
+  border: 1px solid #d9e2ee;
+  border-radius: 9px;
+  background: #fff;
+  color: #243043;
+  font-weight: 750;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.ms-sheet-scroll {
+  overflow: auto;
+  border: 1px solid #d9e2ee;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.ms-view-table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ms-view-table th,
+.ms-view-table td {
+  border-bottom: 1px solid #e6edf5;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ms-view-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f7fb;
+  color: #475467;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.ms-view-table tr.is-summary td {
+  background: #f8fafc;
+  font-weight: 800;
+}
+
+.ms-view-table td small {
+  display: block;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.ms-usage-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ms-usage-group {
+  border: 1px solid #d9e2ee;
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.ms-usage-group header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e6edf5;
+}
+
+.ms-usage-group header strong,
+.ms-usage-group header small {
+  display: block;
+}
+
+.ms-usage-group header small {
+  color: #667085;
+  margin-top: 2px;
+}
+
+.ms-usage-group header span {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ms-usage-table {
+  display: grid;
+}
+
+.ms-usage-heading,
+.ms-usage-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(90px, 1fr));
+}
+
+.ms-usage-heading span,
+.ms-usage-row span {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e6edf5;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-usage-heading span {
+  background: #fbfcfe;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.ms-usage-empty-row {
+  padding: 14px;
+  color: #667085;
+}
+
+.ms-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  border: 1px solid #d9e2ee;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.ms-calendar-heading {
+  padding: 8px;
+  background: #f5f7fb;
+  border-right: 1px solid #e6edf5;
+  border-bottom: 1px solid #d9e2ee;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.ms-calendar-cell {
+  min-height: 104px;
+  padding: 8px;
+  border-right: 1px solid #e6edf5;
+  border-bottom: 1px solid #e6edf5;
+  background: #fff;
+}
+
+.ms-calendar-cell.is-nonworking {
+  background: #f8fafc;
+}
+
+.ms-calendar-cell.is-other-month {
+  color: #98a2b3;
+  background: #fbfcfe;
+}
+
+.ms-calendar-cell strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.ms-calendar-cell span,
+.ms-calendar-cell em {
+  display: block;
+  margin: 3px 0;
+  padding: 3px 6px;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-calendar-cell em {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.ms-timeline-view {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d9e2ee;
+  border-radius: 14px;
+  background: #fff;
+  overflow-x: auto;
+}
+
+.ms-timeline-lane {
+  display: grid;
+  grid-template-columns: 220px minmax(360px, 1fr) 190px;
+  align-items: center;
+  gap: 12px;
+}
+
+.ms-timeline-lane > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.ms-timeline-lane small {
+  color: #667085;
+  font-size: 11px;
+}
+
+.ms-timeline-track {
+  position: relative;
+  height: 28px;
+  border: 1px solid #d9e2ee;
+  border-radius: 999px;
+  background: #f8fafc;
+}
+
+.ms-timeline-track i {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.20);
+}
+
+.ms-timeline-track b {
+  position: absolute;
+  right: 6px;
+  top: -1px;
+  color: #fff;
+  font-size: 10px;
+  line-height: 18px;
+}
+
+.ms-view-empty,
+.ms-network-placeholder {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 22px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #344054;
+}
+
+.ms-view-empty strong,
+.ms-network-placeholder strong {
+  font-size: 18px;
+}
+
+.ms-view-empty p,
+.ms-network-placeholder p {
+  margin: 0;
+  color: #667085;
+}
+
+@media (max-width: 900px) {
+  .ms-view-picker-group {
+    min-width: 0;
+  }
+
+  .ms-calendar-grid {
+    grid-template-columns: repeat(7, minmax(94px, 1fr));
+  }
+
+  .ms-timeline-lane {
+    grid-template-columns: 1fr;
+  }
+}
