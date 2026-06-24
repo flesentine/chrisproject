@@ -1,6 +1,15 @@
-# Chris's Discount Project Maker — v0.25.3
+# Chris's Discount Project Maker — v0.25.4
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
+
+## v0.25.4 changes
+
+- Restores dependency logic to the Stitch canvas instead of hiding it behind the old grid.
+- Adds Predecessors and Successors columns to the ProjectHub Task List pane.
+- Adds dependency badges that open Task Information for editing predecessor/successor details.
+- Draws dependency connector lines between Gantt bars in the Stitch Gantt pane.
+- Updates the hover detail card with Network Logic, including predecessor and successor task names/types.
+- Adds a Classic links button that toggles back to the original grid/Gantt editor when rubberband dependency linking is needed.
 
 ## v0.25.3 changes
 
@@ -27,4 +36,4 @@ Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
 ## Use
 
-Open `index.html` locally or host the folder on GitHub Pages. Use the ProjectHub sidebar for file, task, resource, Gantt, calendar, report, and settings commands. Use Project → Set Baseline from the sidebar after your plan is approved, then update Task Information → Progress as work happens.
+Open `index.html` locally or host the folder on GitHub Pages. Use the ProjectHub sidebar for file, task, resource, Gantt, calendar, report, and settings commands. Use the Predecessors/Successors badges or double-click a task to edit logic. Use Classic links in the Gantt pane when you want the original rubberband dependency editor.
