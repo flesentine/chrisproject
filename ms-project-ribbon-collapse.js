@@ -1,7 +1,7 @@
 (() => {
   const COLLAPSE_KEY = "ms-project-ribbon-collapsed-v1";
-  const VIEW_ASSET_VERSION = "v0.29.0";
-  const GANTT_FORMAT_VERSION = "v0.30.0";
+  const VIEW_ASSET_VERSION = "v0.40.0";
+  const GANTT_FORMAT_VERSION = "v0.40.0";
 
   function boot() {
     const tabs = document.getElementById("ribbonTabs");
@@ -47,7 +47,11 @@
   }
 
   function loadCss(id, href) {
-    if (document.getElementById(id)) return;
+    const existing = document.getElementById(id);
+    if (existing) {
+      if (existing.getAttribute("href") !== href) existing.href = href;
+      return;
+    }
     const link = document.createElement("link");
     link.id = id;
     link.rel = "stylesheet";
@@ -56,11 +60,16 @@
   }
 
   function loadScript(id, src) {
-    if (document.getElementById(id)) return;
+    const existing = document.getElementById(id);
+    if (existing) {
+      if (existing.getAttribute("src") !== src) existing.src = src;
+      return;
+    }
     const script = document.createElement("script");
     script.id = id;
     script.src = src;
     script.defer = true;
+    script.async = false;
     document.body.appendChild(script);
   }
 
