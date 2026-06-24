@@ -42,7 +42,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.28.0";
+  const STITCH_VERSION = "v0.29.0";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
@@ -68,6 +68,7 @@
 
   function bootStitchCanvasLoader() {
     document.body.classList.add("projecthub-stitch-theme");
+    loadScriptOnce("calendarEngineV2Js", `calendar-engine-v2.js?${STITCH_VERSION}`);
     loadCssOnce("stitchThemeCss", `stitch-theme.css?${STITCH_VERSION}`);
     loadCssOnce("stitchCanvasCss", `stitch-canvas.css?${STITCH_VERSION}`);
     loadCssOnce("stitchCanvasFixCss", `stitch-canvas-fix.css?${STITCH_VERSION}`);
