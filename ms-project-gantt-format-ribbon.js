@@ -252,3 +252,23 @@
     el._hideTimer = setTimeout(() => { el.hidden = true; }, 3000);
   }
 })();
+
+(() => {
+  const TASK_TYPES_ASSET_VERSION = "v0.34.0";
+
+  function loadTaskTypesAsset() {
+    if (document.getElementById("appTaskTypesJs")) return;
+    const script = document.createElement("script");
+    script.id = "appTaskTypesJs";
+    script.src = `app-task-types.js?${TASK_TYPES_ASSET_VERSION}`;
+    script.defer = true;
+    script.async = false;
+    document.body.appendChild(script);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", loadTaskTypesAsset, { once: true });
+  } else {
+    loadTaskTypesAsset();
+  }
+})();
