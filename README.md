@@ -1,14 +1,14 @@
-# Chris's Discount Project Maker — v0.33.0
+# Chris's Discount Project Maker — v0.35.0
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
-## v0.33.0 changes
+## v0.35.0 changes
 
-- Adds Resource Sheet polish for MS Project-style resource planning.
-- Supports editable resource name, type, max units, standard rate, overtime rate, base-calendar placeholder, and notes.
-- Keeps Task Information → Resources as the assignment path.
-- Shows assigned resource names directly on task rows and Gantt bars.
-- Acceptance path: create resource “Engineer”, assign Engineer to Task 1, and Task 1 visibly shows Engineer.
+- Adds the Baselines build: Set Baseline saves Baseline Start, Baseline Finish, Baseline Duration, baseline work, and baseline cost placeholders.
+- Adds visible baseline/variance grid columns beside Start/Finish: BL Start, BL Finish, BL Dur, Start Var, Finish Var, and Dur Var.
+- Fixes schedule variance math so an unchanged baseline shows 0d and moving a task later shows positive working-day variance.
+- Keeps baseline ghost bars visible under current Gantt bars after the plan moves.
+- Acceptance path: click Project → Set Baseline, move a task later, then confirm Start Var updates and the old date range remains as the baseline ghost bar.
 
 ## Use
 
