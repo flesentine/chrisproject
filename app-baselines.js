@@ -17,7 +17,8 @@
       typeof render === "function" && typeof renderGantt === "function" && typeof baselineVariance === "function" &&
       typeof hasBaseline === "function" && typeof normalizeBaseline === "function" && typeof formatDuration === "function" &&
       typeof formatDayVariance === "function" && typeof formatDurationVariance === "function" && typeof getTotalFieldColumnWidth === "function" &&
-      typeof getFieldPaneWidth === "function" && typeof saveUiPrefs === "function" && typeof applyUiPrefs === "function";
+      typeof getFieldPaneWidth === "function" && typeof saveUiPrefs === "function" && typeof applyUiPrefs === "function" &&
+      typeof setBaseline === "function";
   }
 
   function boot() {
@@ -28,9 +29,11 @@
     }
     window.__baselineVarianceColumnsLoaded = true;
     installStyles();
+    installBaselineCommandBridge();
     patchVarianceMath();
     installFieldColumns();
     patchRenderers();
+    exposeBaselineSelfTest();
     setBaselineVersionLabel();
     render();
   }
@@ -50,11 +53,38 @@
       .baseline-grid-cell.is-positive .baseline-grid-value { color: #92400e; background: #fff7ed; border-color: #fed7aa; }
       .baseline-grid-cell.is-negative .baseline-grid-value { color: #166534; background: #ecfdf3; border-color: #bbf7d0; }
       .baseline-grid-cell.is-zero .baseline-grid-value { color: #475467; background: #f8fafc; }
-      .baseline-bar { top: calc(var(--bar-top) + var(--bar-height) + 4px); height: 8px; border-radius: 999px; opacity: .78; background: repeating-linear-gradient(90deg, rgba(71, 85, 105, .68) 0 8px, rgba(148, 163, 184, .68) 8px 14px); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+      .baseline-bar { position: absolute; z-index: 1; top: calc(var(--bar-top) + var(--bar-height) + 4px); height: 8px; border-radius: 999px; opacity: .78; background: repeating-linear-gradient(90deg, rgba(71, 85, 105, .68) 0 8px, rgba(148, 163, 184, .68) 8px 14px); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
       .baseline-bar span { position: absolute; left: 8px; top: -17px; color: #475467; font-size: 10px; font-weight: 800; white-space: nowrap; }
       .indicator-dot.is-baseline.has-variance { background: #fff7ed; color: #b45309; border-color: #fed7aa; }
     `;
     document.head.appendChild(style);
+  }
+
+  function installBaselineCommandBridge() {
+    if (window.__baselineCommandBridgeInstalled) return;
+    window.__baselineCommandBridgeInstalled = true;
+    document.addEventListener("click", (event) => {
+      const command = event.target?.closest?.('[data-ms-project-command="set-baseline"], [data-ms-format-command="baseline"]');
+      if (!command) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setBaseline();
+      showBaselineToast("Baseline saved. Move a task to see Start Var and the ghost bar.");
+    }, true);
+  }
+
+  function showBaselineToast(message) {
+    let toast = document.getElementById("baselineToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "baselineToast";
+      toast.className = "ms-project-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.hidden = false;
+    window.clearTimeout(toast._hideTimer);
+    toast._hideTimer = window.setTimeout(() => { toast.hidden = true; }, 3200);
   }
 
   function installFieldColumns() {
@@ -181,6 +211,30 @@
     return { hasBaseline: true, isVariance: false, ...lookup[key] };
   }
 
+  function exposeBaselineSelfTest() {
+    window.__baselineVarianceSelfTest = () => {
+      const saved = JSON.parse(JSON.stringify(state));
+      const selected = selectedTaskIndex;
+      try {
+        state.calendar = normalizeCalendar({ name: "Standard", workingDays: [1, 2, 3, 4, 5], exceptions: [], minutesPerDay: 480 });
+        state.projectStart = "2026-07-06";
+        state.tasks = [{ uid: 1, id: 1, name: "Baseline acceptance", start: "2026-07-06", finish: "2026-07-10", durationMinutes: 2400, durationDays: 5, percent: 0, predecessors: [], links: [], outlineLevel: 1, isSummary: false, expanded: true, assignments: [] }];
+        ensureDecorations();
+        setBaseline();
+        state.tasks[0].start = "2026-07-08";
+        state.tasks[0].finish = "2026-07-14";
+        state.tasks[0].durationMinutes = workingSpanMinutes(state.tasks[0].start, state.tasks[0].finish);
+        const variance = baselineVariance(state.tasks[0]);
+        render();
+        return { hasBaseline: hasBaseline(state.tasks[0]), baselineStart: state.tasks[0].baseline.start, startVariance: variance.startDays, ghostBars: document.querySelectorAll(".baseline-bar").length, columns: BASELINE_COLUMNS.map((column) => column.key), passed: variance.startDays === 2 && document.querySelectorAll(".baseline-bar").length > 0, version: VERSION };
+      } finally {
+        state = saved;
+        selectedTaskIndex = selected;
+        render();
+      }
+    };
+  }
+
   function setBaselineVersionLabel() {
     const label = `${VERSION} · ${VERSION_NAME}`;
     if (els?.appVersionBadge) {
@@ -190,5 +244,7 @@
     if (els?.appVersionFooter) els.appVersionFooter.textContent = `${label} · Build 2026-06-24`;
     const ribbonVersion = document.getElementById("ribbonVersionText");
     if (ribbonVersion) ribbonVersion.textContent = `${VERSION} · baselines`;
+    const compatChip = document.getElementById("compatChip");
+    if (compatChip && !compatChip.classList.contains("has-issues")) compatChip.lastChild.textContent = " Baselines + variance ready";
   }
 })();
