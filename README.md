@@ -1,15 +1,18 @@
-# Chris's Discount Project Maker — v0.35.0
+# Chris's Discount Project Maker — v0.36.0
 
 Static Microsoft Project-inspired planner that runs on GitHub Pages.
 
-## v0.35.0 changes
+## v0.36.0 changes
 
-- Adds the Baselines build: Set Baseline saves Baseline Start, Baseline Finish, Baseline Duration, baseline work, and baseline cost placeholders.
-- Adds visible baseline/variance grid columns beside Start/Finish: BL Start, BL Finish, BL Dur, Start Var, Finish Var, and Dur Var.
-- Fixes schedule variance math so an unchanged baseline shows 0d and moving a task later shows positive working-day variance.
-- Keeps baseline ghost bars visible under current Gantt bars after the plan moves.
-- Acceptance path: click Project → Set Baseline, move a task later, then confirm Start Var updates and the old date range remains as the baseline ghost bar.
+- Adds the Costs build: Fixed Cost and Cost columns appear in the task grid next to progress.
+- Keeps resource Standard Rate, Overtime Rate, and Cost/Use editable in the Resource Sheet and uses assignments to calculate resource rate cost and cost-per-use cost.
+- Adds a Task Information → Costs tab with Fixed Cost, Resource Rate Cost, Cost Per Use, Total Task Cost, Baseline Cost, and Cost Variance.
+- Rolls summary task cost up from child tasks, while still allowing each task to carry its own fixed cost.
+- Updates baseline cost and cost variance to use total task cost, not only assignment cost.
+- Exports/imports Project XML cost fields including FixedCost, FixedCostAccrual, task Cost, resource rates, assignment Cost, and baseline Cost.
+- CSV export now includes task cost, resource cost, assignment cost, baseline cost, and cost variance records.
+- Acceptance path: create a work resource with a standard rate, add Cost/Use, assign it to a task, enter Fixed Cost, then confirm task Cost updates and the parent summary rolls up the child cost.
 
 ## Use
 
-Open `index.html` locally or host the folder on GitHub Pages. Use the restored MS Project-style schedule grid for real planning, dependency links, predecessor/successor columns, baselines, progress, actuals, resources, XML import/export, and CSV export. Use Task, Project, Resource, View, and Gantt Chart Format tabs for the fuller MS Project-style command surface.
+Open `index.html` locally or host the folder on GitHub Pages. Use the restored MS Project-style schedule grid for real planning, dependency links, predecessor/successor columns, baselines, progress, actuals, resources, costs, XML import/export, and CSV export. Use Task, Project, Resource, View, and Gantt Chart Format tabs for the fuller MS Project-style command surface.
