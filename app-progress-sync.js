@@ -42,7 +42,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.27.0";
+  const STITCH_VERSION = "v0.27.1";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
@@ -74,9 +74,11 @@
     loadCssOnce("stitchSidebarCommandsCss", `stitch-sidebar-commands.css?${STITCH_VERSION}`);
     loadCssOnce("msProjectClassicCss", `ms-project-classic.css?${STITCH_VERSION}`);
     loadCssOnce("msProjectTaskRibbonCss", `ms-project-task-ribbon.css?${STITCH_VERSION}`);
+    loadCssOnce("msProjectRibbonCollapseCss", `ms-project-ribbon-collapse.css?${STITCH_VERSION}`);
     loadScriptOnce("stitchCanvasJs", `stitch-canvas.js?${STITCH_VERSION}`);
     loadScriptOnce("stitchSidebarCommandsJs", `stitch-sidebar-commands.js?${STITCH_VERSION}`);
     loadScriptOnce("msProjectTaskRibbonJs", `ms-project-task-ribbon.js?${STITCH_VERSION}`);
+    loadScriptOnce("msProjectRibbonCollapseJs", `ms-project-ribbon-collapse.js?${STITCH_VERSION}`);
   }
 
   if (document.readyState === "loading") {
