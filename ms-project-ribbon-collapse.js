@@ -1,5 +1,6 @@
 (() => {
   const COLLAPSE_KEY = "ms-project-ribbon-collapsed-v1";
+  const VIEW_ASSET_VERSION = "v0.29.0";
 
   function boot() {
     const tabs = document.getElementById("ribbonTabs");
@@ -9,6 +10,7 @@
       return;
     }
     installToggle(tabs);
+    loadViewRibbonAssets();
     applyCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
   }
 
@@ -30,6 +32,29 @@
       localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
     });
     tabs.appendChild(button);
+  }
+
+  function loadViewRibbonAssets() {
+    loadCss("msProjectViewRibbonCss", `ms-project-view-ribbon.css?${VIEW_ASSET_VERSION}`);
+    loadScript("msProjectViewRibbonJs", `ms-project-view-ribbon.js?${VIEW_ASSET_VERSION}`);
+  }
+
+  function loadCss(id, href) {
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function loadScript(id, src) {
+    if (document.getElementById(id)) return;
+    const script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.defer = true;
+    document.body.appendChild(script);
   }
 
   function applyCollapsed(collapsed) {
