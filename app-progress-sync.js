@@ -42,7 +42,7 @@
 })();
 
 (() => {
-  const STITCH_VERSION = "v0.25.3";
+  const STITCH_VERSION = "v0.25.4";
 
   function loadCssOnce(id, href) {
     const existing = document.getElementById(id);
