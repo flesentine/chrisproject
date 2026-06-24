@@ -1,0 +1,274 @@
+/* v0.30.0 fuller MS Project Gantt Chart Format ribbon. */
+.ms-gantt-format-ribbon {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  min-height: 82px;
+}
+
+.ms-gantt-format-ribbon .command-group {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 72px;
+  padding: 4px 8px 2px;
+  border-right: 1px solid #c7cbd1;
+  background: transparent;
+}
+
+.ms-gantt-format-ribbon .group-label {
+  align-self: end;
+  justify-self: center;
+  color: #4b5563;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ms-gantt-format-ribbon .ms-command-body {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ms-gantt-format-ribbon .ms-command-stack {
+  display: grid;
+  gap: 3px;
+}
+
+.ms-gantt-format-ribbon button,
+.ms-gantt-format-ribbon label,
+.ms-gantt-format-ribbon input,
+.ms-gantt-format-ribbon select {
+  font: inherit;
+}
+
+.ms-gantt-format-ribbon button,
+.ms-gantt-format-ribbon .ms-ribbon-menu > summary {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #111827;
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ms-gantt-format-ribbon button:hover,
+.ms-gantt-format-ribbon .ms-ribbon-menu > summary:hover {
+  background: #e8eef5;
+  border-color: #c4ccd7;
+  transform: none;
+  box-shadow: none;
+}
+
+.ms-gantt-format-ribbon .ms-large-button {
+  display: grid;
+  place-items: center;
+  min-width: 54px;
+  min-height: 58px;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.ms-gantt-format-ribbon .ms-large-button i {
+  display: block;
+  margin-bottom: 3px;
+  font-style: normal;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.ms-gantt-format-ribbon .ms-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-start;
+  min-width: 86px;
+}
+
+.ms-gantt-format-ribbon .ms-icon-button i {
+  font-style: normal;
+  font-size: 15px;
+}
+
+.ms-gantt-format-ribbon .ms-ribbon-menu {
+  position: relative;
+}
+
+.ms-gantt-format-ribbon .ms-ribbon-menu > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ms-gantt-format-ribbon .ms-ribbon-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-gantt-format-ribbon .ms-ribbon-menu[open] > summary {
+  background: #dfeaf5;
+  border-color: #b7c7d8;
+}
+
+.ms-gantt-format-ribbon .ms-ribbon-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 240;
+  display: grid;
+  gap: 4px;
+  min-width: 210px;
+  padding: 8px;
+  border: 1px solid #c8d2de;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.ms-gantt-format-ribbon .ms-ribbon-popover button,
+.ms-gantt-format-ribbon .ms-ribbon-popover label {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.ms-gantt-format-ribbon .ms-checkbox-stack {
+  display: grid;
+  gap: 5px;
+  min-width: 130px;
+}
+
+.ms-gantt-format-ribbon .ms-checkbox-stack label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ms-gantt-style-gallery {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 820px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.ms-gantt-style-tile {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 48px;
+  padding: 4px;
+  border: 1px solid #cfd7e2;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.ms-gantt-style-tile:hover,
+.ms-gantt-style-tile.is-active {
+  background: #e8eef5;
+  border-color: #94a3b8;
+}
+
+.ms-style-preview {
+  position: relative;
+  width: 46px;
+  height: 22px;
+  border-top: 6px solid var(--style-a, #4aa3b5);
+  border-bottom: 6px solid var(--style-b, #31c58b);
+  background: #f8fafc;
+}
+
+.ms-style-preview::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -9px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid var(--style-c, #0d3b66);
+}
+
+.ms-style-preview.style-1 { --style-a: #7dd3fc; --style-b: #31c58b; --style-c: #0d9488; }
+.ms-style-preview.style-2 { --style-a: #f472b6; --style-b: #a855f7; --style-c: #be185d; }
+.ms-style-preview.style-3 { --style-a: #c084fc; --style-b: #64748b; --style-c: #334155; }
+.ms-style-preview.style-4 { --style-a: #94a3b8; --style-b: #475569; --style-c: #111827; }
+.ms-style-preview.style-5 { --style-a: #67e8f9; --style-b: #14b8a6; --style-c: #0f766e; }
+.ms-style-preview.style-6 { --style-a: #a7f3d0; --style-b: #16a34a; --style-c: #15803d; }
+.ms-style-preview.style-7 { --style-a: #bef264; --style-b: #65a30d; --style-c: #4d7c0f; }
+.ms-style-preview.style-8 { --style-a: #22c55e; --style-b: #2563eb; --style-c: #1d4ed8; }
+.ms-style-preview.style-9 { --style-a: #2dd4bf; --style-b: #0f766e; --style-c: #115e59; }
+.ms-style-preview.style-10 { --style-a: #22c55e; --style-b: #166534; --style-c: #14532d; }
+.ms-style-preview.style-11 { --style-a: #f59e0b; --style-b: #84cc16; --style-c: #ca8a04; }
+.ms-style-preview.style-12 { --style-a: #65a30d; --style-b: #334155; --style-c: #1f2937; }
+.ms-style-preview.style-13 { --style-a: #2563eb; --style-b: #1e40af; --style-c: #172554; }
+.ms-style-preview.style-14 { --style-a: #8b5cf6; --style-b: #374151; --style-c: #312e81; }
+.ms-style-preview.style-15 { --style-a: #1f2937; --style-b: #111827; --style-c: #020617; }
+.ms-style-preview.style-16 { --style-a: #64748b; --style-b: #334155; --style-c: #1e293b; }
+
+.ms-gantt-format-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  max-width: 380px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24);
+  font-size: 13px;
+}
+
+.projecthub-stitch-theme.ms-format-gridlines-off .unified-card .gantt-row {
+  background-image: none !important;
+}
+
+.projecthub-stitch-theme.ms-format-hide-summary .planner-row.is-summary,
+.projecthub-stitch-theme.ms-format-hide-summary .gantt-bar.is-summary {
+  display: none !important;
+}
+
+.projecthub-stitch-theme.ms-format-text-large .planner-cell,
+.projecthub-stitch-theme.ms-format-text-large .gantt-bar span {
+  font-size: 13px !important;
+}
+
+.projecthub-stitch-theme.ms-format-critical .gantt-bar.is-late,
+.projecthub-stitch-theme.ms-format-critical .planner-row.is-late {
+  outline: 2px solid #ef4444;
+  outline-offset: -2px;
+}
+
+.projecthub-stitch-theme.ms-gantt-style-1 .gantt-bar::before { background: linear-gradient(90deg, #0d3b66, #31c58b); }
+.projecthub-stitch-theme.ms-gantt-style-2 .gantt-bar::before { background: linear-gradient(90deg, #be185d, #a855f7); }
+.projecthub-stitch-theme.ms-gantt-style-3 .gantt-bar::before { background: linear-gradient(90deg, #334155, #a855f7); }
+.projecthub-stitch-theme.ms-gantt-style-4 .gantt-bar::before { background: linear-gradient(90deg, #111827, #64748b); }
+.projecthub-stitch-theme.ms-gantt-style-5 .gantt-bar::before { background: linear-gradient(90deg, #0f766e, #67e8f9); }
+.projecthub-stitch-theme.ms-gantt-style-6 .gantt-bar::before { background: linear-gradient(90deg, #15803d, #a7f3d0); }
+.projecthub-stitch-theme.ms-gantt-style-7 .gantt-bar::before { background: linear-gradient(90deg, #4d7c0f, #bef264); }
+.projecthub-stitch-theme.ms-gantt-style-8 .gantt-bar::before { background: linear-gradient(90deg, #1d4ed8, #22c55e); }
+.projecthub-stitch-theme.ms-gantt-style-9 .gantt-bar::before { background: linear-gradient(90deg, #115e59, #2dd4bf); }
+.projecthub-stitch-theme.ms-gantt-style-10 .gantt-bar::before { background: linear-gradient(90deg, #14532d, #22c55e); }
+.projecthub-stitch-theme.ms-gantt-style-11 .gantt-bar::before { background: linear-gradient(90deg, #ca8a04, #84cc16); }
+.projecthub-stitch-theme.ms-gantt-style-12 .gantt-bar::before { background: linear-gradient(90deg, #1f2937, #65a30d); }
+.projecthub-stitch-theme.ms-gantt-style-13 .gantt-bar::before { background: linear-gradient(90deg, #172554, #2563eb); }
+.projecthub-stitch-theme.ms-gantt-style-14 .gantt-bar::before { background: linear-gradient(90deg, #312e81, #8b5cf6); }
+.projecthub-stitch-theme.ms-gantt-style-15 .gantt-bar::before { background: linear-gradient(90deg, #020617, #1f2937); }
+.projecthub-stitch-theme.ms-gantt-style-16 .gantt-bar::before { background: linear-gradient(90deg, #1e293b, #64748b); }
+
+@media (max-width: 1200px) {
+  .ms-gantt-format-ribbon {
+    overflow-x: auto;
+  }
+}
