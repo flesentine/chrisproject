@@ -1,5 +1,5 @@
 (() => {
-  const PROJECT_RIBBON_VERSION = "v0.28.0";
+  const PROJECT_RIBBON_VERSION = "v0.31.0";
 
   function boot() {
     const projectPanel = document.querySelector('[data-ribbon-panel="project"]');
@@ -94,13 +94,13 @@
   }
 
   function patchVersion() {
-    const label = `${PROJECT_RIBBON_VERSION} · Project tab ribbon`;
+    const label = `${PROJECT_RIBBON_VERSION} · constraints + deadlines`;
     const ribbon = document.getElementById("ribbonVersionText");
     const badge = document.getElementById("appVersionBadge");
     const footer = document.getElementById("appVersionFooter");
     if (ribbon) ribbon.textContent = label;
     if (badge) badge.textContent = label;
-    if (footer) footer.textContent = `${label} · Build 2026-06-23`;
+    if (footer) footer.textContent = `${label} · Build 2026-06-24`;
   }
 
   function handleProjectRibbonChange(event) {
@@ -279,5 +279,410 @@
     clearTimeout(el._hideTimer);
     el.hidden = false;
     el._hideTimer = setTimeout(() => { el.hidden = true; }, 3000);
+  }
+})();
+
+(() => {
+  const CONSTRAINTS_DEADLINES_VERSION = "v0.31.0";
+  const CONSTRAINTS_DEADLINES_NAME = "Constraints + deadlines";
+  const CONSTRAINTS_BUILD_DATE = "2026-06-24";
+  const SCHEDULE_FIELDS = new Set(["start", "finish", "duration", "predecessors", "constraintType", "constraintDate", "deadline"]);
+  let bootAttempts = 0;
+
+  function bootConstraintsDeadlinesV2() {
+    if (window.__constraintsDeadlinesV2Loaded) return;
+    if (
+      typeof state === "undefined" ||
+      typeof render !== "function" ||
+      typeof getTaskLinks !== "function" ||
+      typeof applyConstraintsToDates !== "function" ||
+      typeof applyDatesToTask !== "function"
+    ) {
+      retryBoot();
+      return;
+    }
+
+    window.__constraintsDeadlinesV2Loaded = true;
+    injectConstraintStyles();
+    patchConstraintRuntime();
+    normalizeConstraintDeadlineData();
+    exposeConstraintSelfTest();
+    render();
+  }
+
+  function retryBoot() {
+    bootAttempts += 1;
+    if (bootAttempts <= 80) window.setTimeout(bootConstraintsDeadlinesV2, 50);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootConstraintsDeadlinesV2, { once: true });
+  } else {
+    bootConstraintsDeadlinesV2();
+  }
+
+  function injectConstraintStyles() {
+    if (document.getElementById("constraintsDeadlinesV2Styles")) return;
+    const style = document.createElement("style");
+    style.id = "constraintsDeadlinesV2Styles";
+    style.textContent = `
+      .indicator-dot.is-constraint-conflict { background: #fff1f2; color: #be123c; border-color: rgba(190,18,60,0.24); }
+      .planner-row.has-constraint-conflict .planner-fields { box-shadow: inset 3px 0 0 #be123c; }
+      .planner-row.has-constraint-conflict .constraint-warning-badge { background: #be123c; }
+      .constraint-explain-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid rgba(190,18,60,0.22);
+        background: #fff1f2;
+        color: #9f1239;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 850;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function patchConstraintRuntime() {
+    const baseEnsureDecorations = ensureDecorations;
+    ensureDecorations = function constraintsV2EnsureDecorations() {
+      baseEnsureDecorations();
+      normalizeConstraintDeadlineData();
+    };
+
+    const baseGetTaskConstraintWarnings = getTaskConstraintWarnings;
+    getTaskConstraintWarnings = function constraintsV2GetTaskConstraintWarnings(task) {
+      const base = typeof baseGetTaskConstraintWarnings === "function" ? baseGetTaskConstraintWarnings(task) : [];
+      return uniqueWarnings([...base, ...getDependencyConstraintWarnings(task)]);
+    };
+
+    const baseUpdateTask = updateTask;
+    updateTask = function constraintsV2UpdateTask(index, field, value) {
+      const beforeTask = state.tasks?.[index];
+      const stableId = beforeTask?.id;
+      const result = baseUpdateTask(index, field, value);
+      const task = getTaskByStableId(stableId, index);
+      if (!task || isSummaryTask(task)) return result;
+
+      if (SCHEDULE_FIELDS.has(field)) {
+        const changedByConstraint = enforceConstraintsOnTask(task);
+        const changedByCascade = cascadeSuccessorsSafely(task);
+        if ((changedByConstraint || changedByCascade) && typeof render === "function") render();
+      }
+      return result;
+    };
+
+    if (typeof applyTaskInfoForm === "function") {
+      const baseApplyTaskInfoForm = applyTaskInfoForm;
+      applyTaskInfoForm = function constraintsV2ApplyTaskInfoForm() {
+        const index = taskInfoIndex;
+        const beforeTask = state.tasks?.[index];
+        const stableId = beforeTask?.id;
+        const result = baseApplyTaskInfoForm();
+        const task = getTaskByStableId(stableId, index);
+        if (task && !isSummaryTask(task)) {
+          const changedByConstraint = enforceConstraintsOnTask(task);
+          const changedByCascade = cascadeSuccessorsSafely(task);
+          if ((changedByConstraint || changedByCascade) && typeof render === "function") render();
+        }
+        return result;
+      };
+    }
+
+    if (typeof renderTaskIndicators === "function") {
+      const baseRenderTaskIndicators = renderTaskIndicators;
+      renderTaskIndicators = function constraintsV2RenderTaskIndicators(task, index, context = {}) {
+        const html = baseRenderTaskIndicators(task, index, context);
+        const conflicts = getDependencyConstraintWarnings(task);
+        if (!conflicts.length || !html.includes("</button>")) return html;
+        const title = escapeXml(conflicts.join(" "));
+        const chip = `<span class="indicator-dot is-constraint-conflict" title="${title}">⚠</span>`;
+        return html.replace("</button>", `${chip}</button>`);
+      };
+    }
+
+    if (typeof renderGantt === "function") {
+      const baseRenderGantt = renderGantt;
+      renderGantt = function constraintsV2RenderGantt() {
+        baseRenderGantt();
+        decorateConstraintConflictRows();
+      };
+    }
+
+    const baseRenderVersion = renderVersion;
+    renderVersion = function constraintsV2RenderVersion() {
+      baseRenderVersion();
+      const text = `${CONSTRAINTS_DEADLINES_VERSION} · ${CONSTRAINTS_DEADLINES_NAME}`;
+      if (els.appVersionBadge) {
+        els.appVersionBadge.textContent = text;
+        els.appVersionBadge.title = `Build ${CONSTRAINTS_BUILD_DATE}`;
+      }
+      if (els.appVersionFooter) {
+        els.appVersionFooter.textContent = `${text} · Build ${CONSTRAINTS_BUILD_DATE}`;
+      }
+      const ribbonVersionText = document.getElementById("ribbonVersionText");
+      if (ribbonVersionText) ribbonVersionText.textContent = `${CONSTRAINTS_DEADLINES_VERSION} · constraints/deadlines`;
+      const compatChip = document.getElementById("compatChip");
+      if (compatChip) compatChip.lastChild.textContent = " Constraints/deadlines ready";
+    };
+  }
+
+  function normalizeConstraintDeadlineData() {
+    if (!Array.isArray(state.tasks)) return;
+    state.tasks.forEach((task) => {
+      task.constraintType = normalizeConstraintType(task.constraintType);
+      task.constraintDate = normalizeDateValue(task.constraintDate);
+      task.deadline = normalizeDateValue(task.deadline);
+      if (!constraintNeedsDate(task.constraintType)) task.constraintDate = "";
+    });
+  }
+
+  function isSummaryTask(task) {
+    if (!task) return false;
+    const index = state.tasks?.indexOf(task) ?? -1;
+    return index >= 0 && typeof isSummaryIndex === "function" ? isSummaryIndex(index) : Boolean(task.isSummary);
+  }
+
+  function getTaskByStableId(id, fallbackIndex) {
+    return (state.tasks || []).find((task) => task.id === id) || state.tasks?.[fallbackIndex] || null;
+  }
+
+  function enforceConstraintsOnTask(task) {
+    if (!task || isSummaryTask(task)) return false;
+    const dates = {
+      start: task.start,
+      finish: task.finish,
+      durationMinutes: normalizeDurationMinutes(task.durationMinutes, workingSpanMinutes(task.start, task.finish)),
+    };
+    const constrained = applyConstraintsToDates(task, dates);
+    return applyDatesToTask(task, constrained);
+  }
+
+  function cascadeSuccessorsSafely(task) {
+    if (!task || typeof cascadeScheduleFromTask !== "function") return false;
+    if (typeof detectCycles === "function" && detectCycles().length) return false;
+    return cascadeScheduleFromTask(task.id, { silent: true, render: false });
+  }
+
+  function uniqueWarnings(warnings) {
+    return [...new Set((warnings || []).filter(Boolean))];
+  }
+
+  function compareDates(a, b) {
+    const left = dateOnly(a);
+    const right = dateOnly(b);
+    if (!left || !right) return 0;
+    return Math.round((left - right) / 86400000);
+  }
+
+  function fmt(value) {
+    return typeof formatFriendlyDate === "function" ? formatFriendlyDate(value) : normalizeDateValue(value);
+  }
+
+  function latestWorkingDate(items) {
+    const dates = (items || []).map((item) => dateOnly(item)).filter(Boolean);
+    if (!dates.length) return null;
+    return new Date(Math.max(...dates.map(Number)));
+  }
+
+  function requirementFromLink(task, link, byId) {
+    const pred = byId.get(link.id);
+    if (!pred) return null;
+    const predStart = dateOnly(pred.start);
+    const predFinish = dateOnly(pred.finish);
+    if (!predStart || !predFinish) return null;
+    const type = normalizeLinkType(link.type);
+    if (type === "FS") {
+      return { kind: "start", date: applyLagToWorkingDate(addWorkingDaysAfter(predFinish, 1), link.lagMinutes), link, predecessor: pred };
+    }
+    if (type === "SS") {
+      return { kind: "start", date: applyLagToWorkingDate(predStart, link.lagMinutes), link, predecessor: pred };
+    }
+    if (type === "FF") {
+      return { kind: "finish", date: applyLagToWorkingDate(predFinish, link.lagMinutes), link, predecessor: pred };
+    }
+    if (type === "SF") {
+      return { kind: "finish", date: applyLagToWorkingDate(predStart, link.lagMinutes), link, predecessor: pred };
+    }
+    return null;
+  }
+
+  function calculateRawDependencyDates(task) {
+    const links = getTaskLinks(task);
+    if (!links.length) return null;
+    const byId = new Map((state.tasks || []).map((candidate) => [candidate.id, candidate]));
+    const requirements = links.map((link) => requirementFromLink(task, link, byId)).filter(Boolean);
+    if (!requirements.length) return null;
+
+    const durationMinutes = normalizeDurationMinutes(task.durationMinutes, workingSpanMinutes(task.start, task.finish));
+    const latestStartRequirement = latestWorkingDate(requirements.filter((row) => row.kind === "start").map((row) => row.date));
+    const latestFinishRequirement = latestWorkingDate(requirements.filter((row) => row.kind === "finish").map((row) => row.date));
+    const finishDrivenStart = latestFinishRequirement ? startFromFinishByDuration(latestFinishRequirement, durationMinutes) : null;
+    const desiredStart = latestWorkingDate([latestStartRequirement, finishDrivenStart]) || dateOnly(task.start) || dateOnly(state.projectStart) || dateOnly(today);
+    const desiredFinish = finishFromStartByDuration(desiredStart, durationMinutes);
+
+    return {
+      start: toDateInputValue(desiredStart),
+      finish: toDateInputValue(desiredFinish),
+      durationMinutes,
+      requirements,
+    };
+  }
+
+  function getDependencyConstraintWarnings(task) {
+    if (!task || isSummaryTask(task)) return [];
+    const raw = calculateRawDependencyDates(task);
+    if (!raw) return getDeadlineOnlyWarnings(task);
+
+    const warnings = [];
+    const type = normalizeConstraintType(task.constraintType);
+    const constraintDate = dateOnly(task.constraintDate);
+    const deadlineDate = dateOnly(task.deadline);
+    const rawStart = dateOnly(raw.start);
+    const rawFinish = dateOnly(raw.finish);
+    const finalFinish = dateOnly(task.finish);
+    const constraintLabel = formatConstraintType(type);
+
+    if (constraintDate) {
+      raw.requirements.forEach((requirement) => {
+        const direction = requirement.kind === "start" ? "Start" : "Finish";
+        const linkLabel = formatLink(requirement.link);
+        if (requirement.kind === "start") {
+          if (type === "SNET" && compareDates(requirement.date, constraintDate) < 0) warnings.push(`Dependency ${linkLabel} wants ${direction} ${fmt(requirement.date)}, but ${constraintLabel} holds it at ${fmt(constraintDate)}.`);
+          if (type === "SNLT" && compareDates(requirement.date, constraintDate) > 0) warnings.push(`Dependency ${linkLabel} wants ${direction} ${fmt(requirement.date)}, but ${constraintLabel} limits it to ${fmt(constraintDate)}.`);
+          if (type === "MSO" && compareDates(requirement.date, constraintDate) !== 0) warnings.push(`Dependency ${linkLabel} wants ${direction} ${fmt(requirement.date)}, but ${constraintLabel} fixes it at ${fmt(constraintDate)}.`);
+        }
+        if (requirement.kind === "finish") {
+          if (type === "FNET" && compareDates(requirement.date, constraintDate) < 0) warnings.push(`Dependency ${linkLabel} wants ${direction} ${fmt(requirement.date)}, but ${constraintLabel} holds it at ${fmt(constraintDate)}.`);
+          if (type === "FNLT" && compareDates(requirement.date, constraintDate) > 0) warnings.push(`Dependency ${linkLabel} wants ${direction} ${fmt(requirement.date)}, but ${constraintLabel} limits it to ${fmt(constraintDate)}.`);
+          if (type === "MFO" && compareDates(requirement.date, constraintDate) !== 0) warnings.push(`Dependency ${linkLabel} wants ${direction} ${fmt(requirement.date)}, but ${constraintLabel} fixes it at ${fmt(constraintDate)}.`);
+        }
+      });
+
+      if (type === "SNET" && rawStart && compareDates(rawStart, constraintDate) < 0) warnings.push(`Predecessors calculate Start ${fmt(rawStart)}, but ${constraintLabel} prevents this task from moving before ${fmt(constraintDate)}.`);
+      if (type === "SNLT" && rawStart && compareDates(rawStart, constraintDate) > 0) warnings.push(`Predecessors calculate Start ${fmt(rawStart)}, which violates ${constraintLabel} ${fmt(constraintDate)}.`);
+      if (type === "MSO" && rawStart && compareDates(rawStart, constraintDate) !== 0) warnings.push(`Predecessors calculate Start ${fmt(rawStart)}, but ${constraintLabel} fixes Start at ${fmt(constraintDate)}.`);
+      if (type === "FNET" && rawFinish && compareDates(rawFinish, constraintDate) < 0) warnings.push(`Predecessors calculate Finish ${fmt(rawFinish)}, but ${constraintLabel} prevents this task from finishing before ${fmt(constraintDate)}.`);
+      if (type === "FNLT" && rawFinish && compareDates(rawFinish, constraintDate) > 0) warnings.push(`Predecessors calculate Finish ${fmt(rawFinish)}, which violates ${constraintLabel} ${fmt(constraintDate)}.`);
+      if (type === "MFO" && rawFinish && compareDates(rawFinish, constraintDate) !== 0) warnings.push(`Predecessors calculate Finish ${fmt(rawFinish)}, but ${constraintLabel} fixes Finish at ${fmt(constraintDate)}.`);
+    }
+
+    if (type === "ALAP" && deadlineDate && rawFinish && compareDates(rawFinish, deadlineDate) < 0) {
+      warnings.push(`As Late As Possible keeps Finish near the deadline (${fmt(deadlineDate)}) instead of the earlier dependency date ${fmt(rawFinish)}.`);
+    }
+
+    if (deadlineDate) {
+      const drivenFinish = rawFinish || finalFinish;
+      if (drivenFinish && compareDates(drivenFinish, deadlineDate) > 0) warnings.push(`Dependency path pushes Finish to ${fmt(drivenFinish)}, after the deadline ${fmt(deadlineDate)}.`);
+      if (finalFinish && compareDates(finalFinish, deadlineDate) > 0) warnings.push(`Deadline warning: Finish ${fmt(finalFinish)} is after ${fmt(deadlineDate)}.`);
+    }
+
+    return uniqueWarnings(warnings);
+  }
+
+  function getDeadlineOnlyWarnings(task) {
+    const deadlineDate = dateOnly(task?.deadline);
+    const finishDate = dateOnly(task?.finish);
+    if (deadlineDate && finishDate && compareDates(finishDate, deadlineDate) > 0) {
+      return [`Deadline warning: Finish ${fmt(finishDate)} is after ${fmt(deadlineDate)}.`];
+    }
+    return [];
+  }
+
+  function decorateConstraintConflictRows() {
+    const rows = document.querySelectorAll(".planner-row[data-row-index]");
+    rows.forEach((row) => {
+      const index = Number(row.dataset.rowIndex);
+      const task = state.tasks?.[index];
+      const conflicts = getDependencyConstraintWarnings(task);
+      row.classList.toggle("has-constraint-conflict", conflicts.length > 0);
+      const nameCell = row.querySelector(".task-name-cell");
+      if (!nameCell) return;
+      let chip = nameCell.querySelector(".constraint-explain-chip");
+      if (!conflicts.length) {
+        chip?.remove();
+        return;
+      }
+      if (!chip) {
+        chip = document.createElement("span");
+        chip.className = "constraint-explain-chip";
+        nameCell.appendChild(chip);
+      }
+      chip.textContent = "constraint";
+      chip.title = conflicts.join(" ");
+    });
+  }
+
+  function exposeConstraintSelfTest() {
+    window.__constraintsDeadlinesV2SelfTest = () => {
+      const savedState = JSON.parse(JSON.stringify(state));
+      const savedSelected = selectedTaskIndex;
+      const results = {};
+      try {
+        state.calendar = normalizeCalendar({ name: "Standard", workingDays: [1, 2, 3, 4, 5], exceptions: [], minutesPerDay: 480 });
+        state.projectStart = "2026-07-06";
+        state.tasks = [
+          {
+            uid: 1,
+            id: 1,
+            name: "Predecessor",
+            notes: "",
+            start: "2026-07-06",
+            finish: "2026-07-07",
+            durationMinutes: parseDurationInput("2d"),
+            durationDays: 2,
+            percent: 0,
+            predecessors: [],
+            links: [],
+            outlineLevel: 1,
+            isSummary: false,
+            expanded: true,
+            constraintType: "ASAP",
+            constraintDate: "",
+            deadline: "",
+            assignments: [],
+          },
+          {
+            uid: 2,
+            id: 2,
+            name: "SNET successor",
+            notes: "",
+            start: "2026-07-10",
+            finish: "2026-07-13",
+            durationMinutes: parseDurationInput("2d"),
+            durationDays: 2,
+            percent: 0,
+            predecessors: [1],
+            links: [{ id: 1, type: "FS", lagMinutes: 0 }],
+            outlineLevel: 1,
+            isSummary: false,
+            expanded: true,
+            constraintType: "SNET",
+            constraintDate: "2026-07-10",
+            deadline: "2026-07-09",
+            assignments: [],
+          },
+        ];
+        state.nextUid = 3;
+        ensureDecorations();
+        scheduleAllLinkedTasks({ render: false, silent: true });
+        const task = state.tasks[1];
+        const warnings = getTaskConstraintWarnings(task);
+        results.snetStart = task.start;
+        results.snetHeldAtOrAfterConstraint = compareDates(task.start, "2026-07-10") >= 0;
+        results.showsDependencyConstraintWarning = warnings.some((warning) => /SNET|Start No Earlier Than|prevents.*moving before|Dependency 1FS/i.test(warning));
+        results.showsDeadlineWarning = warnings.some((warning) => /deadline/i.test(warning));
+        results.acceptancePassed = results.snetHeldAtOrAfterConstraint && results.showsDependencyConstraintWarning;
+        results.warnings = warnings;
+        results.version = CONSTRAINTS_DEADLINES_VERSION;
+        return results;
+      } finally {
+        state = savedState;
+        selectedTaskIndex = savedSelected;
+        render();
+      }
+    };
   }
 })();
