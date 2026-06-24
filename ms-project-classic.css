@@ -1,0 +1,401 @@
+/* v0.26.0: polished MS Project classic layout.
+   Keeps the newer ProjectHub colors, but restores the real grid + Gantt surface. */
+:root {
+  --classic-navy: #0a376b;
+  --classic-navy-2: #082d5a;
+  --classic-teal: #31c58b;
+  --classic-line: #d8e0ea;
+  --classic-soft: #f4f7fb;
+  --classic-grid-header: #6f7378;
+  --classic-grid-dark: #3f4348;
+}
+
+body.projecthub-stitch-theme {
+  padding: 0;
+  background: #eef2f6;
+  color: #111827;
+}
+
+.projecthub-stitch-theme .app-shell {
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.projecthub-stitch-theme .project-ribbon-shell {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.16);
+}
+
+.projecthub-stitch-theme .project-titlebar {
+  min-height: 38px;
+  padding: 0 16px;
+  color: #fff;
+  background: linear-gradient(90deg, var(--classic-navy), var(--classic-navy-2));
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .project-app-icon {
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #58d99c, #1c5f99);
+}
+
+.projecthub-stitch-theme .title-product-name {
+  font-size: 0;
+}
+
+.projecthub-stitch-theme .title-product-name::before {
+  content: "MS Project";
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.projecthub-stitch-theme .version-badge {
+  color: #dff8ec;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.20);
+}
+
+.projecthub-stitch-theme .quick-command,
+.projecthub-stitch-theme .title-project-name {
+  color: #fff;
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.22);
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .title-project-name-label {
+  color: rgba(255,255,255,0.75);
+}
+
+.projecthub-stitch-theme .ribbon-tabs,
+.projecthub-stitch-theme .office-ribbon {
+  display: flex !important;
+  margin: 0;
+  background: #f2f3f5;
+  border-bottom: 1px solid #c8ccd2;
+  backdrop-filter: none;
+}
+
+.projecthub-stitch-theme .ribbon-tabs {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.projecthub-stitch-theme .ribbon-tab {
+  min-height: 30px;
+  padding: 0 13px;
+  border-radius: 0;
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.projecthub-stitch-theme .ribbon-tab.is-active {
+  color: #0f172a;
+  background: #fff;
+  box-shadow: inset 0 3px 0 var(--classic-teal);
+}
+
+.projecthub-stitch-theme .office-ribbon {
+  min-height: 70px;
+  align-items: stretch;
+  gap: 0;
+  padding: 5px 8px 6px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .command-group {
+  align-items: center;
+  min-width: 84px;
+  padding: 5px 9px 3px;
+  border: 0;
+  border-right: 1px solid #c7cbd1;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .command-group-title {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.projecthub-stitch-theme .command-buttons {
+  gap: 4px;
+}
+
+.projecthub-stitch-theme button.primary,
+.projecthub-stitch-theme button.success {
+  background: linear-gradient(135deg, #0d3b66, var(--classic-teal));
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(13, 59, 102, 0.16);
+}
+
+.projecthub-stitch-theme button.ghost,
+.projecthub-stitch-theme .secondary-action,
+.projecthub-stitch-theme .icon-btn {
+  background: #fff;
+  border-color: #cfd7e2;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme main {
+  padding: 8px 8px 0;
+}
+
+.projecthub-stitch-theme .hero-board,
+.projecthub-stitch-theme .summary-grid,
+.projecthub-stitch-theme .validation-panel,
+.projecthub-stitch-theme .mpp-panel,
+.projecthub-stitch-theme .readiness-card,
+.projecthub-stitch-theme .compat-chip,
+.projecthub-stitch-theme .stitch-sidebar,
+.projecthub-stitch-theme .stitch-health-card,
+.projecthub-stitch-theme .stitch-canvas,
+.projecthub-stitch-theme .stitch-command-drawer {
+  display: none !important;
+}
+
+.projecthub-stitch-theme .workspace {
+  display: block;
+}
+
+.projecthub-stitch-theme .work-card,
+.projecthub-stitch-theme .unified-card {
+  overflow: hidden;
+  border: 1px solid #aeb7c2;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header {
+  display: flex !important;
+  min-height: 34px;
+  padding: 5px 8px;
+  border-bottom: 1px solid #aeb7c2;
+  background: #f8fafc;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header h2::after {
+  content: " — Classic MS Project layout";
+  color: #64748b;
+  font-weight: 650;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header p,
+.projecthub-stitch-theme .card-badge {
+  display: none;
+}
+
+.projecthub-stitch-theme .planner-shell {
+  display: block !important;
+  border-top: 0;
+  background: #fff;
+}
+
+.projecthub-stitch-theme .planner-scroll {
+  max-height: calc(100vh - 172px);
+  min-height: calc(100vh - 172px);
+  background: #fff;
+}
+
+.projecthub-stitch-theme .planner-timeline {
+  min-height: 36px;
+  background: var(--classic-grid-dark);
+  border-bottom: 1px solid #2f3338;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .planner-fields-heading {
+  background: var(--classic-grid-header);
+  color: #fff;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .field-heading-cell,
+.projecthub-stitch-theme .planner-fields-heading span {
+  color: #fff;
+  border-right-color: #555b62;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.projecthub-stitch-theme .planner-dates-heading {
+  border-left: 1px solid #2f3338;
+}
+
+.projecthub-stitch-theme .planner-date-cell {
+  color: #e5e7eb;
+  background: var(--classic-grid-dark);
+  border-right-color: #59606a;
+  font-size: 10px;
+}
+
+.projecthub-stitch-theme .planner-date-cell strong {
+  color: #f8fafc;
+  font-size: 10px;
+}
+
+.projecthub-stitch-theme .planner-date-cell.is-weekend,
+.projecthub-stitch-theme .planner-date-cell.is-nonworking {
+  background: #373b40;
+}
+
+.projecthub-stitch-theme .planner-date-cell.is-today {
+  background: #315b74;
+  box-shadow: inset 0 -3px 0 var(--classic-teal);
+}
+
+.projecthub-stitch-theme .planner-row {
+  background: #fff;
+  border-bottom: 1px solid #e4e7eb;
+}
+
+.projecthub-stitch-theme .planner-row:nth-child(even) {
+  background: #fbfcfd;
+}
+
+.projecthub-stitch-theme .planner-row:hover {
+  background: #eef6ff;
+}
+
+.projecthub-stitch-theme .planner-row.is-selected,
+.projecthub-stitch-theme .planner-row.is-selected .planner-fields {
+  background: #d9ecff;
+}
+
+.projecthub-stitch-theme .planner-fields {
+  margin: 0;
+  height: var(--planner-row-height);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .planner-cell {
+  min-height: var(--planner-row-height);
+  padding: 2px 6px;
+  border-right: 1px solid #e1e5ea;
+  color: #111827;
+  font-size: 12px;
+}
+
+.projecthub-stitch-theme .planner-cell input,
+.projecthub-stitch-theme .planner-cell select {
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.projecthub-stitch-theme .id-pill,
+.projecthub-stitch-theme .duration-pill,
+.projecthub-stitch-theme .progress-inline-chip {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .indicator-button {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .pane-splitter,
+.projecthub-stitch-theme .column-resize-handle,
+.projecthub-stitch-theme .date-resize-handle {
+  display: block !important;
+}
+
+.projecthub-stitch-theme .pane-splitter {
+  background: #b9c3cf;
+  border-left: 1px solid #8893a0;
+  border-right: 1px solid #d8dee6;
+}
+
+.projecthub-stitch-theme .unified-card .gantt-row {
+  border-bottom: 1px solid #edf0f4;
+  background-image: linear-gradient(to right, rgba(148, 163, 184, 0.32) 1px, transparent 1px);
+}
+
+.projecthub-stitch-theme .gantt-bar,
+.projecthub-stitch-theme .unified-card .gantt-bar {
+  height: 18px;
+  top: calc((var(--planner-row-height) - 18px) / 2);
+  min-width: 12px;
+  border: 1px solid #70aee9;
+  border-radius: 0;
+  background: #87bdf0;
+  box-shadow: none;
+}
+
+.projecthub-stitch-theme .gantt-bar.is-summary,
+.projecthub-stitch-theme .summary-gantt-bar {
+  background: #111827;
+  border-color: #111827;
+}
+
+.projecthub-stitch-theme .gantt-bar::before {
+  background: linear-gradient(90deg, #0d3b66, var(--classic-teal));
+  border-radius: 0;
+}
+
+.projecthub-stitch-theme .gantt-bar span {
+  color: #111827;
+  text-shadow: none;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.projecthub-stitch-theme .dependency-line,
+.projecthub-stitch-theme .dependency-path {
+  stroke: #40464d;
+}
+
+.projecthub-stitch-theme .baseline-bar {
+  height: 5px;
+  border-radius: 0;
+  background: rgba(13, 59, 102, 0.22);
+}
+
+.projecthub-stitch-theme .task-info-panel,
+.projecthub-stitch-theme .dependency-dialog {
+  border-radius: 4px;
+}
+
+@media (max-width: 900px) {
+  .projecthub-stitch-theme main {
+    padding: 6px;
+  }
+
+  .projecthub-stitch-theme .office-ribbon {
+    overflow-x: auto;
+  }
+}
