@@ -1,8 +1,11 @@
 (() => {
-  const TASK_RIBBON_VERSION = "v0.27.0";
+  const TASK_RIBBON_VERSION = "v0.31.0";
+  const TASK_RIBBON_LABEL = `${TASK_RIBBON_VERSION} · WBS outline tools`;
   let taskClipboard = null;
 
   function boot() {
+    installOutlineRuntimePatch();
+    installOutlineStyles();
     const taskPanel = document.querySelector('[data-ribbon-panel="task"]');
     if (!taskPanel) {
       setTimeout(boot, 100);
@@ -10,6 +13,7 @@
     }
     installTaskRibbon(taskPanel);
     patchVersion();
+    updateOutlineUi();
   }
 
   if (document.readyState === "loading") {
@@ -86,6 +90,17 @@
           </div>
           <span class="group-label">Tasks</span>
         </div>
+        <div class="command-group ms-outline-group">
+          <div class="ms-command-body">
+            <button class="ms-large-button" type="button" data-ms-task-command="outdent" title="Outdent selected task: Ctrl/Cmd+[ or Alt+Shift+Left"><i>←</i>Outdent</button>
+            <button class="ms-large-button ms-primary-tile" type="button" data-ms-task-command="indent" title="Indent selected task: Ctrl/Cmd+] or Alt+Shift+Right"><i>→</i>Indent</button>
+            <div class="ms-command-stack">
+              <button class="ms-icon-button" type="button" data-ms-task-command="toggle-summary-override" title="Allow manual editing of a summary task schedule"><i>Σ</i>Override rollup</button>
+              <span class="ms-outline-status" id="msOutlineStatus">WBS auto</span>
+            </div>
+          </div>
+          <span class="group-label">Outline</span>
+        </div>
         <div class="command-group">
           <div class="ms-command-body">
             <div class="ms-command-stack">
@@ -146,14 +161,324 @@
     taskPanel.addEventListener("change", handleTaskRibbonChange);
   }
 
+  function installOutlineRuntimePatch() {
+    if (window.__wbsOutlineToolsPatched || typeof state === "undefined") return;
+    window.__wbsOutlineToolsPatched = true;
+
+    const baseEnsureDecorations = typeof ensureDecorations === "function" ? ensureDecorations : null;
+    ensureDecorations = function wbsEnsureDecorations() {
+      if (baseEnsureDecorations) baseEnsureDecorations();
+      applyWbsAndOutlineNumbers();
+    };
+
+    const baseRollupSummaryTasks = typeof rollupSummaryTasks === "function" ? rollupSummaryTasks : null;
+    if (baseRollupSummaryTasks) {
+      rollupSummaryTasks = function wbsRollupSummaryTasks() {
+        const manual = captureManualSummarySchedules();
+        baseRollupSummaryTasks();
+        restoreManualSummarySchedules(manual);
+        applyWbsAndOutlineNumbers();
+      };
+    }
+
+    const baseRender = typeof render === "function" ? render : null;
+    if (baseRender) {
+      render = function wbsRender() {
+        const result = baseRender();
+        updateOutlineUi();
+        return result;
+      };
+    }
+
+    const baseRenderGantt = typeof renderGantt === "function" ? renderGantt : null;
+    if (baseRenderGantt) {
+      renderGantt = function wbsRenderGantt() {
+        const result = baseRenderGantt();
+        unlockManualSummaryRows();
+        updateOutlineUi();
+        return result;
+      };
+    }
+
+    const baseRefreshTaskInfoPanel = typeof refreshTaskInfoPanel === "function" ? refreshTaskInfoPanel : null;
+    if (baseRefreshTaskInfoPanel) {
+      refreshTaskInfoPanel = function wbsRefreshTaskInfoPanel(force = false) {
+        const result = baseRefreshTaskInfoPanel(force);
+        syncTaskInfoSummaryLock();
+        return result;
+      };
+    }
+
+    const baseUpdateTask = typeof updateTask === "function" ? updateTask : null;
+    if (baseUpdateTask) {
+      updateTask = function wbsUpdateTask(index, field, value) {
+        const task = state.tasks?.[index];
+        if (task && isSummaryTask(index) && ["start", "finish", "duration", "percent"].includes(field)) {
+          if (task.summaryManualOverride !== true) {
+            toast("Summary dates, duration, and percent roll up from child tasks. Use Override rollup first if you need a manual summary value.");
+            renderSafe();
+            return;
+          }
+          return updateManualSummaryField(index, field, value);
+        }
+        return baseUpdateTask(index, field, value);
+      };
+    }
+
+    const baseApplyTaskInfoForm = typeof applyTaskInfoForm === "function" ? applyTaskInfoForm : null;
+    if (baseApplyTaskInfoForm) {
+      applyTaskInfoForm = function wbsApplyTaskInfoForm() {
+        const index = typeof taskInfoIndex === "number" ? taskInfoIndex : null;
+        const task = index == null ? null : state.tasks?.[index];
+        const manualSummary = task && isSummaryTask(index) && task.summaryManualOverride === true;
+        const values = manualSummary ? captureTaskInfoScheduleValues() : null;
+        const result = baseApplyTaskInfoForm();
+        if (manualSummary) applyManualSummaryValues(index, values);
+        return result;
+      };
+    }
+
+    indentSelectedTask = function wbsIndentSelectedTask() { return moveOutlineLevel(1); };
+    outdentSelectedTask = function wbsOutdentSelectedTask() { return moveOutlineLevel(-1); };
+  }
+
+  function installOutlineStyles() {
+    if (document.getElementById("wbsOutlineToolsStyles")) return;
+    const style = document.createElement("style");
+    style.id = "wbsOutlineToolsStyles";
+    style.textContent = `
+      .ms-outline-group .ms-command-body { gap: 6px; }
+      .ms-outline-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 22px;
+        max-width: 150px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #eef6ff;
+        border: 1px solid #c7dcf6;
+        color: #185a9d;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .planner-row.is-summary-override .planner-fields { box-shadow: inset 3px 0 0 #7c3aed; }
+      .summary-rollup-badge.is-overridden { background: #f3e8ff; color: #6d28d9; border-color: #d8b4fe; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function applyWbsAndOutlineNumbers() {
+    if (!Array.isArray(state.tasks)) return;
+    const counters = [];
+    state.tasks.forEach((task, index) => {
+      const previousLevel = index > 0 ? normalizeLevelSafe(state.tasks[index - 1].outlineLevel) : 1;
+      let level = normalizeLevelSafe(task.outlineLevel);
+      if (index === 0) level = 1;
+      level = Math.min(level, previousLevel + 1);
+      task.outlineLevel = level;
+      counters.length = level;
+      for (let i = 0; i < level - 1; i += 1) if (!counters[i]) counters[i] = 1;
+      counters[level - 1] = (counters[level - 1] || 0) + 1;
+      task.wbs = counters.join(".");
+      task.outlineNumber = task.wbs;
+      const next = state.tasks[index + 1];
+      const hasChildren = Boolean(next && normalizeLevelSafe(next.outlineLevel) > level);
+      task.isSummary = hasChildren;
+      if (hasChildren) task.expanded = task.expanded !== false;
+      else {
+        task.expanded = true;
+        task.summaryManualOverride = false;
+      }
+    });
+  }
+
+  function captureManualSummarySchedules() {
+    const manual = new Map();
+    (state.tasks || []).forEach((task) => {
+      if (task.summaryManualOverride === true && Number.isInteger(Number(task.uid))) {
+        manual.set(Number(task.uid), {
+          start: task.start,
+          finish: task.finish,
+          durationDays: task.durationDays,
+          durationMinutes: task.durationMinutes,
+          percent: task.percent,
+          isMilestone: task.isMilestone,
+        });
+      }
+    });
+    return manual;
+  }
+
+  function restoreManualSummarySchedules(manual) {
+    (state.tasks || []).forEach((task) => {
+      if (task.summaryManualOverride !== true || !manual.has(Number(task.uid))) return;
+      Object.assign(task, manual.get(Number(task.uid)));
+    });
+  }
+
+  function getSubtreeIndexesSafe(rootIndex) {
+    const root = state.tasks?.[rootIndex];
+    if (!root) return [];
+    const rootLevel = normalizeLevelSafe(root.outlineLevel);
+    const indexes = [rootIndex];
+    for (let i = rootIndex + 1; i < state.tasks.length; i += 1) {
+      const level = normalizeLevelSafe(state.tasks[i].outlineLevel);
+      if (level <= rootLevel) break;
+      indexes.push(i);
+    }
+    return indexes;
+  }
+
+  function moveOutlineLevel(delta) {
+    const index = getSelectedIndex();
+    const task = state.tasks?.[index];
+    if (!task) return toast("Select a task first.");
+    const currentLevel = normalizeLevelSafe(task.outlineLevel);
+    if (delta > 0) {
+      if (index <= 0) return toast("The first task cannot be indented.");
+      const previousLevel = normalizeLevelSafe(state.tasks[index - 1]?.outlineLevel);
+      if (currentLevel >= Math.min(10, previousLevel + 1)) return toast("That task is already at the deepest valid level under the row above.");
+      getSubtreeIndexesSafe(index).forEach((i) => { state.tasks[i].outlineLevel = normalizeLevelSafe(state.tasks[i].outlineLevel + 1); });
+      state.tasks[index - 1].expanded = true;
+    } else {
+      if (currentLevel <= 1) return toast("That task is already at outline level 1.");
+      getSubtreeIndexesSafe(index).forEach((i) => { state.tasks[i].outlineLevel = normalizeLevelSafe(state.tasks[i].outlineLevel - 1); });
+    }
+    applyWbsAndOutlineNumbers();
+    if (typeof selectTask === "function") selectTask(index);
+    renderSafe();
+    toast(delta > 0 ? `Indented task ${state.tasks[index].id} to WBS ${state.tasks[index].wbs}.` : `Outdented task ${state.tasks[index].id} to WBS ${state.tasks[index].wbs}.`);
+  }
+
+  function toggleSummaryOverride(index) {
+    if (!selectedRequired(index)) return;
+    const task = state.tasks[index];
+    if (!isSummaryTask(index)) return toast("Select a summary task first. A task becomes a summary when another task is indented under it.");
+    task.summaryManualOverride = task.summaryManualOverride !== true;
+    renderSafe();
+    toast(task.summaryManualOverride ? "Summary schedule override is on. You can edit summary Start, Finish, Duration, and %." : "Summary schedule override is off. Values roll up from child tasks again.");
+  }
+
+  function unlockManualSummaryRows() {
+    (state.tasks || []).forEach((task, index) => {
+      const row = document.querySelector(`.planner-row[data-row-index="${index}"]`);
+      if (!row) return;
+      row.classList.toggle("is-summary-override", isSummaryTask(index) && task.summaryManualOverride === true);
+      if (!isSummaryTask(index) || task.summaryManualOverride !== true) return;
+      row.querySelectorAll('input[data-field="duration"], input[data-field="start"], input[data-field="finish"], input[data-field="percent"]').forEach((input) => {
+        input.removeAttribute("readonly");
+        input.removeAttribute("aria-readonly");
+        input.title = "Manual summary override is on. Turn off Override rollup to calculate from children again.";
+      });
+      row.querySelectorAll(".summary-rollup-badge").forEach((badge) => {
+        badge.classList.add("is-overridden");
+        badge.textContent = "override";
+      });
+    });
+  }
+
+  function syncTaskInfoSummaryLock() {
+    const index = typeof taskInfoIndex === "number" ? taskInfoIndex : null;
+    const task = index == null ? null : state.tasks?.[index];
+    if (!task || !isSummaryTask(index)) return;
+    const unlocked = task.summaryManualOverride === true;
+    ["tiStart", "tiFinish", "tiDuration", "tiPercent", "tiMilestone"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (field) field.disabled = !unlocked;
+    });
+    const notice = document.getElementById("tiRollupNotice");
+    if (notice) notice.textContent = unlocked
+      ? "Manual summary override is on. This summary task can be edited directly until you turn off Override rollup."
+      : "Summary task dates, duration, and percent complete are rollups from children. Edit the child tasks to change those values.";
+  }
+
+  function updateManualSummaryField(index, field, value) {
+    const task = state.tasks?.[index];
+    if (!task) return;
+    if (field === "percent") task.percent = normalizePercentSafe(value);
+    else if (field === "duration") {
+      const minutes = parseDurationInputSafe(value, task.durationMinutes);
+      if (typeof setTaskStartKeepDuration === "function") setTaskStartKeepDuration(task, task.start || state.projectStart, minutes);
+      else task.durationMinutes = minutes;
+    } else if (field === "start") {
+      if (typeof setTaskStartKeepDuration === "function") setTaskStartKeepDuration(task, value || state.projectStart, task.durationMinutes);
+      else task.start = value;
+    } else if (field === "finish") {
+      task.finish = value;
+      if (typeof workingSpanMinutes === "function") task.durationMinutes = workingSpanMinutes(task.start, task.finish);
+    }
+    task.durationDays = typeof durationMinutesToWorkingDays === "function" ? durationMinutesToWorkingDays(task.durationMinutes) : task.durationDays;
+    task.isMilestone = Number(task.durationMinutes) === 0;
+    renderSafe();
+  }
+
+  function captureTaskInfoScheduleValues() {
+    return {
+      start: valueOf("tiStart"),
+      finish: valueOf("tiFinish"),
+      duration: valueOf("tiDuration"),
+      percent: valueOf("tiPercent"),
+      milestone: Boolean(document.getElementById("tiMilestone")?.checked),
+    };
+  }
+
+  function applyManualSummaryValues(index, values) {
+    const task = state.tasks?.[index];
+    if (!task || !values) return;
+    task.summaryManualOverride = true;
+    task.percent = normalizePercentSafe(values.percent);
+    const minutes = values.milestone ? 0 : parseDurationInputSafe(values.duration, task.durationMinutes);
+    if (values.finish && values.finish !== task.finish) {
+      task.start = values.start || task.start;
+      task.finish = values.finish;
+      task.durationMinutes = typeof workingSpanMinutes === "function" ? workingSpanMinutes(task.start, task.finish) : minutes;
+    } else if (typeof setTaskStartKeepDuration === "function") {
+      setTaskStartKeepDuration(task, values.start || task.start || state.projectStart, minutes);
+    } else {
+      task.start = values.start || task.start;
+      task.durationMinutes = minutes;
+    }
+    task.durationDays = typeof durationMinutesToWorkingDays === "function" ? durationMinutesToWorkingDays(task.durationMinutes) : task.durationDays;
+    task.isMilestone = task.durationMinutes === 0;
+    renderSafe();
+  }
+
+  function updateOutlineUi() {
+    applyWbsAndOutlineNumbers();
+    const index = getSelectedIndex();
+    const task = state.tasks?.[index];
+    const status = document.getElementById("msOutlineStatus");
+    if (status) status.textContent = task ? `WBS ${task.wbs || task.outlineNumber || task.id} · L${normalizeLevelSafe(task.outlineLevel)}` : "WBS auto";
+    document.querySelectorAll('[data-ms-task-command="outdent"]').forEach((button) => { button.disabled = !task || normalizeLevelSafe(task.outlineLevel) <= 1; });
+    document.querySelectorAll('[data-ms-task-command="indent"]').forEach((button) => { button.disabled = !task || index <= 0; });
+    document.querySelectorAll('[data-ms-task-command="toggle-summary-override"]').forEach((button) => {
+      button.disabled = !task || !isSummaryTask(index);
+      button.classList.toggle("is-active", Boolean(task && task.summaryManualOverride === true));
+    });
+  }
+
+  function isSummaryTask(index) {
+    if (typeof isSummaryIndex === "function") return isSummaryIndex(index);
+    const task = state.tasks?.[index];
+    const next = state.tasks?.[index + 1];
+    return Boolean(task && next && normalizeLevelSafe(next.outlineLevel) > normalizeLevelSafe(task.outlineLevel));
+  }
+
+  function normalizeLevelSafe(value) {
+    if (typeof normalizeLevel === "function") return normalizeLevel(value);
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.min(10, Math.max(1, Math.round(n))) : 1;
+  }
+
   function patchVersion() {
-    const label = `${TASK_RIBBON_VERSION} · full Task ribbon`;
     const ribbon = document.getElementById("ribbonVersionText");
     const badge = document.getElementById("appVersionBadge");
     const footer = document.getElementById("appVersionFooter");
-    if (ribbon) ribbon.textContent = label;
-    if (badge) badge.textContent = label;
-    if (footer) footer.textContent = `${label} · Build 2026-06-23`;
+    if (ribbon) ribbon.textContent = TASK_RIBBON_LABEL;
+    if (badge) badge.textContent = TASK_RIBBON_LABEL;
+    if (footer) footer.textContent = `${TASK_RIBBON_LABEL} · Build 2026-06-24`;
   }
 
   function handleTaskRibbonChange(event) {
@@ -167,7 +492,6 @@
     if (!commandEl || commandEl.tagName === "SELECT") return;
     const command = commandEl.dataset.msTaskCommand;
     const index = getSelectedIndex();
-    const task = index == null ? null : state.tasks[index];
 
     switch (command) {
       case "view-gantt": return clickId("scheduleViewBtn") || toast("Already in Gantt Chart view.");
@@ -182,6 +506,9 @@
       case "inactivate": return inactivateTask(index);
       case "manual-schedule": return setScheduleMode(index, "manual");
       case "auto-schedule": return setScheduleMode(index, "auto", true);
+      case "indent": return indentSelectedTask();
+      case "outdent": return outdentSelectedTask();
+      case "toggle-summary-override": return toggleSummaryOverride(index);
       case "inspect":
       case "information": return clickId("taskInfoBtn");
       case "move-earlier": return moveTask(index, -1);
@@ -240,10 +567,7 @@
   }
 
   function pasteTask(index) {
-    if (!taskClipboard?.task) {
-      toast("Nothing to paste yet.");
-      return;
-    }
+    if (!taskClipboard?.task) return toast("Nothing to paste yet.");
     const insertAt = Number.isInteger(index) ? index + 1 : state.tasks.length;
     const pasted = cloneTask(taskClipboard.task);
     pasted.uid = state.nextUid++;
@@ -251,6 +575,7 @@
     pasted.name = `${pasted.name || "Task"} copy`;
     pasted.links = [];
     pasted.predecessors = [];
+    pasted.summaryManualOverride = false;
     state.tasks.splice(insertAt, 0, pasted);
     renumberTasks();
     if (typeof selectTask === "function") selectTask(insertAt);
@@ -260,9 +585,11 @@
 
   function setPercent(index, percent, message = null) {
     if (!selectedRequired(index)) return;
-    state.tasks[index].percent = Math.min(100, Math.max(0, Math.round(percent)));
+    const task = state.tasks[index];
+    if (isSummaryTask(index) && task.summaryManualOverride !== true) return toast("Summary percent rolls up from child tasks. Use Override rollup first if you need a manual value.");
+    task.percent = normalizePercentSafe(percent);
     renderSafe();
-    toast(message || `Set selected task to ${state.tasks[index].percent}%.`);
+    toast(message || `Set selected task to ${task.percent}%.`);
   }
 
   function inactivateTask(index) {
@@ -291,10 +618,8 @@
   function moveTask(index, days) {
     if (!selectedRequired(index)) return;
     const task = state.tasks[index];
-    if (typeof addDays !== "function" || typeof toDateInputValue !== "function") {
-      toast("Move command needs the date helpers.");
-      return;
-    }
+    if (isSummaryTask(index) && task.summaryManualOverride !== true) return toast("Summary dates roll up from children. Move child tasks, or turn on Override rollup first.");
+    if (typeof addDays !== "function" || typeof toDateInputValue !== "function") return toast("Move command needs the date helpers.");
     task.start = toDateInputValue(addDays(task.start, days));
     task.finish = toDateInputValue(addDays(task.finish, days));
     renderSafe();
@@ -308,6 +633,8 @@
     if (state.tasks[newIndex]) {
       state.tasks[newIndex].name = "New summary task";
       state.tasks[newIndex].outlineLevel = Math.max(1, Number(state.tasks[index]?.outlineLevel || 1));
+      state.tasks[newIndex].expanded = true;
+      state.tasks[newIndex].summaryManualOverride = false;
     }
     renderSafe();
     toast("Inserted summary placeholder. Indent child tasks under it to create the rollup.");
@@ -347,10 +674,7 @@
     const query = prompt("Find task name:");
     if (!query) return;
     const index = state.tasks.findIndex((task) => String(task.name || "").toLowerCase().includes(query.toLowerCase()));
-    if (index < 0) {
-      toast("No matching task found.");
-      return;
-    }
+    if (index < 0) return toast("No matching task found.");
     if (typeof selectTask === "function") selectTask(index);
     renderSafe();
     setTimeout(() => scrollToSelected(index), 0);
@@ -360,7 +684,7 @@
     if (!selectedRequired(index)) return;
     const task = state.tasks[index];
     task.name = "";
-    task.percent = 0;
+    if (!isSummaryTask(index) || task.summaryManualOverride === true) task.percent = 0;
     renderSafe();
     toast("Cleared selected task name and progress.");
   }
@@ -371,6 +695,20 @@
 
   function renumberTasks() {
     state.tasks.forEach((task, i) => { task.id = i + 1; });
+  }
+
+  function parseDurationInputSafe(text, fallback) {
+    return typeof parseDurationInput === "function" ? parseDurationInput(text, fallback) : Math.max(0, Number(fallback) || 0);
+  }
+
+  function normalizePercentSafe(value) {
+    if (typeof normalizePercent === "function") return normalizePercent(value);
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : 0;
+  }
+
+  function valueOf(id) {
+    return document.getElementById(id)?.value || "";
   }
 
   function renderSafe() {
