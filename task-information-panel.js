@@ -1,6 +1,7 @@
 (() => {
-  const TASK_INFO_VERSION = "v0.32.0";
-  const TASK_INFO_LABEL = `${TASK_INFO_VERSION} · Task Information panel`;
+  const TASK_INFO_VERSION = "v0.33.0";
+  const TASK_INFO_NAME = "Resources";
+  const TASK_INFO_LABEL = `${TASK_INFO_VERSION} · ${TASK_INFO_NAME}`;
   const TASK_INFO_BUILD_DATE = "2026-06-24";
   const DESIRED_TABS = [
     ["general", "General"],
@@ -16,15 +17,17 @@
   ];
 
   function boot() {
-    if (window.__taskInformationPanelV2Installed) return;
-    if (typeof state === "undefined" || typeof openTaskInfo !== "function" || !document.querySelector(".task-info-tabs")) {
+    if (window.__taskInformationPanelV3Installed) return;
+    if (typeof state === "undefined" || typeof openTaskInfo !== "function" || typeof render !== "function" || !document.querySelector(".task-info-tabs")) {
       setTimeout(boot, 80);
       return;
     }
-    window.__taskInformationPanelV2Installed = true;
+
+    window.__taskInformationPanelV3Installed = true;
     installStyles();
     normalizeTaskInfoDom();
     patchTaskInfoRuntime();
+    decorateTaskResources();
     patchVersionLabels();
     if (typeof refreshTaskInfoPanel === "function") refreshTaskInfoPanel(true);
   }
@@ -36,9 +39,9 @@
   }
 
   function installStyles() {
-    if (document.getElementById("taskInformationPanelV2Styles")) return;
+    if (document.getElementById("taskInformationPanelV3Styles")) return;
     const style = document.createElement("style");
-    style.id = "taskInformationPanelV2Styles";
+    style.id = "taskInformationPanelV3Styles";
     style.textContent = `
       .task-info-tabs {
         display: flex;
@@ -46,9 +49,7 @@
         gap: 6px;
         padding-bottom: 8px;
       }
-      .task-info-tab {
-        white-space: nowrap;
-      }
+      .task-info-tab { white-space: nowrap; }
       .task-info-tab.is-placeholder::after {
         content: "later";
         margin-left: 6px;
@@ -85,18 +86,69 @@
         background: #f8fafc;
         font-size: 12px;
       }
-      .successor-row strong {
-        color: #185a9d;
-      }
+      .successor-row strong { color: #185a9d; }
       .successor-row span {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .custom-fields-placeholder {
-        display: grid;
-        gap: 12px;
+      .custom-fields-placeholder { display: grid; gap: 12px; }
+      .task-resource-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-left: 6px;
+        min-width: 0;
+      }
+      .task-resource-badge {
+        display: inline-flex;
+        align-items: center;
+        max-width: 150px;
+        min-height: 18px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        border: 1px solid rgba(37, 99, 235, 0.24);
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 10px;
+        font-weight: 850;
+        line-height: 1.1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .gantt-resource-label {
+        position: absolute;
+        left: 10px;
+        bottom: -17px;
+        z-index: 4;
+        max-width: min(220px, calc(100% + 90px));
+        padding: 1px 7px;
+        border-radius: 999px;
+        border: 1px solid #bfdbfe;
+        background: rgba(255,255,255,0.96);
+        color: #1d4ed8;
+        font-size: 10px;
+        font-weight: 850;
+        line-height: 1.25;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      .resource-acceptance-note {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 10px;
+        padding: 9px 11px;
+        border: 1px solid #d9e2ee;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: #344054;
+        font-size: 12px;
+        font-weight: 700;
       }
     `;
     document.head.appendChild(style);
@@ -108,7 +160,7 @@
     if (!tabs || !form) return;
 
     tabs.setAttribute("role", "tablist");
-    tabs.dataset.taskInfoV2Tabs = "1";
+    tabs.dataset.taskInfoV3Tabs = "1";
 
     DESIRED_TABS.forEach(([key, label]) => ensureTab(tabs, key, label));
     ensurePredecessorPage(form);
@@ -117,8 +169,8 @@
     normalizeResourcePage();
     orderTabs(tabs);
 
-    if (tabs.dataset.taskInfoV2Bound !== "1") {
-      tabs.dataset.taskInfoV2Bound = "1";
+    if (tabs.dataset.taskInfoV3Bound !== "1") {
+      tabs.dataset.taskInfoV3Bound = "1";
       tabs.addEventListener("click", (event) => {
         const button = event.target.closest("[data-task-info-tab]");
         if (!button) return;
@@ -145,8 +197,7 @@
 
   function orderTabs(tabs) {
     const orderedKeys = DESIRED_TABS.map(([key]) => key);
-    const buttons = [...tabs.querySelectorAll("[data-task-info-tab]")];
-    buttons
+    [...tabs.querySelectorAll("[data-task-info-tab]")]
       .sort((a, b) => {
         const aIndex = orderedKeys.indexOf(a.dataset.taskInfoTab);
         const bIndex = orderedKeys.indexOf(b.dataset.taskInfoTab);
@@ -224,6 +275,11 @@
     page.id = "task-info-page-resources";
     const legend = page.querySelector("legend");
     if (legend) legend.textContent = "Resources";
+
+    const help = page.querySelector(".task-info-help");
+    if (help) {
+      help.textContent = "Assign work, material, or cost resources from the Resource Sheet. The task row and Gantt bar show assigned resource names immediately.";
+    }
   }
 
   function pageFor(key) {
@@ -231,11 +287,11 @@
   }
 
   function patchTaskInfoRuntime() {
-    if (window.__taskInformationPanelV2RuntimePatched) return;
-    window.__taskInformationPanelV2RuntimePatched = true;
+    if (window.__taskInformationPanelV3RuntimePatched) return;
+    window.__taskInformationPanelV3RuntimePatched = true;
 
     const baseSetTaskInfoTab = typeof setTaskInfoTab === "function" ? setTaskInfoTab : null;
-    setTaskInfoTab = function taskInfoV2SetTaskInfoTab(tab = "general") {
+    setTaskInfoTab = function taskInfoV3SetTaskInfoTab(tab = "general") {
       normalizeTaskInfoDom();
       const requested = pageFor(tab) ? tab : "general";
       if (!pageFor(requested)) return baseSetTaskInfoTab?.(tab);
@@ -253,17 +309,18 @@
 
     const baseRefreshTaskInfoPanel = typeof refreshTaskInfoPanel === "function" ? refreshTaskInfoPanel : null;
     if (baseRefreshTaskInfoPanel) {
-      refreshTaskInfoPanel = function taskInfoV2RefreshTaskInfoPanel(force = false) {
+      refreshTaskInfoPanel = function taskInfoV3RefreshTaskInfoPanel(force = false) {
         normalizeTaskInfoDom();
         const result = baseRefreshTaskInfoPanel(force);
         refreshSuccessorPanel();
+        decorateTaskResources();
         return result;
       };
     }
 
     const baseOpenTaskInfo = typeof openTaskInfo === "function" ? openTaskInfo : null;
     if (baseOpenTaskInfo) {
-      openTaskInfo = function taskInfoV2OpenTaskInfo(index) {
+      openTaskInfo = function taskInfoV3OpenTaskInfo(index) {
         normalizeTaskInfoDom();
         return baseOpenTaskInfo(index);
       };
@@ -271,14 +328,154 @@
 
     const baseRender = typeof render === "function" ? render : null;
     if (baseRender) {
-      render = function taskInfoV2Render() {
+      render = function taskInfoV3Render() {
         const result = baseRender();
         normalizeTaskInfoDom();
-        patchVersionLabels();
         refreshSuccessorPanel();
+        decorateTaskResources();
+        patchVersionLabels();
         return result;
       };
     }
+
+    wrapAssignmentRuntime();
+    wrapResourceSheetRuntime();
+  }
+
+  function wrapAssignmentRuntime() {
+    if (window.__resourceAssignmentVisibilityPatched) return;
+    window.__resourceAssignmentVisibilityPatched = true;
+
+    if (typeof addAssignmentToTask === "function") {
+      const baseAddAssignmentToTask = addAssignmentToTask;
+      addAssignmentToTask = function resourceV2AddAssignmentToTask(index = taskInfoIndex) {
+        const result = baseAddAssignmentToTask(index);
+        afterResourceChange();
+        return result;
+      };
+    }
+
+    if (typeof updateTaskAssignment === "function") {
+      const baseUpdateTaskAssignment = updateTaskAssignment;
+      updateTaskAssignment = function resourceV2UpdateTaskAssignment(taskIndex, assignmentIndex, field, value) {
+        const result = baseUpdateTaskAssignment(taskIndex, assignmentIndex, field, value);
+        afterResourceChange();
+        return result;
+      };
+    }
+
+    if (typeof deleteTaskAssignment === "function") {
+      const baseDeleteTaskAssignment = deleteTaskAssignment;
+      deleteTaskAssignment = function resourceV2DeleteTaskAssignment(taskIndex, assignmentIndex) {
+        const result = baseDeleteTaskAssignment(taskIndex, assignmentIndex);
+        afterResourceChange();
+        return result;
+      };
+    }
+
+    if (typeof updateResource === "function") {
+      const baseUpdateResource = updateResource;
+      updateResource = function resourceV2UpdateResource(index, field, value) {
+        const result = baseUpdateResource(index, field, value);
+        afterResourceChange();
+        return result;
+      };
+    }
+  }
+
+  function wrapResourceSheetRuntime() {
+    if (typeof renderResourceSheet !== "function" || window.__resourceSheetV2Patched) return;
+    window.__resourceSheetV2Patched = true;
+    const baseRenderResourceSheet = renderResourceSheet;
+    renderResourceSheet = function resourceV2RenderResourceSheet() {
+      const result = baseRenderResourceSheet();
+      decorateResourceSheetHeader();
+      return result;
+    };
+  }
+
+  function afterResourceChange() {
+    requestAnimationFrame(() => {
+      decorateResourceSheetHeader();
+      decorateTaskResources();
+      if (typeof renderValidation === "function") renderValidation();
+      if (typeof save === "function") save();
+    });
+  }
+
+  function decorateResourceSheetHeader() {
+    const shell = document.querySelector(".resource-sheet-shell");
+    if (!shell || shell.querySelector(".resource-acceptance-note")) return;
+    const note = document.createElement("div");
+    note.className = "resource-acceptance-note";
+    note.innerHTML = `<strong>Resource Sheet ready:</strong><span>Name, type, max units, standard rate, overtime rate, calendar placeholder, and notes are editable. Assignments show back on task rows.</span>`;
+    shell.insertBefore(note, shell.firstChild);
+  }
+
+  function decorateTaskResources() {
+    if (!Array.isArray(state.tasks)) return;
+    document.querySelectorAll(".planner-row[data-row-index]").forEach((row) => {
+      const index = Number(row.dataset.rowIndex);
+      const task = state.tasks[index];
+      if (!task) return;
+
+      const names = getAssignedResourceNames(task);
+      decorateTaskNameCell(row, names);
+      decorateGanttBar(row, task, names);
+    });
+  }
+
+  function decorateTaskNameCell(row, names) {
+    const nameCell = row.querySelector(".task-name-cell");
+    if (!nameCell) return;
+    let badges = nameCell.querySelector(".task-resource-badges");
+    if (!names.length) {
+      badges?.remove();
+      return;
+    }
+    if (!badges) {
+      badges = document.createElement("span");
+      badges.className = "task-resource-badges";
+      nameCell.appendChild(badges);
+    }
+    badges.innerHTML = names.slice(0, 3).map((name) => `<span class="task-resource-badge" title="${escapeSafe(name)}">${escapeSafe(name)}</span>`).join("") +
+      (names.length > 3 ? `<span class="task-resource-badge" title="${escapeSafe(names.slice(3).join(', '))}">+${names.length - 3}</span>` : "");
+  }
+
+  function decorateGanttBar(row, task, names) {
+    const bar = row.querySelector(".gantt-bar");
+    if (!bar) return;
+    let label = bar.querySelector(".gantt-resource-label");
+    if (!names.length) {
+      label?.remove();
+      return;
+    }
+    if (!label) {
+      label = document.createElement("small");
+      label.className = "gantt-resource-label";
+      bar.appendChild(label);
+    }
+    const text = names.join(", ");
+    label.textContent = text;
+    label.title = `Resources: ${text}`;
+    bar.title = `${bar.title || task.name || "Task"} · Resources: ${text}`;
+  }
+
+  function getAssignedResourceNames(task) {
+    if (!task) return [];
+    try {
+      if (typeof summarizeTaskAssignments === "function") {
+        const summary = summarizeTaskAssignments(task);
+        if (summary?.names?.length) return [...new Set(summary.names.filter(Boolean))];
+      }
+    } catch {
+      // Fall back to assignment/resource lookup below.
+    }
+
+    const resources = Array.isArray(state.resources) ? state.resources : [];
+    return [...new Set((task.assignments || [])
+      .map((assignment) => resources.find((resource) => Number(resource.uid) === Number(assignment.resourceUid))?.name)
+      .filter(Boolean))];
   }
 
   function refreshSuccessorPanel() {
@@ -322,7 +519,7 @@
     const ribbon = document.getElementById("ribbonVersionText");
     const badge = document.getElementById("appVersionBadge");
     const footer = document.getElementById("appVersionFooter");
-    if (ribbon) ribbon.textContent = `${TASK_INFO_LABEL} · tabs ready`;
+    if (ribbon) ribbon.textContent = `${TASK_INFO_LABEL} · Resource Sheet ready`;
     if (badge) {
       badge.textContent = TASK_INFO_LABEL;
       badge.title = `Build ${TASK_INFO_BUILD_DATE}`;
