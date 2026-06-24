@@ -1,0 +1,218 @@
+/* v0.27.0 fuller MS Project Task ribbon. */
+.projecthub-stitch-theme .office-ribbon {
+  min-height: 86px;
+  padding: 4px 8px 5px;
+}
+
+.ms-task-ribbon {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  min-height: 82px;
+}
+
+.ms-task-ribbon .command-group {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 72px;
+  padding: 4px 8px 2px;
+  border-right: 1px solid #c7cbd1;
+  background: transparent;
+}
+
+.ms-task-ribbon .group-label {
+  align-self: end;
+  justify-self: center;
+  color: #4b5563;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ms-task-ribbon .ms-command-body {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ms-task-ribbon .ms-command-stack {
+  display: grid;
+  gap: 3px;
+}
+
+.ms-task-ribbon button,
+.ms-task-ribbon label,
+.ms-task-ribbon select {
+  font: inherit;
+}
+
+.ms-task-ribbon button,
+.ms-task-ribbon .ms-ribbon-menu > summary {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #111827;
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ms-task-ribbon button:hover,
+.ms-task-ribbon .ms-ribbon-menu > summary:hover {
+  background: #e8eef5;
+  border-color: #c4ccd7;
+  transform: none;
+  box-shadow: none;
+}
+
+.ms-task-ribbon .ms-large-button {
+  display: grid;
+  place-items: center;
+  min-width: 50px;
+  min-height: 58px;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.ms-task-ribbon .ms-large-button i {
+  display: block;
+  margin-bottom: 3px;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ms-task-ribbon .ms-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-start;
+  min-width: 58px;
+}
+
+.ms-task-ribbon .ms-icon-button i {
+  font-style: normal;
+  font-size: 15px;
+}
+
+.ms-task-ribbon .ms-percent-row {
+  display: flex;
+  gap: 2px;
+}
+
+.ms-task-ribbon .ms-percent-row button {
+  min-width: 28px;
+  padding: 2px 4px;
+  color: #0d3b66;
+  background: #eef6ff;
+  border-color: #d4e4f3;
+  font-size: 10px;
+}
+
+.ms-task-ribbon .ms-font-grid {
+  display: grid;
+  grid-template-columns: 82px 44px;
+  gap: 3px;
+  align-items: center;
+}
+
+.ms-task-ribbon .ms-font-grid select {
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 1px solid #bdc6d1;
+  border-radius: 2px;
+  background: #fff;
+  font-size: 11px;
+}
+
+.ms-task-ribbon .ms-font-buttons {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 2px;
+}
+
+.ms-task-ribbon .ms-font-buttons button {
+  min-width: 24px;
+  padding: 2px 4px;
+  font-weight: 800;
+}
+
+.ms-task-ribbon .ms-ribbon-menu {
+  position: relative;
+}
+
+.ms-task-ribbon .ms-ribbon-menu > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ms-task-ribbon .ms-ribbon-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-task-ribbon .ms-ribbon-menu[open] > summary {
+  background: #dfeaf5;
+  border-color: #b7c7d8;
+}
+
+.ms-task-ribbon .ms-ribbon-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  padding: 8px;
+  border: 1px solid #c8d2de;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.ms-task-ribbon .ms-ribbon-popover button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.ms-task-ribbon .ms-muted-command {
+  color: #64748b;
+}
+
+.ms-task-ribbon .ms-primary-tile {
+  color: #fff;
+  background: linear-gradient(135deg, #0d3b66, #31c58b);
+  border-color: transparent;
+}
+
+.ms-task-ribbon .ms-primary-tile:hover {
+  color: #fff;
+  background: linear-gradient(135deg, #0b3359, #28ad79);
+}
+
+.ms-task-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24);
+  font-size: 13px;
+}
+
+@media (max-width: 1200px) {
+  .ms-task-ribbon {
+    overflow-x: auto;
+  }
+}
