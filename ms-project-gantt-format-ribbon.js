@@ -255,20 +255,26 @@
 
 (() => {
   const TASK_TYPES_ASSET_VERSION = "v0.34.0";
+  const BASELINE_ASSET_VERSION = "v0.35.0";
 
-  function loadTaskTypesAsset() {
-    if (document.getElementById("appTaskTypesJs")) return;
+  function loadScriptOnce(id, src) {
+    if (document.getElementById(id)) return;
     const script = document.createElement("script");
-    script.id = "appTaskTypesJs";
-    script.src = `app-task-types.js?${TASK_TYPES_ASSET_VERSION}`;
+    script.id = id;
+    script.src = src;
     script.defer = true;
     script.async = false;
     document.body.appendChild(script);
   }
 
+  function loadScheduleExtensions() {
+    loadScriptOnce("appTaskTypesJs", `app-task-types.js?${TASK_TYPES_ASSET_VERSION}`);
+    loadScriptOnce("appBaselinesJs", `app-baselines.js?${BASELINE_ASSET_VERSION}`);
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", loadTaskTypesAsset, { once: true });
+    document.addEventListener("DOMContentLoaded", loadScheduleExtensions, { once: true });
   } else {
-    loadTaskTypesAsset();
+    loadScheduleExtensions();
   }
 })();
