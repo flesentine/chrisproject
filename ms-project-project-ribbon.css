@@ -1,0 +1,195 @@
+/* v0.28.0 fuller MS Project Project ribbon. */
+.ms-project-ribbon {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  min-height: 82px;
+}
+
+.ms-project-ribbon .command-group {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 72px;
+  padding: 4px 8px 2px;
+  border-right: 1px solid #c7cbd1;
+  background: transparent;
+}
+
+.ms-project-ribbon .group-label {
+  align-self: end;
+  justify-self: center;
+  color: #4b5563;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ms-project-ribbon .ms-command-body {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ms-project-ribbon .ms-command-stack {
+  display: grid;
+  gap: 3px;
+}
+
+.ms-project-ribbon button,
+.ms-project-ribbon label,
+.ms-project-ribbon input,
+.ms-project-ribbon select {
+  font: inherit;
+}
+
+.ms-project-ribbon button,
+.ms-project-ribbon .ms-ribbon-menu > summary {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #111827;
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ms-project-ribbon button:hover,
+.ms-project-ribbon .ms-ribbon-menu > summary:hover {
+  background: #e8eef5;
+  border-color: #c4ccd7;
+  transform: none;
+  box-shadow: none;
+}
+
+.ms-project-ribbon .ms-large-button {
+  display: grid;
+  place-items: center;
+  min-width: 54px;
+  min-height: 58px;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.ms-project-ribbon .ms-large-button i {
+  display: block;
+  margin-bottom: 3px;
+  font-style: normal;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.ms-project-ribbon .ms-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-start;
+  min-width: 72px;
+}
+
+.ms-project-ribbon .ms-icon-button i {
+  font-style: normal;
+  font-size: 15px;
+}
+
+.ms-project-ribbon .ms-ribbon-menu {
+  position: relative;
+}
+
+.ms-project-ribbon .ms-ribbon-menu > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ms-project-ribbon .ms-ribbon-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-project-ribbon .ms-ribbon-menu[open] > summary {
+  background: #dfeaf5;
+  border-color: #b7c7d8;
+}
+
+.ms-project-ribbon .ms-ribbon-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 220;
+  display: grid;
+  gap: 4px;
+  min-width: 210px;
+  padding: 8px;
+  border: 1px solid #c8d2de;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.ms-project-ribbon .ms-ribbon-popover button,
+.ms-project-ribbon .ms-ribbon-popover label {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.ms-project-ribbon .ms-status-date {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ms-project-ribbon .ms-status-date input {
+  min-height: 24px;
+  padding: 2px 5px;
+  border: 1px solid #bdc6d1;
+  border-radius: 2px;
+  background: #fff;
+  font-size: 11px;
+}
+
+.ms-project-ribbon .ms-primary-tile {
+  color: #fff;
+  background: linear-gradient(135deg, #0d3b66, #31c58b);
+  border-color: transparent;
+}
+
+.ms-project-ribbon .ms-primary-tile:hover {
+  color: #fff;
+  background: linear-gradient(135deg, #0b3359, #28ad79);
+}
+
+.ms-project-ribbon .ms-muted-command {
+  color: #64748b;
+}
+
+.ms-project-ribbon input[type="file"] {
+  display: none;
+}
+
+.ms-project-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  max-width: 380px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24);
+  font-size: 13px;
+}
+
+@media (max-width: 1200px) {
+  .ms-project-ribbon {
+    overflow-x: auto;
+  }
+}
