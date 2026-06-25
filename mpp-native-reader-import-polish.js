@@ -11,7 +11,8 @@
   if (!reader || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = "0.9.0-assignments";
+  const VERSION = "1.0.0-durations";
+  const MINUTES_PER_DAY = 480;
   const TASK_PRED_FIELD_ID = 0x0b408053;
   const RESOURCE_NAME_FIELD_IDS = [0x0c4002f2, 0x0c4002f5];
   const RESOURCE_INITIAL_FIELD_ID = 0x0c400001;
@@ -52,6 +53,7 @@
       const cfb = new reader.CompoundFileBinary(buffer);
       let xml = result.projectXml;
       let taskStats = null;
+      let durationStats = null;
       let resourceStats = null;
       let assignmentStats = null;
       let changed = false;
@@ -65,6 +67,12 @@
             taskStats = { ...polished, displayPredecessorRows: taskDetails.displayPredecessorRows };
             changed = true;
           }
+        }
+        const durationHit = polishDurationsAndMilestones(xml, result.project.tasks, taskDetails?.tasks || new Map());
+        if (durationHit.changed) {
+          xml = durationHit.xml;
+          durationStats = durationHit;
+          changed = true;
         }
       }
 
@@ -105,8 +113,11 @@
         displayPredecessorRows: taskStats?.displayPredecessorRows || 0,
         displayPredecessorLinks: taskStats?.displayLinksAdded || 0,
         externalDisplayPredecessors: taskStats?.externalDisplayLinks || 0,
-        milestones: taskStats?.milestonesApplied || 0,
+        milestones: durationStats?.milestonesApplied ?? taskStats?.milestonesApplied ?? 0,
         notes: taskStats?.notesApplied || 0,
+        durations: durationStats?.durationsApplied || 0,
+        derivedDurations: durationStats?.derivedDurations || 0,
+        nativeDurations: durationStats?.nativeDurations || 0,
         resources: resourceStats?.count || 0,
         assignments: assignmentStats?.count || 0,
       };
@@ -155,8 +166,14 @@
           nativePredecessorTextRows: taskStats.displayPredecessorRows,
           nativePredecessorLinksAdded: taskStats.displayLinksAdded,
           externalNativePredecessors: taskStats.externalDisplayLinks,
-          milestones: taskStats.milestonesApplied,
           nativeImportNotes: taskStats.notesApplied,
+        } : {}),
+        ...(durationStats ? {
+          durations: durationStats.durationsApplied,
+          nativeDurations: durationStats.nativeDurations,
+          derivedDurations: durationStats.derivedDurations,
+          milestones: durationStats.milestonesApplied,
+          nonMilestoneSameDayTasks: durationStats.nonMilestoneSameDayTasks,
         } : {}),
         ...(resourceStats ? {
           resources: resourceStats.count,
@@ -172,7 +189,8 @@
 
       result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
       const pieces = [];
-      if (taskStats) pieces.push(`added ${taskStats.displayLinksAdded} display predecessor link${taskStats.displayLinksAdded === 1 ? "" : "s"}, marked ${taskStats.milestonesApplied} same-day task${taskStats.milestonesApplied === 1 ? "" : "s"} as milestone${taskStats.milestonesApplied === 1 ? "" : "s"}, and preserved native row context in notes`);
+      if (taskStats) pieces.push(`added ${taskStats.displayLinksAdded} display predecessor link${taskStats.displayLinksAdded === 1 ? "" : "s"} and preserved native row context in notes`);
+      if (durationStats) pieces.push(`applied ${durationStats.durationsApplied} task duration${durationStats.durationsApplied === 1 ? "" : "s"} and marked ${durationStats.milestonesApplied} milestone${durationStats.milestonesApplied === 1 ? "" : "s"} with safer same-day handling`);
       if (resourceStats) pieces.push(`decoded ${resourceStats.count} resource${resourceStats.count === 1 ? "" : "s"} from native TBkndRsc streams`);
       if (assignmentStats) pieces.push(`decoded ${assignmentStats.count} task/resource assignment${assignmentStats.count === 1 ? "" : "s"} from native TBkndAssn streams`);
       result.warnings.push(`MPP import polish ${VERSION}: ${pieces.join("; ")}.`);
@@ -215,9 +233,8 @@
     projectTasks.forEach((task) => {
       const row = rows.get(Number(task.rowId));
       const sourcePredecessors = clean(row?.fields.get(TASK_PRED_FIELD_ID) || "");
-      const explicitDurationDays = row ? inferDurationDays(row.values) : null;
-      const isSameDayLeaf = !task.isSummary && task.start && task.finish && task.start === task.finish;
-      const isMilestone = isSameDayLeaf && !(Number.isFinite(explicitDurationDays) && explicitDurationDays > 1);
+      const nativeDurationDays = nativeTaskDurationDays(task, row);
+      const milestone = nativeTaskMilestone(task, nativeDurationDays);
       if (sourcePredecessors) displayPredecessorRows += 1;
       tasks.set(Number(task.id), {
         id: Number(task.id),
@@ -225,12 +242,138 @@
         uniqueId: task.uniqueId,
         orderKey: task.orderKey,
         sourcePredecessors,
-        explicitDurationDays,
-        isMilestone,
+        nativeDurationDays,
+        nativeDurationSource: nativeDurationSource(task, row),
+        isMilestone: milestone,
       });
     });
 
     return { tasks, displayPredecessorRows };
+  }
+
+  function nativeDurationSource(task, row) {
+    if (task && !task.isSummary && Number.isFinite(Number(task.durationDays)) && Number(task.durationDays) >= 0) return "native-task-table";
+    if (row) {
+      const value = inferDurationDays(row.values);
+      if (Number.isFinite(value) && value >= 0) return "native-var-field";
+    }
+    return "";
+  }
+
+  function nativeTaskDurationDays(task, row) {
+    if (task && !task.isSummary && Number.isFinite(Number(task.durationDays)) && Number(task.durationDays) >= 0) return Number(task.durationDays);
+    if (row) {
+      const value = inferDurationDays(row.values);
+      if (Number.isFinite(value) && value >= 0) return value;
+    }
+    return null;
+  }
+
+  function nativeTaskMilestone(task, nativeDurationDays) {
+    if (!task || task.isSummary) return false;
+    if (Number.isFinite(nativeDurationDays)) return nativeDurationDays === 0;
+    const sameDay = task.start && task.finish && task.start === task.finish;
+    return sameDay && looksLikeMilestoneTaskName(task.name);
+  }
+
+  function polishDurationsAndMilestones(xml, projectTasks, detailMap) {
+    const byId = new Map(projectTasks.map((task) => [Number(task.id), task]));
+    let changed = false;
+    let durationsApplied = 0;
+    let derivedDurations = 0;
+    let nativeDurations = 0;
+    let milestonesApplied = 0;
+    let nonMilestoneSameDayTasks = 0;
+
+    const output = xml.replace(/<Task>([\s\S]*?)<\/Task>/g, (full, body) => {
+      const id = Number(childTextFromBody(body, "ID"));
+      if (!id) return full;
+      const task = byId.get(id);
+      if (!task || task.isSummary) return full;
+      const detail = detailMap.get(id) || {};
+      const duration = chooseDurationForTask(task, detail);
+      if (!duration) return full;
+
+      let nextBody = body;
+      const before = nextBody;
+      nextBody = setOrInsertChild(nextBody, "Duration", minutesToProjectDuration(duration.minutes), "Finish");
+      nextBody = setOrInsertChild(nextBody, "DurationFormat", duration.minutes === 0 ? "7" : "7", "Duration");
+      nextBody = setOrInsertChild(nextBody, "Milestone", duration.isMilestone ? "1" : "0", "DurationFormat");
+      if (duration.isMilestone) {
+        nextBody = setOrInsertChild(nextBody, "Work", "PT0H0M0S", "DurationFormat");
+      }
+      if (nextBody !== before) {
+        changed = true;
+        durationsApplied += 1;
+        if (duration.source === "derived-working-span") derivedDurations += 1;
+        if (duration.source && duration.source.startsWith("native")) nativeDurations += 1;
+        if (duration.isMilestone) milestonesApplied += 1;
+        if (task.start && task.finish && task.start === task.finish && !duration.isMilestone) nonMilestoneSameDayTasks += 1;
+      }
+      return nextBody === body ? full : `<Task>${nextBody}\n    </Task>`;
+    });
+
+    return { xml: output, changed, durationsApplied, derivedDurations, nativeDurations, milestonesApplied, nonMilestoneSameDayTasks };
+  }
+
+  function chooseDurationForTask(task, detail) {
+    const nativeDays = Number(detail?.nativeDurationDays);
+    const source = detail?.nativeDurationSource || "";
+    if (Number.isFinite(nativeDays) && nativeDays >= 0 && nativeDays < 10000) {
+      return {
+        days: nativeDays,
+        minutes: Math.round(nativeDays * MINUTES_PER_DAY),
+        isMilestone: nativeDays === 0,
+        source: source || "native-task-table",
+      };
+    }
+
+    const sameDay = task.start && task.finish && task.start === task.finish;
+    if (sameDay && looksLikeMilestoneTaskName(task.name)) {
+      return { days: 0, minutes: 0, isMilestone: true, source: "same-day-milestone-name" };
+    }
+
+    const workingDays = workingDaysInclusive(task.start, task.finish);
+    if (Number.isFinite(workingDays) && workingDays > 0) {
+      return {
+        days: workingDays,
+        minutes: Math.round(workingDays * MINUTES_PER_DAY),
+        isMilestone: false,
+        source: "derived-working-span",
+      };
+    }
+
+    return sameDay ? { days: 1, minutes: MINUTES_PER_DAY, isMilestone: false, source: "same-day-default" } : null;
+  }
+
+  function workingDaysInclusive(startValue, finishValue) {
+    const start = parseIsoDay(startValue);
+    const finish = parseIsoDay(finishValue || startValue);
+    if (!start || !finish) return null;
+    if (finish < start) return 1;
+    let count = 0;
+    const cursor = new Date(start.getTime());
+    let guard = 0;
+    while (cursor <= finish && guard < 50000) {
+      const day = cursor.getUTCDay();
+      if (day !== 0 && day !== 6) count += 1;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      guard += 1;
+    }
+    return Math.max(1, count);
+  }
+
+  function parseIsoDay(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+    if (!match) return null;
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function looksLikeMilestoneTaskName(name) {
+    const text = clean(name).toLowerCase();
+    if (!text) return false;
+    return /\b(kick[- ]?off|sign[- ]?off|review|irr|drr|trr|arr|odd|mrod|handoff|handover|go\/no-go|decision|committed|release|pdp[- ]?\d|milestone)\b/.test(text);
   }
 
   function decodeNativeResources(cfb) {
@@ -352,16 +495,8 @@
   }
 
   function assignmentWorkMinutes(task) {
-    const days = Number(task.durationDays);
-    if (Number.isFinite(days) && days > 0) return Math.max(0, Math.round(days * 480));
-    if (task.start && task.finish && task.start !== task.finish) {
-      const start = new Date(`${task.start}T00:00:00Z`);
-      const finish = new Date(`${task.finish}T00:00:00Z`);
-      if (!Number.isNaN(start.getTime()) && !Number.isNaN(finish.getTime())) {
-        return Math.max(480, Math.round(((finish - start) / 86400000 + 1) * 480));
-      }
-    }
-    return 0;
+    const duration = chooseDurationForTask(task, {});
+    return duration ? duration.minutes : 0;
   }
 
   function polishProjectXml(xml, projectTasks, details) {
@@ -377,7 +512,6 @@
 
     let displayLinksAdded = 0;
     let externalDisplayLinks = 0;
-    let milestonesApplied = 0;
     let notesApplied = 0;
     let totalPredecessorLinks = 0;
     let changed = false;
@@ -411,20 +545,8 @@
         changed = true;
       }
 
-      if (detail.isMilestone) {
-        const before = nextBody;
-        nextBody = setOrInsertChild(nextBody, "Duration", "PT0H0M0S", "Finish");
-        nextBody = setOrInsertChild(nextBody, "Work", "PT0H0M0S", "DurationFormat");
-        nextBody = setOrInsertChild(nextBody, "Milestone", "1", "DurationFormat");
-        if (nextBody !== before) {
-          milestonesApplied += 1;
-          changed = true;
-        }
-      }
-
       const noteLines = [];
       if (detail.sourcePredecessors) noteLines.push(`Native MPP predecessors: ${detail.sourcePredecessors}`);
-      if (detail.isMilestone) noteLines.push("Native MPP import: same-day leaf task recovered as a zero-duration milestone.");
       if (detail.rowId || detail.uniqueId) noteLines.push(`Native MPP row ${detail.rowId || "?"}${detail.uniqueId ? `, unique ID ${detail.uniqueId}` : ""}${detail.orderKey != null ? `, order ${detail.orderKey}` : ""}.`);
       if (noteLines.length) {
         nextBody = appendNotes(nextBody, noteLines.join("\n"));
@@ -435,7 +557,7 @@
       return nextBody === body ? full : `<Task>${nextBody}\n    </Task>`;
     });
 
-    return { xml: output, changed, displayLinksAdded, externalDisplayLinks, milestonesApplied, notesApplied, totalPredecessorLinks };
+    return { xml: output, changed, displayLinksAdded, externalDisplayLinks, notesApplied, totalPredecessorLinks };
   }
 
   function injectResourcesXml(xml, resources) {
@@ -524,9 +646,9 @@
     const amount = Number(match[2]);
     const unit = match[3] || "d";
     if (!Number.isFinite(amount)) return 0;
-    let minutesPerUnit = 480;
-    if (unit.startsWith("mo")) minutesPerUnit = 20 * 480;
-    else if (unit.startsWith("w")) minutesPerUnit = 5 * 480;
+    let minutesPerUnit = MINUTES_PER_DAY;
+    if (unit.startsWith("mo")) minutesPerUnit = 20 * MINUTES_PER_DAY;
+    else if (unit.startsWith("w")) minutesPerUnit = 5 * MINUTES_PER_DAY;
     else if (unit.startsWith("h")) minutesPerUnit = 60;
     else if (unit === "m" || unit.startsWith("min")) minutesPerUnit = 1;
     return Math.round(sign * amount * minutesPerUnit);
@@ -703,19 +825,20 @@
   function inferDurationDays(values) {
     for (const value of values || []) {
       const days = parseDurationDays(value);
-      if (Number.isFinite(days) && days > 0) return days;
+      if (Number.isFinite(days) && days >= 0) return days;
     }
     return null;
   }
 
   function parseDurationDays(value) {
     const text = clean(value).toLowerCase();
+    if (/^0\s*(?:d|day|days)\b/.test(text)) return 0;
     let match = /(-?\d+(?:\.\d+)?)\s*(?:d|day|days)\b/.exec(text);
-    if (match) return Math.max(1, Math.round(Number(match[1])));
+    if (match) return Math.max(0, Math.round(Number(match[1])));
     match = /(-?\d+(?:\.\d+)?)\s*(?:w|wk|wks|week|weeks)\b/.exec(text);
-    if (match) return Math.max(1, Math.round(Number(match[1]) * 5));
+    if (match) return Math.max(0, Math.round(Number(match[1]) * 5));
     match = /(-?\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/.exec(text);
-    if (match) return Math.max(1, Math.round(Number(match[1]) / 8));
+    if (match) return Math.max(0, Math.round(Number(match[1]) / 8));
     return null;
   }
 
