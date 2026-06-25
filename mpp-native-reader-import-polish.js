@@ -11,9 +11,9 @@
   if (!reader || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = "0.8.0-polish";
+  const VERSION = "0.9.0-assignments";
   const TASK_PRED_FIELD_ID = 0x0b408053;
-  const RESOURCE_NAME_FIELD_ID = 0x0c4002f5;
+  const RESOURCE_NAME_FIELD_IDS = [0x0c4002f2, 0x0c4002f5];
   const RESOURCE_INITIAL_FIELD_ID = 0x0c400001;
   const ENDOFCHAIN = -2;
   const textDecoderUtf8 = new TextDecoder("utf-8", { fatal: false });
@@ -53,6 +53,7 @@
       let xml = result.projectXml;
       let taskStats = null;
       let resourceStats = null;
+      let assignmentStats = null;
       let changed = false;
 
       if (result.project?.tasks?.length) {
@@ -81,6 +82,21 @@
         }
       }
 
+      const assignments = resources.length && result.project?.tasks?.length
+        ? decodeNativeAssignments(cfb, result.project.tasks, resources)
+        : [];
+      if (assignments.length) {
+        const assignmentHit = injectAssignmentsXml(xml, assignments);
+        if (assignmentHit.changed) {
+          xml = assignmentHit.xml;
+          assignmentStats = {
+            count: assignments.length,
+            streams: assignmentHit.streams,
+          };
+          changed = true;
+        }
+      }
+
       if (!changed) return result;
       result.projectXml = xml;
       result.project = result.project || {};
@@ -92,6 +108,7 @@
         milestones: taskStats?.milestonesApplied || 0,
         notes: taskStats?.notesApplied || 0,
         resources: resourceStats?.count || 0,
+        assignments: assignmentStats?.count || 0,
       };
 
       if (resourceStats) {
@@ -110,6 +127,13 @@
           names: resourceStats.names,
         };
       }
+      if (assignmentStats) {
+        result.project.assignmentCount = assignmentStats.count;
+        result.importAssignments = {
+          version: VERSION,
+          count: assignmentStats.count,
+        };
+      }
 
       result.nativeTable.importPolishVersion = VERSION;
       if (taskStats) {
@@ -119,6 +143,11 @@
         result.nativeTable.resourceCount = resourceStats.count;
         result.nativeTable.resourceStrategy = "native-resource-table-cache";
         result.nativeTable.resourceStreams = resourceStats.streams;
+      }
+      if (assignmentStats) {
+        result.nativeTable.assignmentCount = assignmentStats.count;
+        result.nativeTable.assignmentStrategy = "native-assignment-fixed-table-cache";
+        result.nativeTable.assignmentStreams = assignmentStats.streams;
       }
       result.nativeTable.fieldCoverage = {
         ...(result.nativeTable.fieldCoverage || {}),
@@ -134,12 +163,18 @@
           resourceNames: resources.filter((resource) => resource.name).length,
           resourceInitials: resources.filter((resource) => resource.initials).length,
         } : {}),
+        ...(assignmentStats ? {
+          assignments: assignmentStats.count,
+          assignedTasks: new Set(assignments.map((assignment) => assignment.taskUid)).size,
+          assignedResources: new Set(assignments.map((assignment) => assignment.resourceUid)).size,
+        } : {}),
       };
 
       result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
       const pieces = [];
       if (taskStats) pieces.push(`added ${taskStats.displayLinksAdded} display predecessor link${taskStats.displayLinksAdded === 1 ? "" : "s"}, marked ${taskStats.milestonesApplied} same-day task${taskStats.milestonesApplied === 1 ? "" : "s"} as milestone${taskStats.milestonesApplied === 1 ? "" : "s"}, and preserved native row context in notes`);
       if (resourceStats) pieces.push(`decoded ${resourceStats.count} resource${resourceStats.count === 1 ? "" : "s"} from native TBkndRsc streams`);
+      if (assignmentStats) pieces.push(`decoded ${assignmentStats.count} task/resource assignment${assignmentStats.count === 1 ? "" : "s"} from native TBkndAssn streams`);
       result.warnings.push(`MPP import polish ${VERSION}: ${pieces.join("; ")}.`);
       return result;
     } catch (error) {
@@ -208,6 +243,7 @@
     if (varMeta.length < 32 || !var2Data.length) return [];
 
     const view = new DataView(varMeta.buffer, varMeta.byteOffset, varMeta.byteLength);
+    const fixedResources = parseResourceFixedRows(cfb);
     const rows = new Map();
 
     for (let offset = 0x20; offset + 12 <= varMeta.length; offset += 12) {
@@ -216,26 +252,27 @@
       const valueOffset = readUInt32(view, offset + 8);
       if (!fieldId || valueOffset >= var2Data.length) continue;
       const row = rows.get(rowId) || { rowId, fields: new Map(), nameOffset: null };
-      const value = fieldId === RESOURCE_NAME_FIELD_ID
+      const value = RESOURCE_NAME_FIELD_IDS.includes(fieldId)
         ? readLengthPrefixedTextLenient(var2Data, valueOffset)
         : readLengthPrefixedValue(var2Data, valueOffset);
-      if (value != null) row.fields.set(fieldId, value);
-      if (fieldId === RESOURCE_NAME_FIELD_ID) row.nameOffset = valueOffset;
+      if (value != null && (String(value).trim() || !row.fields.has(fieldId))) row.fields.set(fieldId, value);
+      if (RESOURCE_NAME_FIELD_IDS.includes(fieldId) && String(value || "").trim()) row.nameOffset = valueOffset;
       rows.set(rowId, row);
     }
 
     const resources = [];
     const seenNames = new Set();
     [...rows.values()].sort((a, b) => a.rowId - b.rowId).forEach((row) => {
-      const name = normalizeResourceName(row.fields.get(RESOURCE_NAME_FIELD_ID));
+      const name = normalizeResourceName(firstResourceName(row.fields));
       if (!name) return;
       const nameKey = name.toLowerCase();
       if (seenNames.has(nameKey)) return;
       seenNames.add(nameKey);
       const id = resources.length + 1;
+      const fixed = fixedResources.byRowId.get(row.rowId) || null;
       resources.push({
         id,
-        uid: Number.isInteger(row.rowId) && row.rowId > 0 ? row.rowId : id,
+        uid: Number.isInteger(fixed?.uid) && fixed.uid > 0 ? fixed.uid : (Number.isInteger(row.rowId) && row.rowId > 0 ? row.rowId : id),
         rowId: row.rowId,
         name,
         initials: normalizeInitials(row.fields.get(RESOURCE_INITIAL_FIELD_ID), name),
@@ -250,6 +287,81 @@
 
     resources.streams = { varMeta: varMetaEntry.path, var2Data: var2DataEntry.path };
     return resources;
+  }
+
+  function parseResourceFixedRows(cfb) {
+    const fixed = splitFixedRecords(cfb, "TBkndRsc");
+    const byRowId = new Map();
+    fixed.records.forEach((record) => {
+      const bytes = record.bytes;
+      if (!bytes || bytes.length < 8) return;
+      const uid = readUInt32FromBytes(bytes, 0);
+      const rowId = readUInt32FromBytes(bytes, 4);
+      if (rowId > 0) byRowId.set(rowId, { uid, rowId, fixedIndex: record.index });
+    });
+    return { byRowId, streams: fixed.streams };
+  }
+
+  function firstResourceName(fields) {
+    for (const fieldId of RESOURCE_NAME_FIELD_IDS) {
+      const value = normalizeResourceName(fields.get(fieldId));
+      if (value) return value;
+    }
+    return "";
+  }
+
+  function decodeNativeAssignments(cfb, projectTasks, resources) {
+    const fixed = splitFixedRecords(cfb, "TBkndAssn");
+    if (!fixed.records.length) return [];
+    const taskRowToTask = new Map(projectTasks.map((task) => [Number(task.rowId), task]).filter(([rowId]) => Number.isFinite(rowId) && rowId > 0));
+    const resourceUids = new Set(resources.map((resource) => Number(resource.uid)).filter((uid) => Number.isInteger(uid) && uid > 0));
+    const assignments = [];
+    const seen = new Set();
+
+    fixed.records.forEach((record) => {
+      const bytes = record.bytes;
+      if (!bytes || bytes.length < 12) return;
+      const assignmentUid = readUInt32FromBytes(bytes, 0);
+      const taskRowId = readUInt32FromBytes(bytes, 4);
+      const packedResource = readUInt32FromBytes(bytes, 8);
+      const resourceUid = packedResource & 0xffff;
+      const task = taskRowToTask.get(taskRowId);
+      if (!task || !resourceUids.has(resourceUid) || task.isSummary) return;
+      const taskUid = Number(task.id);
+      if (!Number.isInteger(taskUid) || taskUid <= 0) return;
+      const key = `${taskUid}:${resourceUid}:${assignmentUid || record.index}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const workMinutes = assignmentWorkMinutes(task);
+      assignments.push({
+        uid: Number.isInteger(assignmentUid) && assignmentUid > 0 ? assignmentUid : assignments.length + 1,
+        taskUid,
+        taskRowId,
+        resourceUid,
+        units: 1,
+        workMinutes,
+        actualWorkMinutes: 0,
+        remainingWorkMinutes: workMinutes,
+        sourceIndex: record.index,
+      });
+    });
+
+    assignments.sort((a, b) => a.taskUid - b.taskUid || a.resourceUid - b.resourceUid || a.uid - b.uid);
+    assignments.streams = fixed.streams;
+    return assignments;
+  }
+
+  function assignmentWorkMinutes(task) {
+    const days = Number(task.durationDays);
+    if (Number.isFinite(days) && days > 0) return Math.max(0, Math.round(days * 480));
+    if (task.start && task.finish && task.start !== task.finish) {
+      const start = new Date(`${task.start}T00:00:00Z`);
+      const finish = new Date(`${task.finish}T00:00:00Z`);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(finish.getTime())) {
+        return Math.max(480, Math.round(((finish - start) / 86400000 + 1) * 480));
+      }
+    }
+    return 0;
   }
 
   function polishProjectXml(xml, projectTasks, details) {
@@ -341,6 +453,28 @@
     return { xml: xml.replace(/\s*<\/Project>\s*$/, `${resourcesXml}\n</Project>`), changed: true, streams };
   }
 
+  function injectAssignmentsXml(xml, assignments) {
+    const streams = assignments.streams || {};
+    const hasRealAssignments = /<Assignments>[\s\S]*?<Assignment>[\s\S]*?<TaskUID>\s*[1-9]/.test(xml);
+    if (hasRealAssignments) return { xml, changed: false, streams };
+    const assignmentsXml = `\n  <Assignments>${assignments.map(renderAssignmentXml).join("")}\n  </Assignments>`;
+    if (/<Assignments>[\s\S]*?<\/Assignments>/.test(xml)) {
+      return { xml: xml.replace(/<Assignments>[\s\S]*?<\/Assignments>/, assignmentsXml.trim()), changed: true, streams };
+    }
+    return { xml: xml.replace(/\s*<\/Project>\s*$/, `${assignmentsXml}\n</Project>`), changed: true, streams };
+  }
+
+  function renderAssignmentXml(assignment) {
+    return `\n    <Assignment>\n      <UID>${assignment.uid}</UID>\n      <TaskUID>${assignment.taskUid}</TaskUID>\n      <ResourceUID>${assignment.resourceUid}</ResourceUID>\n      <PercentWorkComplete>0</PercentWorkComplete>\n      <Units>${Number(assignment.units || 1).toFixed(2)}</Units>\n      <Work>${minutesToProjectDuration(assignment.workMinutes)}</Work>\n      <ActualWork>${minutesToProjectDuration(assignment.actualWorkMinutes)}</ActualWork>\n      <RemainingWork>${minutesToProjectDuration(assignment.remainingWorkMinutes)}</RemainingWork>\n    </Assignment>`;
+  }
+
+  function minutesToProjectDuration(minutes) {
+    const safe = Math.max(0, Math.round(Number(minutes) || 0));
+    const hours = Math.floor(safe / 60);
+    const mins = safe % 60;
+    return `PT${hours}H${mins}M0S`;
+  }
+
   function renderResourceXml(resource) {
     return `\n    <Resource>\n      <UID>${resource.uid}</UID>\n      <ID>${resource.id}</ID>\n      <Name>${escapeXmlValue(resource.name)}</Name>\n      <Type>0</Type>\n      <IsNull>0</IsNull>\n      <Initials>${escapeXmlValue(resource.initials)}</Initials>\n      <MaxUnits>${Number(resource.maxUnits || 1).toFixed(2)}</MaxUnits>\n      <StandardRate>${escapeXmlValue(resource.standardRate || "0")}</StandardRate>\n      <StandardRateFormat>2</StandardRateFormat>\n      <OvertimeRate>${escapeXmlValue(resource.overtimeRate || "0")}</OvertimeRate>\n      <OvertimeRateFormat>2</OvertimeRateFormat>\n      <CostPerUse>${escapeXmlValue(resource.costPerUse || "0")}</CostPerUse>\n      <AccrueAt>3</AccrueAt>\n      <BaseCalendarUID>1</BaseCalendarUID>\n      <Notes>${escapeXmlValue(resource.notes || "")}</Notes>\n    </Resource>`;
   }
@@ -423,6 +557,40 @@
   function childTextFromBody(body, localName) {
     const match = new RegExp(`<${localName}>([\\s\\S]*?)<\\/${localName}>`).exec(body);
     return match ? decodeXmlValue(match[1].trim()) : "";
+  }
+
+  function splitFixedRecords(cfb, prefix) {
+    const metaEntry = getEntryByPath(cfb, `${prefix}/FixedMeta`);
+    const dataEntry = getEntryByPath(cfb, `${prefix}/FixedData`);
+    if (!metaEntry || !dataEntry) return { records: [], streams: {} };
+    const meta = cfb.getStream(metaEntry);
+    const data = cfb.getStream(dataEntry);
+    if (meta.length < 16 || !data.length) return { records: [], streams: { fixedMeta: metaEntry.path, fixedData: dataEntry.path } };
+    const metaView = new DataView(meta.buffer, meta.byteOffset, meta.byteLength);
+    const count = readUInt32(metaView, 8);
+    if (!Number.isInteger(count) || count <= 0) return { records: [], streams: { fixedMeta: metaEntry.path, fixedData: dataEntry.path } };
+    const available = meta.length - 16;
+    const itemSize = available % count === 0 ? available / count : 0;
+    if (!itemSize || itemSize < 8) return { records: [], streams: { fixedMeta: metaEntry.path, fixedData: dataEntry.path } };
+    const offsets = [];
+    for (let i = 0; i < count; i += 1) {
+      const offset = 16 + i * itemSize;
+      offsets.push(readUInt32(metaView, offset + 4));
+    }
+    const records = [];
+    offsets.forEach((offset, index) => {
+      if (offset > data.length) return;
+      let nextOffset = index + 1 < offsets.length ? offsets[index + 1] : data.length;
+      if (nextOffset < offset || nextOffset > data.length) nextOffset = data.length;
+      const bytes = data.slice(offset, nextOffset);
+      if (bytes.length) records.push({ index, offset, bytes });
+    });
+    return { records, streams: { fixedMeta: metaEntry.path, fixedData: dataEntry.path } };
+  }
+
+  function readUInt32FromBytes(bytes, offset) {
+    if (!bytes || offset + 4 > bytes.length) return 0;
+    return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true);
   }
 
   function getEntryByPath(cfb, suffix) {
