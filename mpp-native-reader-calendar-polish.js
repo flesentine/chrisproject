@@ -7,8 +7,11 @@
   if (!reader || window.__nativeMppCalendarPolishLoaded) return;
   window.__nativeMppCalendarPolishLoaded = true;
 
-  const VERSION = "0.1.0-calendars";
+  const VERSION = "0.2.0-native-week-rules";
   const NAME_FIELD_IDS = [0x0d40001a, 0x0d400008, 0x0d400001];
+  const RULE_FIELD_ID = 0x0d400001;
+  const DAY_BLOCK_SIZE = 60;
+  const WEEK_BLOCK_SIZE = DAY_BLOCK_SIZE * 7;
   const decoderUtf8 = new TextDecoder("utf-8", { fatal: false });
   const decoderUtf16 = new TextDecoder("utf-16le", { fatal: false });
 
@@ -51,16 +54,23 @@
         version: VERSION,
         count: calendars.length,
         names: calendars.map((calendar) => calendar.name),
-        source: "native-TBkndCal-name-table",
-        note: "Calendar names and broad working patterns are decoded. Holiday exceptions are not decoded yet.",
+        source: "native-TBkndCal-rule-blob",
+        explicitWeekRuleCalendars: calendars.filter((calendar) => calendar.hasNativeWeekRules).length,
+        exceptionNameCalendars: calendars.filter((calendar) => calendar.exceptionNames?.length).length,
+        note: "Weekly work patterns are decoded from native calendar blobs. Exception names are detected, but exception dates are not decoded yet.",
       };
       result.importPolish = { ...(result.importPolish || {}), calendars: calendars.length, calendarPolishVersion: VERSION };
       result.nativeTable = result.nativeTable || {};
       result.nativeTable.calendarCount = calendars.length;
-      result.nativeTable.calendarStrategy = "native-calendar-name-table";
-      result.nativeTable.fieldCoverage = { ...(result.nativeTable.fieldCoverage || {}), calendars: calendars.length };
+      result.nativeTable.calendarStrategy = "native-calendar-rule-blob";
+      result.nativeTable.fieldCoverage = {
+        ...(result.nativeTable.fieldCoverage || {}),
+        calendars: calendars.length,
+        calendarWeekRules: calendars.filter((calendar) => calendar.hasNativeWeekRules).length,
+        calendarExceptionNameSets: calendars.filter((calendar) => calendar.exceptionNames?.length).length,
+      };
       result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-      result.warnings.push(`MPP calendar polish ${VERSION}: decoded ${calendars.length} calendar${calendars.length === 1 ? "" : "s"} from native TBkndCal streams. Holiday exceptions are not decoded yet.`);
+      result.warnings.push(`MPP calendar polish ${VERSION}: decoded ${calendars.length} calendar${calendars.length === 1 ? "" : "s"}; ${calendars.filter((calendar) => calendar.hasNativeWeekRules).length} had explicit native weekly rule blocks. Exception dates are not decoded yet.`);
       return result;
     } catch (error) {
       result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
@@ -77,29 +87,193 @@
     const data = cfb.getStream(dataEntry);
     const view = new DataView(meta.buffer, meta.byteOffset, meta.byteLength);
     const rows = new Map();
+
     for (let offset = 0x20; offset + 12 <= meta.length; offset += 12) {
       const fieldId = readUInt32(view, offset);
       const rowId = readUInt32(view, offset + 4);
       const valueOffset = readUInt32(view, offset + 8);
-      if (!NAME_FIELD_IDS.includes(fieldId) || valueOffset >= data.length) continue;
-      const value = normalizeCalendarName(readLengthPrefixedValue(data, valueOffset));
-      if (!value) continue;
-      const row = rows.get(rowId) || { rowId, names: [] };
-      row.names.push(value);
+      if (!fieldId || valueOffset >= data.length) continue;
+      const raw = readLengthPrefixedRaw(data, valueOffset);
+      const text = readRawValueText(raw);
+      const row = rows.get(rowId) || { rowId, names: [], ruleBlob: null, exceptionNames: [] };
+      if (NAME_FIELD_IDS.includes(fieldId)) {
+        const name = normalizeCalendarName(text);
+        if (name) row.names.push(name);
+      }
+      if (fieldId === RULE_FIELD_ID && raw && raw.length >= WEEK_BLOCK_SIZE) {
+        const decoded = decodeNativeRuleBlob(raw);
+        if (decoded.hasNativeWeekRules || decoded.exceptionNames.length) {
+          row.ruleBlob = decoded;
+          row.exceptionNames = decoded.exceptionNames;
+        }
+      }
       rows.set(rowId, row);
     }
 
-    const out = [{ uid: 1, id: 1, name: "Standard", kind: "standard", baseCalendarUid: 0 }];
+    const standard = {
+      uid: 1,
+      id: 1,
+      name: "Standard",
+      baseCalendarUid: 0,
+      week: standardWeek(),
+      hasNativeWeekRules: true,
+      exceptionNames: [],
+    };
+    const out = [standard];
     const seen = new Set(["standard"]);
+
     [...rows.values()].sort((a, b) => a.rowId - b.rowId).forEach((row) => {
       const name = chooseCalendarName(row.names);
       if (!name) return;
       const key = name.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
-      out.push({ uid: out.length + 1, id: out.length + 1, name, kind: inferCalendarKind(name), baseCalendarUid: 1, nativeRowId: row.rowId });
+      const rules = row.ruleBlob || { week: standardWeek(), hasNativeWeekRules: false, exceptionNames: [] };
+      out.push({
+        uid: out.length + 1,
+        id: out.length + 1,
+        name,
+        baseCalendarUid: 1,
+        nativeRowId: row.rowId,
+        week: rules.week,
+        hasNativeWeekRules: rules.hasNativeWeekRules,
+        exceptionNames: rules.exceptionNames || [],
+      });
     });
     return out;
+  }
+
+  function decodeNativeRuleBlob(raw) {
+    const week = standardWeek();
+    let explicit = 0;
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      const offset = dayIndex * DAY_BLOCK_SIZE;
+      if (offset + DAY_BLOCK_SIZE > raw.length) break;
+      const decoded = decodeDayBlock(raw.slice(offset, offset + DAY_BLOCK_SIZE));
+      if (!decoded) continue;
+      week[dayIndex] = decoded;
+      explicit += 1;
+    }
+    return {
+      week,
+      hasNativeWeekRules: explicit > 0,
+      exceptionNames: extractExceptionNames(raw),
+    };
+  }
+
+  function decodeDayBlock(block) {
+    if (!block || block.length < DAY_BLOCK_SIZE) return null;
+    const words = [];
+    const view = new DataView(block.buffer, block.byteOffset, block.byteLength);
+    for (let offset = 0; offset + 2 <= block.length; offset += 2) words.push(readUInt16(view, offset));
+
+    // Native day block markers seen in real MPPs:
+    // [1, 0, ...zeros] means inherit/default day, so do not override.
+    if (words[0] === 1 && words.slice(1).every((word) => word === 0)) return null;
+
+    // [0, 0, ...] is an explicit non-working day.
+    if (words[0] === 0 && words[1] === 0 && words.slice(2).every((word) => word === 0)) return [];
+
+    // [0, 1, 14400, ...] is a full 24-hour day. Values are tenths of minutes.
+    if (words[0] === 0 && words[1] === 1 && words[2] >= 14390) return [{ from: "00:00:00", to: "23:59:00" }];
+
+    // [0, 1, start, duration, ...] is one continuous working window.
+    if (words[0] === 0 && words[1] === 1 && isTimeTick(words[2]) && isDurationTick(words[4])) {
+      return [makeWindow(words[2], words[2] + words[4])].filter(Boolean);
+    }
+
+    // [0, 2, start1, start2, duration1, duration2, ...] is the common two-window Project day.
+    // Example: 08:00-12:00 and 13:00-17:00 stores start1=4800, start2=7800,
+    // duration1=2400, duration2=2400 in tenths of minutes.
+    if (words[0] === 0 && words[1] === 2 && isTimeTick(words[2]) && isTimeTick(words[5])) {
+      const firstDuration = isDurationTick(words[10]) ? words[10] : 2400;
+      const secondDuration = isDurationTick(words[20]) ? words[20] : 2400;
+      return [makeWindow(words[2], words[2] + firstDuration), makeWindow(words[5], words[5] + secondDuration)].filter(Boolean);
+    }
+
+    return null;
+  }
+
+  function makeWindow(fromTicks, toTicks) {
+    const from = ticksToTime(fromTicks);
+    const to = ticksToTime(toTicks);
+    if (!from || !to || from === to) return null;
+    return { from, to };
+  }
+
+  function ticksToTime(ticks) {
+    const n = Number(ticks);
+    if (!Number.isFinite(n) || n < 0) return "";
+    const minutes = Math.max(0, Math.min(1439, Math.round(n / 10)));
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+  }
+
+  function isTimeTick(value) {
+    return Number.isFinite(Number(value)) && value >= 0 && value <= 14400;
+  }
+
+  function isDurationTick(value) {
+    return Number.isFinite(Number(value)) && value > 0 && value <= 14400;
+  }
+
+  function standardWeek() {
+    return [
+      [],
+      standardDay(),
+      standardDay(),
+      standardDay(),
+      standardDay(),
+      standardDay(),
+      [],
+    ];
+  }
+
+  function standardDay() {
+    return [
+      { from: "08:00:00", to: "12:00:00" },
+      { from: "13:00:00", to: "17:00:00" },
+    ];
+  }
+
+  function extractExceptionNames(raw) {
+    const names = [];
+    const seen = new Set();
+    const strings = extractUtf16Strings(raw).filter((value) => isExceptionName(value));
+    strings.forEach((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
+    });
+    return names;
+  }
+
+  function extractUtf16Strings(raw) {
+    const out = [];
+    let chars = [];
+    const flush = () => {
+      if (chars.length >= 4) out.push(chars.join("").trim());
+      chars = [];
+    };
+    const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    for (let offset = 0; offset + 2 <= raw.length; offset += 2) {
+      const code = readUInt16(view, offset);
+      if (code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 0x007e) || (code >= 0x00a0 && code <= 0xffff)) chars.push(String.fromCharCode(code));
+      else flush();
+    }
+    flush();
+    return out.map(clean).filter(Boolean);
+  }
+
+  function isExceptionName(value) {
+    const text = clean(value);
+    if (text.length < 4 || text.length > 80) return false;
+    if (!/[A-Za-z\p{L}]/u.test(text)) return false;
+    if (/^(eCalendar|EditDays|Start|EndDate|Week|Working|From\d|To\d|Default|Record)$/i.test(text)) return false;
+    if (/^[\W_]+$/u.test(text)) return false;
+    return true;
   }
 
   function chooseCalendarName(names) {
@@ -116,14 +290,6 @@
     return text;
   }
 
-  function inferCalendarKind(name) {
-    const text = String(name || "").toLowerCase();
-    if (/24\s*hour|24h/.test(text)) return "twentyFourHour";
-    if (/7\s*day|7day|seven|all working|all\s+working/.test(text)) return "sevenDay";
-    if (/6\s*day|6day|saturday|sat\b/.test(text)) return "sixDay";
-    return "standard";
-  }
-
   function injectCalendars(xml, calendars) {
     if (/<Calendars>[\s\S]*?<Calendar>[\s\S]*?<Name>/.test(xml)) return { xml, changed: false };
     const calendarXml = `\n  <Calendars>${calendars.map(renderCalendar).join("")}\n  </Calendars>`;
@@ -136,9 +302,7 @@
   }
 
   function setProjectCalendarUid(xml, uid) {
-    if (/<CalendarUID>[\s\S]*?<\/CalendarUID>/.test(xml)) {
-      return xml.replace(/<CalendarUID>[\s\S]*?<\/CalendarUID>/, `<CalendarUID>${uid}</CalendarUID>`);
-    }
+    if (/<CalendarUID>[\s\S]*?<\/CalendarUID>/.test(xml)) return xml.replace(/<CalendarUID>[\s\S]*?<\/CalendarUID>/, `<CalendarUID>${uid}</CalendarUID>`);
     return xml.replace(/(<Project[^>]*>)/, `$1\n  <CalendarUID>${uid}</CalendarUID>`);
   }
 
@@ -151,26 +315,14 @@
   }
 
   function renderCalendar(calendar) {
-    const is24 = calendar.kind === "twentyFourHour";
-    const days = calendar.kind === "sevenDay" || is24
-      ? [1, 2, 3, 4, 5, 6, 7]
-      : calendar.kind === "sixDay"
-        ? [2, 3, 4, 5, 6, 7]
-        : [2, 3, 4, 5, 6];
-    const nonWorking = [1, 2, 3, 4, 5, 6, 7].filter((day) => !days.includes(day));
-    const weekDays = [
-      ...nonWorking.map((day) => renderWeekDay(day, false, is24)),
-      ...days.map((day) => renderWeekDay(day, true, is24)),
-    ].join("");
-    return `\n    <Calendar>\n      <UID>${calendar.uid}</UID>\n      <Name>${escapeXml(calendar.name)}</Name>\n      <IsBaseCalendar>1</IsBaseCalendar>\n      <BaseCalendarUID>${calendar.baseCalendarUid || 0}</BaseCalendarUID>\n      <WeekDays>${weekDays}\n      </WeekDays>\n    </Calendar>`;
+    const weekDays = calendar.week.map((workingTimes, dayIndex) => renderWeekDay(dayIndex + 1, workingTimes)).join("");
+    const note = calendar.exceptionNames?.length ? `\n      <Notes>${escapeXml(`Native MPP exception names detected, dates not decoded yet: ${calendar.exceptionNames.slice(0, 20).join(", ")}${calendar.exceptionNames.length > 20 ? ", …" : ""}`)}</Notes>` : "";
+    return `\n    <Calendar>\n      <UID>${calendar.uid}</UID>\n      <Name>${escapeXml(calendar.name)}</Name>\n      <IsBaseCalendar>1</IsBaseCalendar>\n      <BaseCalendarUID>${calendar.baseCalendarUid || 0}</BaseCalendarUID>${note}\n      <WeekDays>${weekDays}\n      </WeekDays>\n    </Calendar>`;
   }
 
-  function renderWeekDay(dayType, working, is24) {
-    if (!working) return `\n        <WeekDay>\n          <DayType>${dayType}</DayType>\n          <DayWorking>0</DayWorking>\n        </WeekDay>`;
-    if (is24) {
-      return `\n        <WeekDay>\n          <DayType>${dayType}</DayType>\n          <DayWorking>1</DayWorking>\n          <WorkingTimes>\n            <WorkingTime><FromTime>00:00:00</FromTime><ToTime>23:59:00</ToTime></WorkingTime>\n          </WorkingTimes>\n        </WeekDay>`;
-    }
-    return `\n        <WeekDay>\n          <DayType>${dayType}</DayType>\n          <DayWorking>1</DayWorking>\n          <WorkingTimes>\n            <WorkingTime><FromTime>08:00:00</FromTime><ToTime>12:00:00</ToTime></WorkingTime>\n            <WorkingTime><FromTime>13:00:00</FromTime><ToTime>17:00:00</ToTime></WorkingTime>\n          </WorkingTimes>\n        </WeekDay>`;
+  function renderWeekDay(dayType, workingTimes) {
+    if (!workingTimes?.length) return `\n        <WeekDay>\n          <DayType>${dayType}</DayType>\n          <DayWorking>0</DayWorking>\n        </WeekDay>`;
+    return `\n        <WeekDay>\n          <DayType>${dayType}</DayType>\n          <DayWorking>1</DayWorking>\n          <WorkingTimes>${workingTimes.map((window) => `\n            <WorkingTime><FromTime>${window.from}</FromTime><ToTime>${window.to}</ToTime></WorkingTime>`).join("")}\n          </WorkingTimes>\n        </WeekDay>`;
   }
 
   function getEntry(cfb, suffix) {
@@ -178,15 +330,22 @@
     return cfb.entries.find((entry) => entry.type === 2 && String(entry.path || "").toLowerCase().endsWith(needle)) || null;
   }
 
-  function readLengthPrefixedValue(bytes, offset) {
-    if (!bytes || offset == null || offset < 0 || offset + 4 > bytes.length) return "";
+  function readLengthPrefixedRaw(bytes, offset) {
+    if (!bytes || offset == null || offset < 0 || offset + 4 > bytes.length) return null;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const len = readUInt32(view, offset);
-    if (!Number.isFinite(len) || len < 0 || len > bytes.length - offset - 4 || len > 1024 * 1024) return "";
-    const raw = bytes.slice(offset + 4, offset + 4 + len);
-    if (!raw.length) return "";
+    if (!Number.isFinite(len) || len < 0 || len > bytes.length - offset - 4 || len > 1024 * 1024) return null;
+    return bytes.slice(offset + 4, offset + 4 + len);
+  }
+
+  function readRawValueText(raw) {
+    if (!raw?.length) return "";
     if (raw.length % 2 === 0 && looksUtf16(raw)) return decoderUtf16.decode(raw).replace(/\0+$/g, "").trim();
     if (looksAnsi(raw)) return decoderUtf8.decode(raw).replace(/\0+$/g, "").trim();
+    if (raw.length === 4) {
+      const value = new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getInt32(0, true);
+      if (value !== 0 && value !== -1) return String(value);
+    }
     return "";
   }
 
