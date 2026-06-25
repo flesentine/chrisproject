@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "v0.41.0";
+  const VERSION = "v0.41.1";
   const GROUPS = { text: ["Text", 30], number: ["Number", 20], date: ["Date", 10], flag: ["Flag", 20], cost: ["Cost", 10], duration: ["Duration", 10] };
   let tries = 0;
 
@@ -237,4 +237,13 @@
   function esc(value) {
     return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
   }
+})();
+
+(() => {
+  if (window.__customFieldFormulaEngineAutoLoad) return;
+  window.__customFieldFormulaEngineAutoLoad = true;
+  const script = document.createElement("script");
+  script.src = "app-custom-field-formulas.js";
+  script.defer = true;
+  document.body.appendChild(script);
 })();
