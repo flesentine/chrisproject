@@ -273,3 +273,12 @@
 
   window.__evaluateCustomFieldFormulas = evaluateAllFormulaFields;
 })();
+
+(() => {
+  if (window.__customFieldFormulaUiAutoLoad) return;
+  window.__customFieldFormulaUiAutoLoad = true;
+  const script = document.createElement("script");
+  script.src = "app-custom-field-formula-ui.js";
+  script.defer = true;
+  document.body.appendChild(script);
+})();
