@@ -1,0 +1,33 @@
+name: MPP Internet Corpus
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'mpp-internet-corpus.json'
+      - 'mpp-native-reader*.js'
+      - 'scripts/run-mpp-internet-corpus.mjs'
+      - '.github/workflows/mpp-internet-corpus.yml'
+
+jobs:
+  run-mpp-corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run MPP internet corpus
+        run: node scripts/run-mpp-internet-corpus.mjs
+
+      - name: Upload MPP corpus report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpp-internet-corpus-report
+          path: mpp-internet-corpus-report.json
+          if-no-files-found: error
