@@ -4,13 +4,14 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.8-mpp-import-orchestrator';
+  const VERSION = '0.1.9-mpp-import-orchestrator';
   const MODULES = [
     'mpp-native-task-skeleton-v2-polish.js',
     'mpp-native-task-dates-polish.js',
     'mpp-native-task-fixed-dates-polish.js',
     'mpp-native-resource-table-v2-polish.js',
     'mpp-native-assignment-table-v3-polish.js',
+    'mpp-native-date-sanity-polish.js',
     'app-resource-leveling.js',
     'app-resource-auto-leveling.js',
     'app-progress-xml-work-import.js',
@@ -90,6 +91,7 @@
       nativeTaskSkeletonDiagnostics: importResult.nativeTaskSkeletonDiagnostics || null,
       nativeTaskDates: importResult.nativeTaskDates || null,
       nativeTaskFixedDates: importResult.nativeTaskFixedDates || null,
+      nativeDateSanity: importResult.nativeDateSanity || null,
       nativeResources: importResult.nativeResourceTableV2 || null,
       nativeAssignments: importResult.nativeAssignmentTableV3 || null,
       nativeTableCoverage: importResult.nativeTable?.fieldCoverage || null,
@@ -133,6 +135,7 @@
     if (audit.nativeTaskSkeleton) rows.push(['Task skeleton', `${audit.nativeTaskSkeleton.taskRows || 0} rows, ${audit.nativeTaskSkeleton.namedRows || 0} named`]);
     if (audit.nativeTaskDates) rows.push(['Task dates', `${audit.nativeTaskDates.appliedRows || 0} applied, ${audit.nativeTaskDates.confidence || 'none'}`]);
     if (audit.nativeTaskFixedDates) rows.push(['Fixed dates', `${audit.nativeTaskFixedDates.appliedRows || 0} applied, ${audit.nativeTaskFixedDates.confidence || 'none'}`]);
+    if (audit.nativeDateSanity?.rejected) rows.push(['Date safety', `rejected unsafe ${audit.nativeDateSanity.spanDays || 0}d range`]);
     if (audit.nativeResources) rows.push(['Native resources', `${audit.nativeResources.rows || 0} rows, ${audit.nativeResources.namedRows || 0} named`]);
     if (audit.nativeAssignments) rows.push(['Native assignments', `${audit.nativeAssignments.appliedAssignments || 0} applied, ${audit.nativeAssignments.confidence || 0}% confidence`]);
     if (audit.progress) rows.push(['Progress', `${audit.progress.tasksApplied || 0} tasks`]);
