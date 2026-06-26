@@ -19,6 +19,7 @@ const MODULES = [
   'mpp-native-task-fixed-dates-polish.js',
   'mpp-native-resource-table-v2-polish.js',
   'mpp-native-assignment-table-v3-polish.js',
+  'mpp-native-date-sanity-polish.js',
 ];
 
 try {
