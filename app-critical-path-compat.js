@@ -1,17 +1,187 @@
-(()=>{'use strict';let tries=0;function ready(){return typeof state!=='undefined'&&typeof render==='function'&&typeof renderGantt==='function'}function boot(){if(window.__criticalPathCompatLoaded)return;if(!ready()){if(++tries<180)setTimeout(boot,80);return}window.__criticalPathCompatLoaded=1;css();patch();requestAnimationFrame(after)}document.readyState==='loading'?document.addEventListener('DOMContentLoaded',boot,{once:true}):boot();
-function patch(){let r=render;render=function(...a){let out=r.apply(this,a);after();return out};window.render=render;let g=renderGantt;renderGantt=function(...a){let out=g.apply(this,a);afterRows();return out};window.renderGantt=renderGantt}
-function after(){afterRows();restoreVersion();summary()}function afterRows(){document.querySelectorAll('.planner-row[data-row-index]').forEach(row=>{let t=state.tasks?.[+row.dataset.rowIndex];if(!t)return;let c=!!(t.isCritical||t.critical),sl=Math.max(0,Math.round(Number(t.totalSlackDays)||0)),fs=Math.max(0,Math.round(Number(t.freeSlackDays)||0));row.classList.toggle('is-critical-task',c);let cell=row.querySelector('.task-name-cell'),bar=row.querySelector('.gantt-bar'),gantt=row.querySelector('.gantt-row');if(cell){let b=cell.querySelector('.critical-slack-badge');if(!b){b=document.createElement('span');b.className='critical-slack-badge';cell.appendChild(b)}b.classList.toggle('is-critical',c);b.textContent=c?'Critical':`Slack ${sl}d`;b.title=c?'Critical task: zero total slack.':`Total slack ${sl}d · Free slack ${fs}d.`}if(bar){bar.classList.toggle('is-critical',c);bar.title=(bar.title||t.name||'Task')+(c?' · Critical path':` · Total slack ${sl}d · Free slack ${fs}d`)}if(gantt){let s=gantt.querySelector('.gantt-slack-bar');if(c||sl<=0){s?.remove()}else{if(!s){s=document.createElement('div');s.className='gantt-slack-bar';gantt.appendChild(s)}let dw=Number(uiPrefs?.dayWidth)||58,left=parseFloat(bar?.style?.left||'0')||0,w=parseFloat(bar?.style?.width||'0')||0;s.style.left=`${left+w+6}px`;s.style.width=`${Math.max(24,sl*dw-8)}px`;s.dataset.slackLabel=`${sl}d`;s.title=`${t.name||'Task'}: ${sl}d total slack.`}}})}
-function summary(){let leaf=(state.tasks||[]).filter((t,i)=>t&&!isSummary(i)),crit=leaf.filter(t=>t.isCritical||t.critical),float=leaf.filter(t=>!(t.isCritical||t.critical)&&Number(t.totalSlackDays)>0);let count=document.getElementById('criticalTaskCount'),small=document.getElementById('criticalTaskSummary');if(count)count.textContent=String(crit.length);if(small)small.textContent=(state.criticalPath?.hasCycle?'Fix dependency cycle':`${state.criticalPath?.projectFinish?'Finish '+state.criticalPath.projectFinish:'Critical path ready'} · ${float.length} with float`)}function isSummary(i){try{return typeof isSummaryIndex==='function'?isSummaryIndex(i):!!state.tasks?.[i]?.isSummary}catch{return!!state.tasks?.[i]?.isSummary}}
-function restoreVersion(){let app=typeof APP_VERSION!=='undefined'?APP_VERSION:'v0.39.0',name=typeof APP_VERSION_NAME!=='undefined'?APP_VERSION_NAME:'Project XML + split/repeat',build=typeof APP_BUILD_DATE!=='undefined'?APP_BUILD_DATE:'';let badge=document.getElementById('appVersionBadge'),footer=document.getElementById('appVersionFooter'),rib=document.getElementById('ribbonVersionText');if(badge){badge.textContent=`${app} · ${name}`;if(build)badge.title=`Build ${build}`}if(footer)footer.textContent=`${app} · ${name}${build?' · Build '+build:''}`;if(rib)rib.textContent=`${app} · critical path active`}
-function css(){if(document.getElementById('criticalPathCompatStyles'))return;let s=document.createElement('style');s.id='criticalPathCompatStyles';s.textContent='.planner-row.is-critical-task .planner-fields{box-shadow:inset 4px 0 0 #dc2626!important}.planner-row.is-critical-task .name-input{font-weight:900!important}.gantt-bar.is-critical{background:linear-gradient(135deg,#dc2626,#991b1b)!important;box-shadow:0 14px 30px rgba(220,38,38,.28),0 0 0 1px rgba(255,255,255,.46) inset!important}.critical-slack-badge{display:inline-flex;align-items:center;min-height:18px;margin-left:6px;padding:1px 7px;border-radius:999px;border:1px solid #d9e2ee;background:#f8fafc;color:#475467;font-size:10px;font-weight:850;white-space:nowrap}.critical-slack-badge.is-critical{border-color:rgba(220,38,38,.24);background:#fee2e2;color:#991b1b}.gantt-slack-bar{position:absolute;top:calc(var(--bar-top) + var(--bar-height)/2 - 2px);height:4px;border-radius:999px;background:repeating-linear-gradient(90deg,rgba(71,84,103,.56) 0 8px,transparent 8px 13px);pointer-events:none;z-index:2}.gantt-slack-bar::after{content:attr(data-slack-label);position:absolute;left:50%;top:-18px;transform:translateX(-50%);padding:1px 6px;border:1px solid #d9e2ee;border-radius:999px;background:rgba(255,255,255,.96);color:#475467;font-size:9px;font-weight:850;white-space:nowrap}';document.head.appendChild(s)}})();
-(()=>{if(window.__progressXmlWorkImportAutoLoad)return;window.__progressXmlWorkImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-progress-xml-work-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Progress XML work import loader failed',e)}})();
-(()=>{if(window.__baselineXmlImportAutoLoad)return;window.__baselineXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-baseline-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Baseline XML import loader failed',e)}})();
-(()=>{if(window.__baselineMultiXmlImportAutoLoad)return;window.__baselineMultiXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-baseline-multi-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Multiple baseline XML import loader failed',e)}})();
-(()=>{if(window.__baselineMultiAuditAutoLoad)return;window.__baselineMultiAuditAutoLoad=1;try{const s=document.createElement('script');s.src='app-baseline-multi-audit.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Multiple baseline audit loader failed',e)}})();
-(()=>{if(window.__resourceXmlImportAutoLoad)return;window.__resourceXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-resource-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Resource XML import loader failed',e)}})();
-(()=>{if(window.__linksXmlImportAutoLoad)return;window.__linksXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-links-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Links XML import loader failed',e)}})();
-(()=>{if(window.__taskCalendarXmlImportAutoLoad)return;window.__taskCalendarXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-task-calendar-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Task calendar XML import loader failed',e)}})();
-(()=>{if(window.__viewMetadataXmlImportAutoLoad)return;window.__viewMetadataXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-view-metadata-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('View metadata XML import loader failed',e)}})();
-(()=>{if(window.__viewMetadataAuditAutoLoad)return;window.__viewMetadataAuditAutoLoad=1;try{const s=document.createElement('script');s.src='app-view-metadata-audit.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('View metadata audit loader failed',e)}})();
-(()=>{if(window.__agileMetadataXmlImportAutoLoad)return;window.__agileMetadataXmlImportAutoLoad=1;try{const s=document.createElement('script');s.src='app-agile-metadata-xml-import.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Sprint board metadata XML loader failed',e)}})();
-(()=>{if(window.__sprintBoardAuditAutoLoad)return;window.__sprintBoardAuditAutoLoad=1;try{const s=document.createElement('script');s.src='app-sprint-board-audit.js';s.defer=true;document.body.appendChild(s)}catch(e){console.warn('Sprint board panel loader failed',e)}})();
+(() => {
+  'use strict';
+
+  let tries = 0;
+
+  function ready() {
+    return typeof state !== 'undefined' && typeof render === 'function' && typeof renderGantt === 'function';
+  }
+
+  function boot() {
+    if (window.__criticalPathCompatLoaded) return;
+    if (!ready()) {
+      if (++tries < 180) setTimeout(boot, 80);
+      return;
+    }
+    window.__criticalPathCompatLoaded = true;
+    installStyles();
+    patchRenderers();
+    loadImportOrchestrator();
+    requestAnimationFrame(afterRender);
+  }
+
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', boot, { once: true })
+    : boot();
+
+  function patchRenderers() {
+    const baseRender = render;
+    render = function criticalPathCompatRender(...args) {
+      const result = baseRender.apply(this, args);
+      afterRender();
+      return result;
+    };
+    window.render = render;
+
+    const baseRenderGantt = renderGantt;
+    renderGantt = function criticalPathCompatRenderGantt(...args) {
+      const result = baseRenderGantt.apply(this, args);
+      decorateRows();
+      return result;
+    };
+    window.renderGantt = renderGantt;
+  }
+
+  function afterRender() {
+    decorateRows();
+    restoreVersionLabels();
+    renderCriticalSummary();
+  }
+
+  function decorateRows() {
+    document.querySelectorAll('.planner-row[data-row-index]').forEach((row) => {
+      const task = state.tasks?.[Number(row.dataset.rowIndex)];
+      if (!task) return;
+
+      const critical = Boolean(task.isCritical || task.critical);
+      const totalSlack = Math.max(0, Math.round(Number(task.totalSlackDays) || 0));
+      const freeSlack = Math.max(0, Math.round(Number(task.freeSlackDays) || 0));
+
+      row.classList.toggle('is-critical-task', critical);
+      decorateNameCell(row, critical, totalSlack, freeSlack);
+      decorateGanttBar(row, task, critical, totalSlack, freeSlack);
+      decorateSlackBar(row, task, critical, totalSlack);
+    });
+  }
+
+  function decorateNameCell(row, critical, totalSlack, freeSlack) {
+    const cell = row.querySelector('.task-name-cell');
+    if (!cell) return;
+    let badge = cell.querySelector('.critical-slack-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'critical-slack-badge';
+      cell.appendChild(badge);
+    }
+    badge.classList.toggle('is-critical', critical);
+    badge.textContent = critical ? 'Critical' : `Slack ${totalSlack}d`;
+    badge.title = critical ? 'Critical task: zero total slack.' : `Total slack ${totalSlack}d · Free slack ${freeSlack}d.`;
+  }
+
+  function decorateGanttBar(row, task, critical, totalSlack, freeSlack) {
+    const bar = row.querySelector('.gantt-bar');
+    if (!bar) return;
+    bar.classList.toggle('is-critical', critical);
+    if (!bar.dataset.baseTitle) bar.dataset.baseTitle = cleanBarTitle(bar.title || task.name || 'Task');
+    bar.title = critical
+      ? `${bar.dataset.baseTitle} · Critical path`
+      : `${bar.dataset.baseTitle} · Total slack ${totalSlack}d · Free slack ${freeSlack}d`;
+  }
+
+  function decorateSlackBar(row, task, critical, totalSlack) {
+    const gantt = row.querySelector('.gantt-row');
+    if (!gantt) return;
+    let slack = gantt.querySelector('.gantt-slack-bar');
+    if (critical || totalSlack <= 0) {
+      slack?.remove();
+      return;
+    }
+    if (!slack) {
+      slack = document.createElement('div');
+      slack.className = 'gantt-slack-bar';
+      gantt.appendChild(slack);
+    }
+    const dayWidth = safeDayWidth();
+    const bar = row.querySelector('.gantt-bar');
+    const left = parseFloat(bar?.style?.left || '0') || 0;
+    const width = parseFloat(bar?.style?.width || '0') || 0;
+    slack.style.left = `${left + width + 6}px`;
+    slack.style.width = `${Math.max(24, totalSlack * dayWidth - 8)}px`;
+    slack.dataset.slackLabel = `${totalSlack}d`;
+    slack.title = `${task.name || 'Task'}: ${totalSlack}d total slack.`;
+  }
+
+  function safeDayWidth() {
+    const prefs = typeof uiPrefs !== 'undefined' ? uiPrefs : null;
+    return Number(prefs?.dayWidth) || 58;
+  }
+
+  function cleanBarTitle(value) {
+    return String(value || 'Task')
+      .replace(/ · Critical path/g, '')
+      .replace(/ · Total slack \d+d · Free slack \d+d/g, '')
+      .trim() || 'Task';
+  }
+
+  function renderCriticalSummary() {
+    const leafTasks = (state.tasks || []).filter((task, index) => task && !isSummaryTask(index));
+    const criticalTasks = leafTasks.filter((task) => task.isCritical || task.critical);
+    const floatingTasks = leafTasks.filter((task) => !(task.isCritical || task.critical) && Number(task.totalSlackDays) > 0);
+    const count = document.getElementById('criticalTaskCount');
+    const summary = document.getElementById('criticalTaskSummary');
+    if (count) count.textContent = String(criticalTasks.length);
+    if (summary) {
+      summary.textContent = state.criticalPath?.hasCycle
+        ? 'Fix dependency cycle'
+        : `${state.criticalPath?.projectFinish ? `Finish ${state.criticalPath.projectFinish}` : 'Critical path ready'} · ${floatingTasks.length} with float`;
+    }
+  }
+
+  function isSummaryTask(index) {
+    try {
+      return typeof isSummaryIndex === 'function' ? isSummaryIndex(index) : Boolean(state.tasks?.[index]?.isSummary);
+    } catch {
+      return Boolean(state.tasks?.[index]?.isSummary);
+    }
+  }
+
+  function restoreVersionLabels() {
+    const app = typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'v0.39.0';
+    const name = typeof APP_VERSION_NAME !== 'undefined' ? APP_VERSION_NAME : 'Project XML + split/repeat';
+    const build = typeof APP_BUILD_DATE !== 'undefined' ? APP_BUILD_DATE : '';
+    const badge = document.getElementById('appVersionBadge');
+    const footer = document.getElementById('appVersionFooter');
+    const ribbon = document.getElementById('ribbonVersionText');
+    if (badge) {
+      badge.textContent = `${app} · ${name}`;
+      if (build) badge.title = `Build ${build}`;
+    }
+    if (footer) footer.textContent = `${app} · ${name}${build ? ` · Build ${build}` : ''}`;
+    if (ribbon) ribbon.textContent = `${app} · critical path active`;
+  }
+
+  function loadImportOrchestrator() {
+    if (window.__mppImportOrchestratorAutoLoad) return;
+    window.__mppImportOrchestratorAutoLoad = true;
+    const script = document.createElement('script');
+    script.src = 'app-mpp-import-orchestrator.js';
+    script.defer = true;
+    document.body.appendChild(script);
+  }
+
+  function installStyles() {
+    if (document.getElementById('criticalPathCompatStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'criticalPathCompatStyles';
+    style.textContent = `
+      .planner-row.is-critical-task .planner-fields { box-shadow: inset 4px 0 0 #dc2626 !important; }
+      .planner-row.is-critical-task .name-input { font-weight: 900 !important; }
+      .gantt-bar.is-critical { background: linear-gradient(135deg,#dc2626,#991b1b) !important; box-shadow: 0 14px 30px rgba(220,38,38,.28),0 0 0 1px rgba(255,255,255,.46) inset !important; }
+      .critical-slack-badge { display: inline-flex; align-items: center; min-height: 18px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid #d9e2ee; background: #f8fafc; color: #475467; font-size: 10px; font-weight: 850; white-space: nowrap; }
+      .critical-slack-badge.is-critical { border-color: rgba(220,38,38,.24); background: #fee2e2; color: #991b1b; }
+      .gantt-slack-bar { position: absolute; top: calc(var(--bar-top) + var(--bar-height)/2 - 2px); height: 4px; border-radius: 999px; background: repeating-linear-gradient(90deg,rgba(71,84,103,.56) 0 8px,transparent 8px 13px); pointer-events: none; z-index: 2; }
+      .gantt-slack-bar::after { content: attr(data-slack-label); position: absolute; left: 50%; top: -18px; transform: translateX(-50%); padding: 1px 6px; border: 1px solid #d9e2ee; border-radius: 999px; background: rgba(255,255,255,.96); color: #475467; font-size: 9px; font-weight: 850; white-space: nowrap; }
+    `;
+    document.head.appendChild(style);
+  }
+})();
