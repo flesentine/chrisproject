@@ -4,7 +4,7 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.9-mpp-import-orchestrator';
+  const VERSION = '0.1.10-mpp-import-orchestrator';
   const MODULES = [
     'mpp-native-task-skeleton-v2-polish.js',
     'mpp-native-task-dates-polish.js',
@@ -28,6 +28,7 @@
     'app-assignment-link-audit-panel.js',
     'app-mpp-compat-regression.js',
     'app-mpp-worker-import.js',
+    'app-current-version-label.js',
   ];
 
   const loaded = new Set();
