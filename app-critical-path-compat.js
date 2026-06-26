@@ -16,6 +16,7 @@
     window.__criticalPathCompatLoaded = true;
     installStyles();
     patchRenderers();
+    loadNativeTaskSkeleton();
     loadImportOrchestrator();
     requestAnimationFrame(afterRender);
   }
@@ -158,6 +159,15 @@
     }
     if (footer) footer.textContent = `${app} · ${name}${build ? ` · Build ${build}` : ''}`;
     if (ribbon) ribbon.textContent = `${app} · critical path active`;
+  }
+
+  function loadNativeTaskSkeleton() {
+    if (window.__nativeTaskSkeletonAutoLoad) return;
+    window.__nativeTaskSkeletonAutoLoad = true;
+    const script = document.createElement('script');
+    script.src = 'mpp-native-task-skeleton-polish.js';
+    script.defer = true;
+    document.body.appendChild(script);
   }
 
   function loadImportOrchestrator() {
