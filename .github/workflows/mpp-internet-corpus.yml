@@ -39,6 +39,28 @@ jobs:
       - name: Run MPP internet corpus
         run: node scripts/run-mpp-internet-corpus.mjs
 
+      - name: Normalize opened-only results
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = 'mpp-internet-corpus-report.json';
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          for (const result of report.results || []) {
+            if (result.status === 'passed' && !(Number(result.tasks) > 0)) {
+              result.status = 'opened_only';
+              result.warnings = result.warnings || [];
+              result.warnings.unshift('Opened container but parsed zero tasks. Not counted as a real import pass.');
+            }
+          }
+          report.passed = (report.results || []).filter((r) => r.status === 'passed').length;
+          report.openedOnly = (report.results || []).filter((r) => r.status === 'opened_only').length;
+          report.failed = (report.results || []).filter((r) => r.status === 'failed').length;
+          report.averageScore = report.results?.length ? Math.round(report.results.reduce((sum, r) => sum + Number(r.score || 0), 0) / report.results.length) : 0;
+          report.totalAssignments = (report.results || []).reduce((sum, r) => sum + Number(r.assignments || 0), 0);
+          fs.writeFileSync(path, JSON.stringify(report, null, 2));
+          console.log(`Parsed ${report.passed}/${report.corpusCount}; opened-only ${report.openedOnly}; failed ${report.failed}; average score ${report.averageScore}%`);
+          NODE
+
       - name: Upload MPP corpus report
         uses: actions/upload-artifact@v4
         with:
