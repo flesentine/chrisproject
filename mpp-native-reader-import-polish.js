@@ -1,31 +1,151 @@
-(()=>{'use strict';
-const R=window.NativeMppReader;if(!R||window.__nativeMppImportPolishLoaded)return;window.__nativeMppImportPolishLoaded=1;
-const V='1.2.0-actuals',D=480,U8=new TextDecoder('utf-8'),U16=new TextDecoder('utf-16le'),LT={FF:0,FS:1,SS:2,SF:3},P=0x0b408053,SD=0x0b40804b,FD=0x0b40804a,ST=[0x0b408048,0x0b40804c,0x0b408054,0x0b400564],RN=[0x0c4002f2,0x0c4002f5];
-const br=R.read?.bind(R),bb=R.readBuffer?.bind(R),ba=R.readBufferAsync?.bind(R);if(bb)R.readBuffer=(b,n='project.mpp',o={})=>go(b,bb(b,n,o));if(ba)R.readBufferAsync=async(b,n='project.mpp')=>go(b,await ba(b,n));if(br)R.read=async f=>{const b=await f.arrayBuffer();return R.readBufferAsync?R.readBufferAsync(b,f.name||'project.mpp'):go(b,await br(f))};R.importPolishVersion=V;
-function go(buf,res){if(!res?.projectXml||!res?.nativeTable||!R.CompoundFileBinary)return res;try{let c=new R.CompoundFileBinary(buf),tasks=res.project?.tasks||[],td=taskVar(c,tasks),rs=resources(c),as=assigns(c,tasks,rs,td),xml=res.projectXml,st=patchTasks(xml,tasks,td);xml=st.xml;let hr=putResources(xml,rs);xml=hr.xml;let ha=putAssigns(xml,as);xml=ha.xml;res.projectXml=xml;res.importPolish={version:V,displayPredecessorLinks:st.links,durations:st.durs,baselineSnapshots:st.bases,actuals:st.acts,completedActuals:st.done,openActuals:st.open,resources:rs.length,assignments:as.length};res.nativeTable.importPolishVersion=V;res.nativeTable.fieldCoverage={...(res.nativeTable.fieldCoverage||{}),nativePredecessorLinksAdded:st.links,durations:st.durs,baselineSnapshots:st.bases,actuals:st.acts,completedActuals:st.done,openActuals:st.open,resources:rs.length,assignments:as.length};res.warnings=Array.isArray(res.warnings)?res.warnings:[];res.warnings.push(`MPP import polish ${V}: decoded ${st.acts} actual/progress records, ${st.bases} baseline snapshots, ${rs.length} resources, and ${as.length} assignments.`);return res}catch(e){res.warnings=Array.isArray(res.warnings)?res.warnings:[];res.warnings.push('MPP import polish failed: '+(e.message||e));return res}}
-function taskVar(c,tasks){let m=e(c,'TBkndTask/VarMeta'),d=e(c,'TBkndTask/Var2Data'),out=new Map;if(!m||!d)return out;let mb=c.getStream(m),db=c.getStream(d),v=new DataView(mb.buffer,mb.byteOffset,mb.byteLength),want=new Set(tasks.map(t=>+t.rowId));for(let o=32;o+12<=mb.length;o+=12){let f=u32(v,o),r=u32(v,o+4),p=u32(v,o+8);if(!want.has(r)||p>=db.length)continue;let row=out.get(r)||new Map;row.set(f,val(db,p));out.set(r,row)}let byId=new Map;for(let t of tasks){let row=out.get(+t.rowId)||new Map,txt=ST.map(x=>cl(row.get(x))).filter(Boolean).join(' | '),lo=txt.toLowerCase(),pct=Number(t.percent);if(!Number.isFinite(pct))pct=/\b(finished|complete|completed)\b/.test(lo)?100:0;byId.set(+t.id,{pred:cl(row.get(P)),ds:date(row.get(SD)),df:date(row.get(FD)),pct:Math.max(0,Math.min(100,Math.round(pct))),done:/\b(finished|complete|completed)\b/.test(lo)||pct>=100,started:pct>0||/\b(finished|complete|completed|started|in progress)\b/.test(lo),status:txt})}return byId}
-function patchTasks(xml,tasks,td){let by=new Map(tasks.map(t=>[+t.id,t])),uids=new Map;xml.replace(/<Task>([\s\S]*?)<\/Task>/g,(_,b)=>{let id=+ch(b,'ID'),u=+ch(b,'UID');if(id&&u)uids.set(id,u)});let s={links:0,durs:0,bases:0,acts:0,done:0,open:0};s.xml=xml.replace(/<Task>([\s\S]*?)<\/Task>/g,(full,b)=>{let id=+ch(b,'ID'),t=by.get(id);if(!t)return full;let d=td.get(id)||{},n=b,keys=pk(n);for(let l of preds(d.pred,id,uids)){if(!l.valid)continue;let k=l.uid+':'+(LT[l.type]??1);if(keys.has(k))continue;keys.add(k);n+=plink(l);s.links++}let dm=duration(t);if(!t.isSummary){n=set(n,'Duration',dur(dm),'Finish');n=set(n,'DurationFormat','7','Duration');n=set(n,'Milestone',dm===0?'1':'0','DurationFormat');s.durs++;let a=actual(t,d,n,dm);n=applyA(n,a);s.acts++;a.pct>=100?s.done++:s.open++}if(!/<Baseline>[\s\S]*?<\/Baseline>/.test(n)){n+=base(t,n,dm);s.bases++}return n===b?full:`<Task>${n}\n    </Task>`});return s}
-function duration(t){if(!t||t.isSummary)return Math.max(D,wd(t?.start,t?.finish)*D);let x=Number(t.durationDays);if(Number.isFinite(x)&&x>=0)return Math.round(x*D);if(t.start&&t.finish&&t.start===t.finish&&mile(t.name))return 0;return Math.max(D,wd(t.start,t.finish)*D)}
-function actual(t,d,b,dm){let st=dayOnly(ch(b,'Start'))||t.start||d.ds,fn=dayOnly(ch(b,'Finish'))||t.finish||d.df||st,p=+d.pct||0,started=d.started||p>0,done=d.done||p>=100,act=done?dm:started?Math.round(dm*p/100):0;return{pct:p,as:started?(d.ds||st):'',af:done?(d.df||fn):'',act,rem:done?0:Math.max(0,dm-act)}}
-function applyA(b,a){let n=b;n=set(n,'PercentComplete',''+a.pct,'Milestone');n=set(n,'PercentWorkComplete',''+a.pct,'PercentComplete');n=set(n,'ActualDuration',dur(a.act),'Duration');n=set(n,'RemainingDuration',dur(a.rem),'ActualDuration');if(a.as)n=set(n,'ActualStart',pdate(a.as),'Start');if(a.af)n=set(n,'ActualFinish',pdate(a.af,1),'Finish');return n}
-function base(t,b,dm){let st=dayOnly(ch(b,'Start'))||t.start,fn=dayOnly(ch(b,'Finish'))||t.finish||st;if(!st)return'';return`\n      <Baseline>\n        <Number>0</Number>\n        <Start>${pdate(st)}</Start>\n        <Finish>${pdate(fn,1)}</Finish>\n        <Duration>${dur(dm)}</Duration>\n        <Work>${t.isSummary?'PT0H0M0S':dur(dm)}</Work>\n        <Cost>${+t.cost||0}</Cost>\n      </Baseline>`}
-function resources(c){let m=e(c,'TBkndRsc/VarMeta'),d=e(c,'TBkndRsc/Var2Data'),out=[];if(!m||!d)return out;let mb=c.getStream(m),db=c.getStream(d),v=new DataView(mb.buffer,mb.byteOffset,mb.byteLength),fx=rfix(c),rows=new Map;for(let o=32;o+12<=mb.length;o+=12){let f=u32(v,o),r=u32(v,o+4),p=u32(v,o+8);if(p>=db.length)continue;let row=rows.get(r)||new Map;row.set(f,RN.includes(f)?text(db,p):val(db,p));rows.set(r,row)}let seen=new Set;[...rows].sort((a,b)=>a[0]-b[0]).forEach(([rid,row])=>{let name='';for(let f of RN){name=rname(row.get(f));if(name)break}if(!name||seen.has(name.toLowerCase()))return;seen.add(name.toLowerCase());let id=out.length+1;out.push({id,uid:fx.get(rid)||rid||id,rowId:rid,name,initials:name.split(/\s+/).map(x=>x[0]||'').join('').slice(0,8).toUpperCase()})});return out}
-function assigns(c,tasks,rs,td){let fx=fixed(c,'TBkndAssn'),tr=new Map(tasks.map(t=>[+t.rowId,t])),ru=new Set(rs.map(r=>+r.uid)),out=[],seen=new Set;if(!fx.length)return out;for(let rec of fx){let b=rec.b;if(b.length<12)continue;let au=u32b(b,0),trid=u32b(b,4),rid=u32b(b,8)&0xffff,t=tr.get(trid);if(!t||t.isSummary||!ru.has(rid))continue;let tu=+t.id,k=tu+':'+rid+':'+(au||rec.i);if(seen.has(k))continue;seen.add(k);let dm=duration(t),a=actual(t,td.get(tu)||{},'',dm);out.push({uid:au||out.length+1,taskUid:tu,resourceUid:rid,work:dm,actual:a.act,remain:a.rem,pct:a.pct})}return out}
-function putResources(xml,rs){if(!rs.length||/<Resources>[\s\S]*?<Resource>[\s\S]*?<ID>\s*[1-9]/.test(xml))return{xml};let x=`\n  <Resources>${rs.map(r=>`\n    <Resource>\n      <UID>${r.uid}</UID><ID>${r.id}</ID><Name>${esc(r.name)}</Name><Type>0</Type><IsNull>0</IsNull><Initials>${esc(r.initials)}</Initials><MaxUnits>1.00</MaxUnits><StandardRate>0</StandardRate><OvertimeRate>0</OvertimeRate><CostPerUse>0</CostPerUse><BaseCalendarUID>1</BaseCalendarUID>\n    </Resource>`).join('')}\n  </Resources>`;return{xml:/<Resources>[\s\S]*?<\/Resources>/.test(xml)?xml.replace(/<Resources>[\s\S]*?<\/Resources>/,x.trim()):xml.replace(/\s*<\/Project>\s*$/,`${x}\n</Project>`)}}
-function putAssigns(xml,as){if(!as.length||/<Assignments>[\s\S]*?<Assignment>[\s\S]*?<TaskUID>\s*[1-9]/.test(xml))return{xml};let x=`\n  <Assignments>${as.map(a=>`\n    <Assignment>\n      <UID>${a.uid}</UID><TaskUID>${a.taskUid}</TaskUID><ResourceUID>${a.resourceUid}</ResourceUID><PercentWorkComplete>${a.pct}</PercentWorkComplete><Units>1.00</Units><Work>${dur(a.work)}</Work><ActualWork>${dur(a.actual)}</ActualWork><RemainingWork>${dur(a.remain)}</RemainingWork>\n    </Assignment>`).join('')}\n  </Assignments>`;return{xml:/<Assignments>[\s\S]*?<\/Assignments>/.test(xml)?xml.replace(/<Assignments>[\s\S]*?<\/Assignments>/,x.trim()):xml.replace(/\s*<\/Project>\s*$/,`${x}\n</Project>`)}}
-function fixed(c,p){let me=e(c,p+'/FixedMeta'),de=e(c,p+'/FixedData');if(!me||!de)return[];let mb=c.getStream(me),db=c.getStream(de);if(mb.length<16)return[];let v=new DataView(mb.buffer,mb.byteOffset,mb.byteLength),cnt=u32(v,8),sz=(mb.length-16)/cnt;if(!cnt||sz<8)return[];let off=[];for(let i=0;i<cnt;i++)off.push(u32(v,16+i*sz+4));return off.map((o,i)=>({i,b:db.slice(o,(i+1<off.length?off[i+1]:db.length))})).filter(x=>x.b.length)}
-function rfix(c){let m=new Map;for(let rec of fixed(c,'TBkndRsc')){let b=rec.b;if(b.length>=8)m.set(u32b(b,4),u32b(b,0))}return m}
-function pk(b){let s=new Set;b.replace(/<PredecessorLink>([\s\S]*?)<\/PredecessorLink>/g,(_,x)=>{let u=+ch(x,'PredecessorUID'),t=+ch(x,'Type')||1;if(u)s.add(u+':'+t)});return s}
-function preds(v,self,uids){let t=cl(v);return t?t.split(/[;,]+/).map(x=>{let m=/^(\d+)(FS|SS|FF|SF)?([+-]\d+(?:d|w|h|m|mo)?)?$/i.exec(cl(x).replace(/\s+/g,''));if(!m)return{valid:0};let id=+m[1],uid=uids.get(id);return uid&&id!==self?{valid:1,uid,type:(m[2]||'FS').toUpperCase(),lag:lag(m[3]||'')}: {valid:0}}):[]}
-function plink(l){return`\n      <PredecessorLink><PredecessorUID>${l.uid}</PredecessorUID><Type>${LT[l.type]??1}</Type><CrossProject>0</CrossProject><LinkLag>${l.lag*10}</LinkLag><LagFormat>7</LagFormat></PredecessorLink>`}
-function lag(x){let m=/^([+-])(\d+)(mo|w|d|h|m)?/i.exec(x);if(!m)return 0;let n=+m[2],u=(m[3]||'d').toLowerCase(),per=u==='mo'?20*D:u==='w'?5*D:u==='h'?60:u==='m'?1:D;return(m[1]==='-'?-1:1)*n*per}
-function val(b,o){if(o<0||o+4>b.length)return'';let v=new DataView(b.buffer,b.byteOffset,b.byteLength),L=u32(v,o),raw=b.slice(o+4,o+4+L);if(L<0||L>b.length-o-4||L>1e6)return'';if(!raw.length)return'';if(raw.length%2===0&&ok16(raw))return U16.decode(raw).replace(/\0+$/,'').trim();if(ok8(raw))return U8.decode(raw).replace(/\0+$/,'').trim();if(raw.length===4){let x=new DataView(raw.buffer,raw.byteOffset,raw.byteLength).getInt32(0,true);return x&&x!==-1?String(x):''}if(raw.length===8){let x=new DataView(raw.buffer,raw.byteOffset,raw.byteLength).getFloat64(0,true);return Number.isFinite(x)&&Math.abs(x)<1e9?String(x):''}return''}
-function text(b,o){let x=val(b,o);return rtext(x)?x:''}function rname(x){x=cl(x);return rtext(x)&&!/^(Standard|Calendar|Resource Name|Type|Work|Material|Cost)$/i.test(x)?x:''}function rtext(x){x=cl(x);return x.length>1&&x.length<121&&/[A-Za-z\p{L}]/u.test(x)&&!/�|[\u0000-\u001f\u007f]/.test(x)}
-function ok16(b){if(b.length<6||b.length%2)return 0;let v=new DataView(b.buffer,b.byteOffset,b.byteLength),g=0,t=0;for(let i=0;i+2<=b.length;i+=2){let c=u16(v,i);t++;if(c&&(c>=32||c===9||c===10||c===13))g++}return g/t>.85}function ok8(b){if(b.length<3)return 0;let g=0;for(let x of b)if(x&&(x>=32&&x<=126||x===9||x===10||x===13))g++;return g/b.length>.88}
-function date(v){let t=cl(v),m=/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i.exec(t);if(!m)return'';let y=m[3].length===2?'20'+m[3]:m[3];return`${y}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`}
-function wd(s,f){let a=dt(s),b=dt(f||s);if(!a||!b)return 1;let n=0,d=new Date(a);while(d<=b){let x=d.getUTCDay();if(x&&x!==6)n++;d.setUTCDate(d.getUTCDate()+1)}return Math.max(1,n)}function dt(v){let m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(v||''));return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3])):null}function dayOnly(v){let m=/^(\d{4}-\d{2}-\d{2})/.exec(String(v||''));return m?m[1]:''}function pdate(v,e=0){let d=dayOnly(v);return d?`${d}T${e?'17:00:00':'08:00:00'}`:''}function dur(m){m=Math.max(0,Math.round(+m||0));return`PT${Math.floor(m/60)}H${m%60}M0S`}function mile(n){return/\b(kick|sign|review|release|handoff|decision|milestone|irr|drr|trr|arr|odd|mrod)\b/i.test(cl(n))}
-function ch(b,n){let m=new RegExp(`<${n}>([\\s\\S]*?)<\\/${n}>`).exec(b||'');return m?unesc(m[1].trim()):''}function set(b,n,v,a=''){v=esc(v);let re=new RegExp(`<${n}>[\\s\\S]*?<\\/${n}>`);if(re.test(b))return b.replace(re,`<${n}>${v}</${n}>`);let ar=a?new RegExp(`(<${a}>[\\s\\S]*?<\\/${a}>)`):null;return ar&&ar.test(b)?b.replace(ar,`$1\n      <${n}>${v}</${n}>`):b+`\n      <${n}>${v}</${n}>`}
-function e(c,s){s=s.toLowerCase();return c.entries.find(x=>x.type===2&&String(x.path||'').toLowerCase().endsWith(s))}function u32(v,o){return o+4<=v.byteLength?v.getUint32(o,true):0}function u32b(b,o){return o+4<=b.length?new DataView(b.buffer,b.byteOffset,b.byteLength).getUint32(o,true):0}function u16(v,o){return o+2<=v.byteLength?v.getUint16(o,true):0}function cl(v){return String(v||'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim()}function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;')}function unesc(v){return String(v||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#10;/g,'\n').replace(/&amp;/g,'&')}
-})();
+(() => {
+  'use strict';
 
-(()=>{if(window.__nativeMppCalendarPolishAutoLoad)return;window.__nativeMppCalendarPolishAutoLoad=1;try{const s=document.createElement('script');s.src='mpp-native-reader-calendar-polish.js';s.async=false;s.defer=false;(document.currentScript&&document.currentScript.parentNode?document.currentScript.parentNode:document.body||document.documentElement).insertBefore(s,document.currentScript?document.currentScript.nextSibling:null)}catch(e){console.warn('MPP calendar polish loader failed',e)}})();
+  const R = window.NativeMppReader;
+  if (!R || window.__nativeMppImportPolishLoaded) return;
+  window.__nativeMppImportPolishLoaded = true;
+
+  const VERSION = '1.3.0-worker-first-safe-reader';
+  const inWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
+
+  R.importPolishVersion = VERSION;
+
+  // This file loads before app.js. On the main page, it must never run the heavy
+  // native MPP parser on the UI thread. In the worker, it intentionally becomes
+  // a no-op so mpp-import-worker.js can call readBuffer/readBufferAsync directly.
+  if (inWorker) return;
+
+  const unsafeReadBuffer = R.readBuffer?.bind(R);
+  const unsafeReadBufferAsync = R.readBufferAsync?.bind(R);
+  const unsafeRead = R.read?.bind(R);
+  R.__unsafeMainThreadMppRead = unsafeRead;
+  R.__unsafeMainThreadMppReadBuffer = unsafeReadBuffer;
+  R.__unsafeMainThreadMppReadBufferAsync = unsafeReadBufferAsync;
+
+  R.readBuffer = function blockedMainThreadReadBuffer() {
+    throw new Error('Blocked unsafe main-thread MPP parsing. Use the browser worker import path.');
+  };
+
+  R.readBufferAsync = async function blockedMainThreadReadBufferAsync() {
+    throw new Error('Blocked unsafe main-thread MPP parsing. Use the browser worker import path.');
+  };
+
+  R.read = async function workerFirstMppRead(file) {
+    if (!file) return null;
+    if (!window.Worker) {
+      throw new Error('This browser does not support Web Workers, so native MPP import is disabled to avoid freezing the page. Import Project XML instead.');
+    }
+    const timeoutMs = Math.max(25000, Math.min(120000, 25000 + Math.round((Number(file.size) || 0) / 120000)));
+    showEarlyProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
+    const buffer = await file.arrayBuffer();
+    return new Promise((resolve, reject) => {
+      const worker = new Worker('mpp-import-worker.js');
+      const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      let settled = false;
+      let percent = 12;
+      const startedAt = Date.now();
+
+      const progressTimer = setInterval(() => {
+        if (settled) return;
+        const elapsed = Date.now() - startedAt;
+        const ratio = Math.min(1, elapsed / timeoutMs);
+        percent = Math.max(percent, Math.min(91, Math.round(12 + (1 - Math.pow(1 - ratio, 2.1)) * 79)));
+        const stage = percent < 35 ? 'Opening MPP container'
+          : percent < 65 ? 'Scanning Project tables'
+          : percent < 84 ? 'Checking imported schedule'
+          : 'Finalizing import';
+        showEarlyProgress(file, percent, stage, elapsed > 8000 ? 'Still working locally. Nothing is uploaded.' : 'Working locally in your browser.');
+      }, 300);
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        clearInterval(progressTimer);
+        worker.terminate();
+        reject(new Error(`MPP import exceeded ${Math.round(timeoutMs / 1000)} seconds and was stopped before Chrome froze.`));
+      }, timeoutMs);
+
+      worker.onmessage = (event) => {
+        const data = event.data || {};
+        if (data.id !== id || settled) return;
+        if (data.progress) {
+          showEarlyProgress(file, data.progress.percent || percent, data.progress.stage || 'Importing MPP', data.progress.detail || 'Working locally...');
+          return;
+        }
+        settled = true;
+        clearInterval(progressTimer);
+        clearTimeout(timer);
+        worker.terminate();
+        if (data.ok) {
+          showEarlyProgress(file, 96, 'Loading schedule', 'Worker finished. Building the editable project view...');
+          resolve(data.result);
+        } else {
+          reject(new Error(data.error || 'MPP worker import failed.'));
+        }
+      };
+
+      worker.onerror = (event) => {
+        if (settled) return;
+        settled = true;
+        clearInterval(progressTimer);
+        clearTimeout(timer);
+        worker.terminate();
+        reject(new Error(event.message || 'MPP worker crashed.'));
+      };
+
+      worker.postMessage({ id, name: file.name || 'project.mpp', buffer }, [buffer]);
+    });
+  };
+
+  R.__workerImportVersion = VERSION;
+
+  function showEarlyProgress(file, percent, stage, detail) {
+    const panel = document.getElementById('mppPanel');
+    if (!panel) return;
+    const pct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    panel.hidden = false;
+    panel.classList.remove('mpp-ok', 'mpp-warn');
+    panel.classList.add('mpp-busy');
+    panel.innerHTML = `
+      <div class="mpp-progress-card">
+        <div class="mpp-progress-spinner" aria-hidden="true"></div>
+        <div class="mpp-progress-main">
+          <div class="mpp-progress-topline"><strong>${esc(stage || 'Importing MPP')}</strong><span>${pct}%</span></div>
+          <div class="mpp-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
+          <p>${esc(detail || 'Working locally in this browser...')}</p>
+          <small><code>${esc(file?.name || 'project.mpp')}</code> · ${formatBytes(file?.size || 0)}</small>
+        </div>
+      </div>`;
+    installEarlyStyles();
+  }
+
+  function installEarlyStyles() {
+    if (document.getElementById('mppEarlyWorkerProgressStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'mppEarlyWorkerProgressStyles';
+    style.textContent = `
+      .mpp-progress-card { display:flex; gap:14px; align-items:center; width:100%; }
+      .mpp-progress-spinner { width:34px; height:34px; flex:0 0 auto; border-radius:999px; border:4px solid rgba(37,99,235,.18); border-top-color:#2563eb; animation:mppProgressSpin .85s linear infinite; }
+      .mpp-progress-main { flex:1; min-width:0; display:grid; gap:7px; }
+      .mpp-progress-topline { display:flex; justify-content:space-between; gap:12px; align-items:center; font-weight:900; }
+      .mpp-progress-topline span { color:#1d4ed8; font-variant-numeric:tabular-nums; }
+      .mpp-progress-bar { height:10px; border-radius:999px; overflow:hidden; background:#dbeafe; box-shadow:inset 0 0 0 1px rgba(37,99,235,.12); }
+      .mpp-progress-bar i { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,#2563eb,#06b6d4); transition:width .25s ease; }
+      .mpp-progress-main p { margin:0; color:#334155; font-size:13px; }
+      .mpp-progress-main small { color:#64748b; }
+      @keyframes mppProgressSpin { to { transform:rotate(360deg); } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function formatBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+})();
