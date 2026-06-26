@@ -4,11 +4,12 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.5-mpp-import-orchestrator';
+  const VERSION = '0.1.6-mpp-import-orchestrator';
   const MODULES = [
     'mpp-native-task-skeleton-v2-polish.js',
     'mpp-native-task-dates-polish.js',
     'mpp-native-task-fixed-dates-polish.js',
+    'mpp-native-resource-table-v2-polish.js',
     'app-resource-leveling.js',
     'app-resource-auto-leveling.js',
     'app-progress-xml-work-import.js',
@@ -87,6 +88,7 @@
       nativeTaskSkeletonDiagnostics: importResult.nativeTaskSkeletonDiagnostics || null,
       nativeTaskDates: importResult.nativeTaskDates || null,
       nativeTaskFixedDates: importResult.nativeTaskFixedDates || null,
+      nativeResources: importResult.nativeResourceTableV2 || null,
       nativeTableCoverage: importResult.nativeTable?.fieldCoverage || null,
       outline: importResult.importNativeOutlineSpans || null,
       dependencies: importResult.importDependencyAudit || null,
@@ -128,6 +130,7 @@
     if (audit.nativeTaskSkeleton) rows.push(['Task skeleton', `${audit.nativeTaskSkeleton.taskRows || 0} rows, ${audit.nativeTaskSkeleton.namedRows || 0} named`]);
     if (audit.nativeTaskDates) rows.push(['Task dates', `${audit.nativeTaskDates.appliedRows || 0} applied, ${audit.nativeTaskDates.confidence || 'none'}`]);
     if (audit.nativeTaskFixedDates) rows.push(['Fixed dates', `${audit.nativeTaskFixedDates.appliedRows || 0} applied, ${audit.nativeTaskFixedDates.confidence || 'none'}`]);
+    if (audit.nativeResources) rows.push(['Native resources', `${audit.nativeResources.rows || 0} rows, ${audit.nativeResources.namedRows || 0} named`]);
     if (audit.progress) rows.push(['Progress', `${audit.progress.tasksApplied || 0} tasks`]);
     if (audit.baselines) rows.push(['Baselines', `${audit.baselines.baselineFieldsApplied || 0} primary`]);
     if (audit.multipleBaselines) rows.push(['Multi-baselines', `${audit.multipleBaselines.alternate || 0} alternate records`]);
