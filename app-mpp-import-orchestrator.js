@@ -4,9 +4,10 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.3-mpp-import-orchestrator';
+  const VERSION = '0.1.4-mpp-import-orchestrator';
   const MODULES = [
     'mpp-native-task-skeleton-v2-polish.js',
+    'mpp-native-task-dates-polish.js',
     'app-resource-leveling.js',
     'app-resource-auto-leveling.js',
     'app-progress-xml-work-import.js',
@@ -83,6 +84,7 @@
       nativeImportPolish: importResult.importPolish || null,
       nativeTaskSkeleton: importResult.nativeTaskSkeleton || null,
       nativeTaskSkeletonDiagnostics: importResult.nativeTaskSkeletonDiagnostics || null,
+      nativeTaskDates: importResult.nativeTaskDates || null,
       nativeTableCoverage: importResult.nativeTable?.fieldCoverage || null,
       outline: importResult.importNativeOutlineSpans || null,
       dependencies: importResult.importDependencyAudit || null,
@@ -122,6 +124,7 @@
   function summarize(audit) {
     const rows = [];
     if (audit.nativeTaskSkeleton) rows.push(['Task skeleton', `${audit.nativeTaskSkeleton.taskRows || 0} rows, ${audit.nativeTaskSkeleton.namedRows || 0} named`]);
+    if (audit.nativeTaskDates) rows.push(['Task dates', `${audit.nativeTaskDates.appliedRows || 0} applied, ${audit.nativeTaskDates.confidence || 'none'}`]);
     if (audit.progress) rows.push(['Progress', `${audit.progress.tasksApplied || 0} tasks`]);
     if (audit.baselines) rows.push(['Baselines', `${audit.baselines.baselineFieldsApplied || 0} primary`]);
     if (audit.multipleBaselines) rows.push(['Multi-baselines', `${audit.multipleBaselines.alternate || 0} alternate records`]);
