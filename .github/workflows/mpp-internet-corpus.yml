@@ -6,6 +6,7 @@ on:
     paths:
       - 'mpp-internet-corpus.json'
       - 'mpp-native-reader*.js'
+      - 'mpp-native-task-skeleton-polish.js'
       - 'scripts/run-mpp-internet-corpus.mjs'
       - '.github/workflows/mpp-internet-corpus.yml'
 
@@ -21,6 +22,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Enable task skeleton recovery in runner
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = 'scripts/run-mpp-internet-corpus.mjs';
+          let text = fs.readFileSync(path, 'utf8');
+          text = text.replace(
+            "loadScript('mpp-native-reader-resource-names-polish.js');",
+            "loadScript('mpp-native-reader-resource-names-polish.js');\n  loadScript('mpp-native-task-skeleton-polish.js');"
+          );
+          fs.writeFileSync(path, text);
+          NODE
 
       - name: Run MPP internet corpus
         run: node scripts/run-mpp-internet-corpus.mjs
