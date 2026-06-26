@@ -4,7 +4,7 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.1-mpp-import-orchestrator';
+  const VERSION = '0.1.2-mpp-import-orchestrator';
   const MODULES = [
     'app-resource-leveling.js',
     'app-resource-auto-leveling.js',
@@ -20,6 +20,7 @@
     'app-agile-metadata-xml-import.js',
     'app-sprint-board-audit.js',
     'app-assignment-link-audit-panel.js',
+    'app-mpp-compat-regression.js',
   ];
 
   const loaded = new Set();
@@ -66,7 +67,7 @@
       setTimeout(() => {
         buildFullAudit(result || window.__lastMppImportResult || null);
         renderPanel();
-      }, 140);
+      }, 220);
       return result;
     };
     window.importProjectMppLocal = importProjectMppLocal;
@@ -83,6 +84,7 @@
       outline: importResult.importNativeOutlineSpans || null,
       dependencies: importResult.importDependencyAudit || null,
       assignmentResources: importResult.importAssignmentResources || null,
+      assignmentMappingV2: importResult.importAssignmentMappingV2 || null,
       assignmentLinkEvidence: importResult.importAssignmentLinkAudit || null,
       resourceNames: importResult.importResourceNames || null,
       progress: state.progressXmlImportAudit || null,
@@ -90,6 +92,7 @@
       multipleBaselines: state.baselineMultiXmlImportAudit || null,
       resources: state.resourceXmlImportAudit || null,
       resourceLeveling: state.resourceLevelingAudit || null,
+      compatibilityReport: state.mppCompatibilityReport || null,
       links: state.linksXmlImportAudit || null,
       taskCalendars: state.taskCalendarXmlImportAudit || null,
       viewMetadata: state.projectViewMetadata || null,
@@ -120,11 +123,13 @@
     if (audit.multipleBaselines) rows.push(['Multi-baselines', `${audit.multipleBaselines.alternate || 0} alternate records`]);
     if (audit.resources) rows.push(['Resources', `${audit.resources.resourcesApplied || 0} metadata`]);
     if (audit.resourceLeveling) rows.push(['Resource leveling', `${audit.resourceLeveling.taskMoves || 0} task-day moves`]);
+    if (audit.compatibilityReport) rows.push(['Compatibility', `${audit.compatibilityReport.score || 0}% score`]);
     if (audit.links) rows.push(['Notes/links', `${audit.links.tasksApplied || 0} tasks`]);
     if (audit.taskCalendars) rows.push(['Task calendars', `${audit.taskCalendars.tasksApplied || 0} tasks`]);
     if (audit.viewMetadata) rows.push(['Views/tables', `${audit.viewMetadata.viewCount || 0} views, ${audit.viewMetadata.tableCount || 0} tables`]);
     if (audit.sprintBoardMetadata) rows.push(['Sprint board', `${audit.sprintBoardMetadata.sprintCount || 0} sprints, ${audit.sprintBoardMetadata.boardColumnCount || 0} columns`]);
-    if (audit.assignmentLinkEvidence) rows.push(['Assignment links', `${audit.assignmentLinkEvidence.candidateFields?.length || 0} candidate fields`]);
+    if (audit.assignmentMappingV2) rows.push(['Assignment v2', `${audit.assignmentMappingV2.appliedMappings || 0} applied, ${audit.assignmentMappingV2.unresolved || 0} unresolved, ${audit.assignmentMappingV2.confidence || 0}% confidence`]);
+    else if (audit.assignmentLinkEvidence) rows.push(['Assignment links', `${audit.assignmentLinkEvidence.candidateFields?.length || 0} candidate fields`]);
     if (!rows.length) rows.push(['Result', 'Import completed; no extra audit modules reported data']);
     return rows;
   }
