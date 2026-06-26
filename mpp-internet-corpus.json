@@ -1,0 +1,87 @@
+{
+  "version": "0.1.0-internet-mpp-corpus",
+  "createdAt": "2026-06-26",
+  "note": "Publicly reachable Microsoft Project .mpp files used only as compatibility test inputs. Do not vendor or redistribute binaries in this repo; the lab fetches them from their original public raw URLs.",
+  "sources": [
+    {
+      "id": "aspose-new-product-dev",
+      "name": "NewProductDev.mpp",
+      "focus": "assignments, resources, extended attributes",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/NewProductDev.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/NewProductDev.mpp"
+    },
+    {
+      "id": "aspose-project-2016",
+      "name": "Project2016.mpp",
+      "focus": "Project 2016 task hierarchy and schedule basics",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/Project2016.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/Project2016.mpp"
+    },
+    {
+      "id": "aspose-home-move-plan",
+      "name": "Home move plan.mpp",
+      "focus": "large task list, calendars, critical path, reports",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/Home move plan.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/Home%20move%20plan.mpp"
+    },
+    {
+      "id": "aspose-sample-recurring-leveling",
+      "name": "sample.mpp",
+      "focus": "recurring tasks and resource leveling",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/sample.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/sample.mpp"
+    },
+    {
+      "id": "aspose-calendar-exception",
+      "name": "Calenar with exception.mpp",
+      "focus": "calendar exception records",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/Calenar with exception.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/Calenar%20with%20exception.mpp"
+    },
+    {
+      "id": "aspose-new-project-2013",
+      "name": "New project 2013.mpp",
+      "focus": "Project 2013 schedule and calendar mutation baseline",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/New project 2013.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/New%20project%202013.mpp"
+    },
+    {
+      "id": "aspose-calendar-work-weeks",
+      "name": "CalendarWorkWeeks.mpp",
+      "focus": "calendar work weeks",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/CalendarWorkWeeks.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/CalendarWorkWeeks.mpp"
+    },
+    {
+      "id": "aspose-wbs-definition",
+      "name": "WBSDefinition.mpp",
+      "focus": "WBS definition and renumbering",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/WBSDefinition.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/WBSDefinition.mpp"
+    },
+    {
+      "id": "aspose-vba-project",
+      "name": "VbaProject3.mpp",
+      "focus": "VBA/project macro streams should not crash native reader",
+      "repo": "aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET",
+      "path": "Aspose.Tasks.Cloud.Sdk.Tests/TestData/VbaProject3.mpp",
+      "url": "https://raw.githubusercontent.com/aspose-tasks-cloud/Aspose.Tasks-Cloud-SDK-for-.NET/38337ebb1f3f8aefa89f4aa4dc86a7e04e31a867/Aspose.Tasks.Cloud.Sdk.Tests/TestData/VbaProject3.mpp"
+    },
+    {
+      "id": "groupdocs-conversion-sample",
+      "name": "GroupDocs sample.mpp",
+      "focus": "Project 12 / MPP12 conversion sample",
+      "repo": "groupdocs-conversion/GroupDocs.Conversion-for-.NET",
+      "path": "Examples/GroupDocs.Conversion.Examples.CSharp/Resources/SampleFiles/sample.mpp",
+      "url": "https://raw.githubusercontent.com/groupdocs-conversion/GroupDocs.Conversion-for-.NET/3cc99f49108b2f81d4de642f2d1b44b5992fa1d8/Examples/GroupDocs.Conversion.Examples.CSharp/Resources/SampleFiles/sample.mpp"
+    }
+  ]
+}
