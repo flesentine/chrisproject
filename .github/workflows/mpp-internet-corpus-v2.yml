@@ -1,0 +1,27 @@
+name: MPP Internet Corpus V2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-mpp-corpus-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable skeleton loader
+        run: perl -0pi -e "s/loadScript\('mpp-native-reader-resource-names-polish.js'\);/loadScript('mpp-native-reader-resource-names-polish.js');\n  loadScript('mpp-native-task-skeleton-polish.js');/" scripts/run-mpp-internet-corpus.mjs
+      - name: Run corpus
+        run: node scripts/run-mpp-internet-corpus.mjs
+      - name: Mark zero-task results opened-only
+        run: node -e "const fs=require('fs');const p='mpp-internet-corpus-report.json';const r=JSON.parse(fs.readFileSync(p,'utf8'));r.version='0.1.1-node-mpp-internet-corpus-runner-v2-workflow';for(const x of r.results||[]){if(x.status==='passed'&&!(Number(x.tasks)>0)){x.status='opened_only';x.warnings=x.warnings||[];x.warnings.unshift('Opened container but parsed zero tasks. Not counted as a real import pass.')}x.taskSkeletonRows=x.diagnostics?.fieldCoverage?.taskSkeletonRows||0;x.taskSkeletonNamedRows=x.diagnostics?.fieldCoverage?.taskSkeletonNamedRows||0;}r.passed=(r.results||[]).filter(x=>x.status==='passed').length;r.openedOnly=(r.results||[]).filter(x=>x.status==='opened_only').length;r.failed=(r.results||[]).filter(x=>x.status==='failed').length;r.totalTasks=(r.results||[]).reduce((s,x)=>s+Number(x.tasks||0),0);r.totalSkeletonRows=(r.results||[]).reduce((s,x)=>s+Number(x.taskSkeletonRows||0),0);fs.writeFileSync(p,JSON.stringify(r,null,2));console.log('V2 parsed '+r.passed+'/'+r.corpusCount+' opened-only '+r.openedOnly+' tasks '+r.totalTasks+' skeleton '+r.totalSkeletonRows);"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpp-internet-corpus-v2-report
+          path: mpp-internet-corpus-report.json
+          if-no-files-found: error
