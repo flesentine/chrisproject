@@ -30,14 +30,18 @@ try {
 
 self.onmessage = async (event) => {
   const { id, name, buffer } = event.data || {};
+  const progress = (percent, stage, detail) => self.postMessage({ id, progress: { percent, stage, detail } });
   try {
+    progress(28, 'Worker ready', 'Browser worker loaded the MPP parser modules.');
     if (self.__mppWorkerBootError) throw self.__mppWorkerBootError;
     if (!self.NativeMppReader?.readBufferAsync && !self.NativeMppReader?.readBuffer) {
       throw new Error('Native MPP reader did not load inside the worker.');
     }
+    progress(36, 'Decoding MPP', 'Reading OLE streams and native Project tables...');
     const result = self.NativeMppReader.readBufferAsync
       ? await self.NativeMppReader.readBufferAsync(buffer, name || 'project.mpp')
       : self.NativeMppReader.readBuffer(buffer, name || 'project.mpp');
+    progress(88, 'Cleaning import result', 'Checking date sanity and trimming diagnostics...');
     self.postMessage({ id, ok: true, result: sanitizeResult(result) });
   } catch (error) {
     self.postMessage({ id, ok: false, error: error?.message || String(error || 'MPP worker failed') });
