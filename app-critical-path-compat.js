@@ -3,6 +3,9 @@
 
   let tries = 0;
 
+  loadMppWorkerImportNow();
+  installMppImportCaptureGuard();
+
   function ready() {
     return typeof state !== 'undefined' && typeof render === 'function' && typeof renderGantt === 'function';
   }
@@ -17,6 +20,7 @@
     installStyles();
     patchRenderers();
     loadNativeTaskSkeleton();
+    loadMppWorkerImportNow();
     loadImportOrchestrator();
     requestAnimationFrame(afterRender);
   }
@@ -24,6 +28,79 @@
   document.readyState === 'loading'
     ? document.addEventListener('DOMContentLoaded', boot, { once: true })
     : boot();
+
+  function loadMppWorkerImportNow() {
+    loadScriptOnce('app-mpp-worker-import.js', 'mppWorkerImportDirectBoot');
+    loadScriptOnce('app-current-version-label.js', 'currentVersionDirectBoot');
+  }
+
+  function loadScriptOnce(src, flag) {
+    if (window[flag] || document.querySelector(`script[src="${src}"]`)) return;
+    window[flag] = true;
+    const script = document.createElement('script');
+    script.src = src;
+    script.defer = true;
+    script.dataset.directBoot = '1';
+    (document.body || document.head || document.documentElement).appendChild(script);
+  }
+
+  function installMppImportCaptureGuard() {
+    if (window.__mppImportCaptureGuardInstalled) return;
+    window.__mppImportCaptureGuardInstalled = true;
+    document.addEventListener('change', (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.id !== 'importMppInput') return;
+      if (window.NativeMppReader?.__workerImportVersion) return;
+      const file = input.files?.[0];
+      if (!file) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      input.value = '';
+      loadMppWorkerImportNow();
+      showWorkerBootPanel(file);
+      waitForWorkerThenImport(file);
+    }, true);
+  }
+
+  function showWorkerBootPanel(file) {
+    const panel = document.getElementById('mppPanel');
+    if (!panel) return;
+    panel.hidden = false;
+    panel.classList.remove('mpp-ok', 'mpp-warn');
+    panel.classList.add('mpp-busy');
+    panel.innerHTML = `<strong>MPP import starting:</strong> Loading the browser worker before opening <code>${escapeHtml(file.name || 'project.mpp')}</code>. This prevents Chrome from freezing on the main thread.`;
+  }
+
+  function waitForWorkerThenImport(file) {
+    let attempts = 0;
+    const tick = async () => {
+      attempts += 1;
+      if (window.NativeMppReader?.__workerImportVersion && typeof handlePickedFile === 'function') {
+        try {
+          await handlePickedFile(file);
+        } catch (error) {
+          const panel = document.getElementById('mppPanel');
+          if (panel) {
+            panel.hidden = false;
+            panel.classList.add('mpp-warn');
+            panel.innerHTML = `<strong>MPP import failed:</strong> ${escapeHtml(error?.message || error || 'Unknown error')}`;
+          }
+        }
+        return;
+      }
+      if (attempts >= 80) {
+        const panel = document.getElementById('mppPanel');
+        if (panel) {
+          panel.hidden = false;
+          panel.classList.add('mpp-warn');
+          panel.innerHTML = `<strong>MPP worker not ready:</strong> Hard refresh the page, then try the MPP again. The unsafe main-thread import was blocked so Chrome should not freeze.`;
+        }
+        return;
+      }
+      setTimeout(tick, 100);
+    };
+    setTimeout(tick, 50);
+  }
 
   function patchRenderers() {
     const baseRender = render;
@@ -193,5 +270,15 @@
       .gantt-slack-bar::after { content: attr(data-slack-label); position: absolute; left: 50%; top: -18px; transform: translateX(-50%); padding: 1px 6px; border: 1px solid #d9e2ee; border-radius: 999px; background: rgba(255,255,255,.96); color: #475467; font-size: 9px; font-weight: 850; white-space: nowrap; }
     `;
     document.head.appendChild(style);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
   }
 })();
