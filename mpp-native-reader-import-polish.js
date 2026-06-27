@@ -5,7 +5,7 @@
   if (!R || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = '1.4.0-worker-first-fast-budget';
+  const VERSION = '1.5.0-worker-draft-preview';
   const LIVE_MPP_TIMEOUT_MS = 12000;
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
 
@@ -53,8 +53,8 @@
         percent = Math.max(percent, Math.min(91, Math.round(12 + (1 - Math.pow(1 - ratio, 2.1)) * 79)));
         const stage = percent < 35 ? 'Opening MPP container'
           : percent < 65 ? 'Scanning Project tables'
-          : percent < 84 ? 'Checking imported schedule'
-          : 'Finalizing import';
+          : percent < 84 ? 'Building safe preview'
+          : 'Finalizing preview';
         showEarlyProgress(file, percent, stage, elapsed > 7000 ? 'Still working locally. If this MPP cannot quick-open, the app will stop instead of hanging.' : 'Working locally in your browser.');
       }, 300);
 
@@ -79,8 +79,9 @@
         clearTimeout(timer);
         worker.terminate();
         if (data.ok) {
-          showEarlyProgress(file, 96, 'Loading schedule', 'Worker finished. Building the editable project view...');
-          resolve(data.result);
+          const safe = forceDraftPreview(data.result, file);
+          showEarlyProgress(file, 96, 'Safe preview ready', 'Recovered task names are ready. Choose whether to load the bounded draft.');
+          resolve(safe);
         } else {
           reject(new Error(data.error || 'MPP worker import failed.'));
         }
@@ -100,6 +101,37 @@
   };
 
   R.__workerImportVersion = VERSION;
+
+  function forceDraftPreview(result, file) {
+    const safe = result && typeof result === 'object' ? { ...result } : {};
+    const sourceTasks = Array.isArray(safe.project?.tasks) && safe.project.tasks.length
+      ? safe.project.tasks
+      : Array.isArray(safe.draftProject?.tasks) ? safe.draftProject.tasks : [];
+    const tasks = sourceTasks.slice(0, 250).map((task, index) => ({
+      id: index + 1,
+      uid: index + 1,
+      name: cleanName(task.name) || `Recovered task ${index + 1}`,
+      confidence: task.confidence || 80,
+    }));
+    delete safe.projectXml;
+    safe.project = null;
+    safe.liveImportMode = 'draft-preview-only';
+    safe.fileName = safe.fileName || file?.name || 'project.mpp';
+    safe.draftProject = {
+      name: cleanName(result?.project?.name || result?.draftProject?.name || file?.name || 'Recovered MPP'),
+      start: new Date().toISOString().slice(0, 10),
+      taskCount: tasks.length,
+      tasks,
+      topStream: result?.draftProject?.topStream || null,
+    };
+    safe.warnings = Array.isArray(safe.warnings) ? safe.warnings : [];
+    safe.warnings.unshift('Live MPP import returns a draft preview only. Project XML auto-load is disabled so bad native dates cannot hang the grid/Gantt.');
+    return safe;
+  }
+
+  function cleanName(value) {
+    return String(value || '').replace(/\.mpp$/i, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+  }
 
   function showEarlyProgress(file, percent, stage, detail) {
     const panel = document.getElementById('mppPanel');
