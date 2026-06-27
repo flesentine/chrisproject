@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.52.0';
-  const CURRENT_NAME = 'Safe MPP cleanup';
+  const CURRENT_VERSION = 'v0.53.0';
+  const CURRENT_NAME = 'Safe MPP state cleanup';
   const CURRENT_BUILD = '2026-06-27';
   const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
   const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP worker + safe cleanup`;
+  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP worker + state cleanup`;
 
   if (window.__currentVersionLabelLoaded) return;
   window.__currentVersionLabelLoaded = true;
@@ -17,20 +17,25 @@
     const ribbon = document.getElementById('ribbonVersionText');
     if (badge) {
       badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: worker import, progress UI, date sanity, and live MPP cleanup`;
+      badge.title = `Build ${CURRENT_BUILD}: worker import, progress UI, date sanity, live MPP cleanup, and state cleanup`;
     }
     if (footer) footer.textContent = FOOTER_TEXT;
     if (ribbon) ribbon.textContent = RIBBON_TEXT;
   }
 
-  function loadLiveMppCleanup() {
-    if (window.__liveMppSafeXmlFilterScriptLoaded || document.querySelector('script[src="mpp-live-safe-xml-filter.js"]')) return;
-    window.__liveMppSafeXmlFilterScriptLoaded = true;
+  function loadScriptOnce(src, flag, attrName) {
+    if (window[flag] || document.querySelector(`script[src="${src}"]`)) return;
+    window[flag] = true;
     const script = document.createElement('script');
-    script.src = 'mpp-live-safe-xml-filter.js';
+    script.src = src;
     script.defer = true;
-    script.dataset.liveMppCleanup = '1';
+    if (attrName) script.dataset[attrName] = '1';
     (document.body || document.head || document.documentElement).appendChild(script);
+  }
+
+  function loadLiveMppCleanup() {
+    loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
+    loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'safeLiveMppStateCleanup');
   }
 
   function patchRender() {
@@ -50,6 +55,7 @@
     applyVersionLabel();
     patchRender();
     setTimeout(loadLiveMppCleanup, 250);
+    setTimeout(loadLiveMppCleanup, 1000);
     setTimeout(applyVersionLabel, 250);
     setTimeout(applyVersionLabel, 1000);
     setTimeout(applyVersionLabel, 2500);
