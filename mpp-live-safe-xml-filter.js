@@ -5,7 +5,7 @@
   if (!R || window.__liveMppSafeXmlFilterLoaded) return;
   window.__liveMppSafeXmlFilterLoaded = true;
 
-  const VERSION = '0.3.0-live-mpp-safe-xml-filter';
+  const VERSION = '0.4.0-live-mpp-safe-xml-filter-placeholders';
   const MAX_TASKS = 250;
 
   const previousReadBufferAsync = R.readBufferAsync?.bind(R);
@@ -37,33 +37,25 @@
 
     const seen = new Set();
     const kept = [];
-    let dropped = 0;
+    const droppedNames = [];
 
     for (const task of sourceTasks) {
       const name = cleanName(task?.name);
       if (!isRealTaskName(name)) {
-        dropped += 1;
+        droppedNames.push(name || '(blank)');
         continue;
       }
       const key = name.toLowerCase();
       const isRepeatedFieldValue = seen.has(key) && /^no\s+.*date$/i.test(name);
       if (isRepeatedFieldValue) {
-        dropped += 1;
+        droppedNames.push(name);
         continue;
       }
       seen.add(key);
-      kept.push({
-        name,
-        outlineLevel: clampInt(task.outlineLevel || task.outline_level || 1, 1, 20),
-        outlineNumber: cleanName(task.outlineNumber || task.outline_number || task.wbs || ''),
-      });
+      const outlineNumber = cleanName(task.outlineNumber || task.outline_number || task.wbs || '');
+      const outlineLevel = inferOutlineLevel(task, outlineNumber);
+      kept.push({ name, outlineLevel, outlineNumber });
       if (kept.length >= MAX_TASKS) break;
-    }
-
-    if (!kept.length && sourceTasks.length) {
-      for (let i = 0; i < Math.min(sourceTasks.length, MAX_TASKS); i += 1) {
-        kept.push({ name: cleanName(sourceTasks[i]?.name) || `Recovered task ${i + 1}`, outlineLevel: 1, outlineNumber: String(i + 1) });
-      }
     }
 
     const projectName = cleanName(result.draftProject?.name || result.fileName || fileName || 'Recovered MPP');
@@ -78,20 +70,24 @@
       tasks: kept,
     };
     result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-    result.warnings.unshift(`Live MPP cleanup ${VERSION}: dropped ${dropped} non-task field row${dropped === 1 ? '' : 's'} and rebuilt safe working-day dates.`);
+    result.warnings.unshift(`Live MPP cleanup ${VERSION}: dropped ${droppedNames.length} non-task/generated row${droppedNames.length === 1 ? '' : 's'} and rebuilt safe working-day dates.`);
     result.importPolish = {
       ...(result.importPolish || {}),
       liveMppSafeXmlFilterVersion: VERSION,
-      liveMppDroppedRows: dropped,
+      liveMppDroppedRows: droppedNames.length,
       liveMppLoadedRows: kept.length,
+      liveMppDroppedNames: droppedNames.slice(0, 40),
     };
 
     mark('live-safe-xml-filter-applied', {
       version: VERSION,
       sourceTasks: sourceTasks.length,
       kept: kept.length,
-      dropped,
+      dropped: droppedNames.length,
+      droppedNames: droppedNames.slice(0, 20),
       firstTask: kept[0]?.name || '',
+      lastTask: kept[kept.length - 1]?.name || '',
+      outlineLevels: histogram(kept.map((task) => task.outlineLevel || 1)),
       startDate,
     });
 
@@ -99,16 +95,25 @@
   }
 
   function isRealTaskName(name) {
-    if (!name || name.length < 3) return false;
-    if (/^no\s+program\s+baseline\s+date$/i.test(name)) return false;
-    if (/^no\s+.*baseline.*date$/i.test(name)) return false;
-    if (/^(program\s+)?baseline\s+(date|start|finish|duration|cost|work)$/i.test(name)) return false;
-    if (/^(baseline|baseline date|start variance|finish variance|duration variance|cost variance)$/i.test(name)) return false;
-    if (/^(task name|resource name|start|finish|duration|work|cost|calendar|notes|predecessors|successors)$/i.test(name)) return false;
-    if (/^(yes|no|none|null|true|false)$/i.test(name)) return false;
-    if (/^\d+(?:\.\d+)?$/.test(name)) return false;
-    if (!/[A-Za-z\p{L}]/u.test(name)) return false;
-    return true;
+    const n = cleanName(name);
+    if (!n || n.length < 3) return false;
+    if (/^task\s+\d+$/i.test(n)) return false;
+    if (/^recovered\s+task\s+\d+$/i.test(n)) return false;
+    if (/^mpp\s+task\s+\d+$/i.test(n)) return false;
+    if (/^no\s+program\s+baseline\s+date$/i.test(n)) return false;
+    if (/^no\s+.*baseline.*date$/i.test(n)) return false;
+    if (/^(program\s+)?baseline\s+(date|start|finish|duration|cost|work)$/i.test(n)) return false;
+    if (/^(baseline|baseline date|start variance|finish variance|duration variance|cost variance)$/i.test(n)) return false;
+    if (/^(task name|resource name|start|finish|duration|work|cost|calendar|notes|predecessors|successors)$/i.test(n)) return false;
+    if (/^(yes|no|none|null|true|false)$/i.test(n)) return false;
+    if (/^\d+(?:\.\d+)?$/.test(n)) return false;
+    return /[A-Za-z\p{L}]/u.test(n);
+  }
+
+  function inferOutlineLevel(task, outlineNumber) {
+    const wbs = cleanName(outlineNumber).replace(/\s+/g, '');
+    if (/^\d+(?:\.\d+)*$/.test(wbs)) return Math.max(1, Math.min(20, wbs.split('.').length));
+    return clampInt(task.outlineLevel || task.outline_level || 1, 1, 20);
   }
 
   function buildSafeProjectXml(projectName, startDate, tasks) {
@@ -118,24 +123,19 @@
     const taskXml = tasks.map((task, index) => {
       const day = workingDateForIndex(startDate, index);
       const uid = index + 1;
-      const outlineNumber = task.outlineNumber || String(uid);
-      return `    <Task>\n      <UID>${uid}</UID>\n      <ID>${uid}</ID>\n      <Name>${xmlEsc(task.name)}</Name>\n      <Type>1</Type>\n      <IsNull>0</IsNull>\n      <CreateDate>${projectStart}</CreateDate>\n      <WBS>${xmlEsc(outlineNumber)}</WBS>\n      <OutlineNumber>${xmlEsc(outlineNumber)}</OutlineNumber>\n      <OutlineLevel>${task.outlineLevel || 1}</OutlineLevel>\n      <Start>${day}T08:00:00</Start>\n      <Finish>${day}T17:00:00</Finish>\n      <Duration>PT8H0M0S</Duration>\n      <DurationFormat>7</DurationFormat>\n      <Work>PT0H0M0S</Work>\n      <PercentComplete>0</PercentComplete>\n      <Summary>0</Summary>\n      <Milestone>0</Milestone>\n      <Priority>500</Priority>\n      <Active>1</Active>\n      <Manual>0</Manual>\n    </Task>`;
+      const outlineNumber = cleanName(task.outlineNumber).replace(/\s+/g, '') || String(uid);
+      const outlineLevel = inferOutlineLevel(task, outlineNumber);
+      return `    <Task>\n      <UID>${uid}</UID>\n      <ID>${uid}</ID>\n      <Name>${xmlEsc(task.name)}</Name>\n      <Type>1</Type>\n      <IsNull>0</IsNull>\n      <CreateDate>${projectStart}</CreateDate>\n      <WBS>${xmlEsc(outlineNumber)}</WBS>\n      <OutlineNumber>${xmlEsc(outlineNumber)}</OutlineNumber>\n      <OutlineLevel>${outlineLevel}</OutlineLevel>\n      <Start>${day}T08:00:00</Start>\n      <Finish>${day}T17:00:00</Finish>\n      <Duration>PT8H0M0S</Duration>\n      <DurationFormat>7</DurationFormat>\n      <Work>PT0H0M0S</Work>\n      <PercentComplete>0</PercentComplete>\n      <Summary>0</Summary>\n      <Milestone>0</Milestone>\n      <Priority>500</Priority>\n      <Active>1</Active>\n      <Manual>0</Manual>\n    </Task>`;
     }).join('\n');
 
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<Project xmlns="http://schemas.microsoft.com/project">\n  <Name>${xmlEsc(projectName)}</Name>\n  <Title>${xmlEsc(projectName)}</Title>\n  <ScheduleFromStart>1</ScheduleFromStart>\n  <StartDate>${projectStart}</StartDate>\n  <FinishDate>${projectFinish}</FinishDate>\n  <CalendarUID>1</CalendarUID>\n  <MinutesPerDay>480</MinutesPerDay>\n  <MinutesPerWeek>2400</MinutesPerWeek>\n  <DaysPerMonth>20</DaysPerMonth>\n  <DefaultStartTime>08:00:00</DefaultStartTime>\n  <DefaultFinishTime>17:00:00</DefaultFinishTime>\n  <Calendars>\n    <Calendar>\n      <UID>1</UID>\n      <Name>Standard</Name>\n      <IsBaseCalendar>1</IsBaseCalendar>\n      <WeekDays>\n        <WeekDay><DayType>1</DayType><DayWorking>0</DayWorking></WeekDay>\n        <WeekDay><DayType>2</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>3</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>4</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>5</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>6</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>7</DayType><DayWorking>0</DayWorking></WeekDay>\n      </WeekDays>\n    </Calendar>\n  </Calendars>\n  <Tasks>\n${taskXml}\n  </Tasks>\n</Project>`;
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<Project xmlns="http://schemas.microsoft.com/project">\n  <Name>${xmlEsc(projectName)}</Name>\n  <Title>${xmlEsc(projectName)}</Title>\n  <ScheduleFromStart>1</ScheduleFromStart>\n  <StartDate>${projectStart}</StartDate>\n  <FinishDate>${projectFinish}</FinishDate>\n  <CalendarUID>1</CalendarUID>\n  <MinutesPerDay>480</MinutesPerDay>\n  <MinutesPerWeek>2400</MinutesPerWeek>\n  <DaysPerMonth>20</DaysPerMonth>\n  <DefaultStartTime>08:00:00</DefaultStartTime>\n  <DefaultFinishTime>17:00:00</DefaultFinishTime>\n  <Tasks>\n${taskXml}\n  </Tasks>\n</Project>`;
   }
 
   function parseTasksFromXml(xml) {
     const tasks = [];
     String(xml || '').replace(/<Task>([\s\S]*?)<\/Task>/g, (_match, body) => {
       const name = unesc(child(body, 'Name'));
-      if (name) {
-        tasks.push({
-          name,
-          outlineLevel: Number(child(body, 'OutlineLevel')) || 1,
-          outlineNumber: unesc(child(body, 'OutlineNumber') || child(body, 'WBS') || ''),
-        });
-      }
+      if (name) tasks.push({ name, outlineLevel: Number(child(body, 'OutlineLevel')) || 1, outlineNumber: unesc(child(body, 'OutlineNumber') || child(body, 'WBS') || '') });
       return _match;
     });
     return tasks;
@@ -162,19 +162,10 @@
     return d.toISOString().slice(0, 10);
   }
 
-  function isWorkingDay(d) {
-    const day = d.getUTCDay();
-    return day >= 1 && day <= 5;
-  }
-
-  function cleanName(value) {
-    return String(value || '').replace(/\.mpp$/i, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
-  }
-
-  function clampInt(value, min, max) {
-    const n = Math.round(Number(value) || min);
-    return Math.max(min, Math.min(max, n));
-  }
+  function isWorkingDay(d) { const day = d.getUTCDay(); return day >= 1 && day <= 5; }
+  function cleanName(value) { return String(value || '').replace(/\.mpp$/i, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180); }
+  function clampInt(value, min, max) { const n = Math.round(Number(value) || min); return Math.max(min, Math.min(max, n)); }
+  function histogram(values) { return values.reduce((acc, value) => { const key = String(value || 1); acc[key] = (acc[key] || 0) + 1; return acc; }, {}); }
 
   function mark(type, data) {
     try {
@@ -188,11 +179,6 @@
     } catch {}
   }
 
-  function xmlEsc(value) {
-    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch]));
-  }
-
-  function unesc(value) {
-    return String(value || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#10;/g, '\n').replace(/&amp;/g, '&');
-  }
+  function xmlEsc(value) { return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch])); }
+  function unesc(value) { return String(value || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#10;/g, '\n').replace(/&amp;/g, '&'); }
 })();
