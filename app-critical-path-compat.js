@@ -105,6 +105,7 @@
   function patchRenderers() {
     const baseRender = render;
     render = function criticalPathCompatRender(...args) {
+      clampUnsafeImportedDates();
       const result = baseRender.apply(this, args);
       afterRender();
       return result;
@@ -113,11 +114,74 @@
 
     const baseRenderGantt = renderGantt;
     renderGantt = function criticalPathCompatRenderGantt(...args) {
+      clampUnsafeImportedDates();
       const result = baseRenderGantt.apply(this, args);
       decorateRows();
       return result;
     };
     window.renderGantt = renderGantt;
+  }
+
+  function clampUnsafeImportedDates() {
+    const tasks = state?.tasks || [];
+    if (!tasks.length || state.__unsafeMppDateClampApplied) return;
+    const dated = tasks.map((task) => ({ task, start: parseDate(task.start), finish: parseDate(task.finish) })).filter((row) => row.start && row.finish);
+    if (dated.length < 3) return;
+    const minStart = new Date(Math.min(...dated.map((row) => row.start.getTime())));
+    const maxFinish = new Date(Math.max(...dated.map((row) => row.finish.getTime())));
+    const spanDays = Math.max(0, Math.round((maxFinish - minStart) / 86400000) + 1);
+    const base1984Rows = dated.filter((row) => row.start.getUTCFullYear() <= 1985).length;
+    const hugeRows = dated.filter((row) => Math.round((row.finish - row.start) / 86400000) + 1 > 365).length;
+    const falsePositive1984 = base1984Rows >= Math.max(3, Math.ceil(dated.length * 0.25)) && spanDays > 365 * 3;
+    const giantDurations = hugeRows >= Math.max(3, Math.ceil(dated.length * 0.25));
+    if (!falsePositive1984 && !giantDurations && spanDays <= 365 * 5) return;
+
+    const safeStart = state.projectStart && parseDate(state.projectStart) ? state.projectStart : todayIso();
+    tasks.forEach((task, index) => {
+      const start = addDaysIso(safeStart, index);
+      const duration = safeDuration(task);
+      task.start = start;
+      task.finish = addDaysIso(start, Math.max(0, duration - 1));
+      task.durationDays = duration;
+      task.durationMinutes = duration * (state.calendar?.minutesPerDay || 480);
+      task.unsafeMppDateClamped = true;
+    });
+    state.projectStart = safeStart;
+    state.__unsafeMppDateClampApplied = true;
+    state.__unsafeMppDateClamp = { spanDays, base1984Rows, hugeRows, taskCount: tasks.length };
+    showDateClampPanel(spanDays, base1984Rows, hugeRows);
+    try { if (typeof save === 'function') save(); } catch {}
+  }
+
+  function showDateClampPanel(spanDays, base1984Rows, hugeRows) {
+    const panel = document.getElementById('mppPanel');
+    if (!panel) return;
+    panel.hidden = false;
+    panel.classList.remove('mpp-ok');
+    panel.classList.add('mpp-warn');
+    panel.innerHTML = `<strong>MPP date safety:</strong> The import produced an unsafe ${spanDays}-day timeline with ${base1984Rows} task(s) starting near 1984 and ${hugeRows} giant duration(s). Dates were clamped to a safe draft schedule so the Gantt does not freeze. Task names, order, and WBS were preserved.`;
+  }
+
+  function parseDate(value) {
+    if (!value) return null;
+    const d = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function todayIso() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function addDaysIso(startIso, days) {
+    const d = parseDate(startIso) || new Date();
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function safeDuration(task) {
+    const raw = Number(task.durationDays);
+    if (Number.isFinite(raw) && raw > 0 && raw <= 30) return Math.round(raw);
+    return 1;
   }
 
   function afterRender() {
