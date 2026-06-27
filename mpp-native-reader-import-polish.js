@@ -5,14 +5,14 @@
   if (!R || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = '1.7.0-readbuffer-worker-bridge';
+  const VERSION = '1.8.0-safe-xml-handoff';
   const LIVE_MPP_TIMEOUT_MS = 12000;
+  const MAX_LIVE_TASKS = 250;
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
 
   R.importPolishVersion = VERSION;
 
-  // In the Worker this must be a no-op, otherwise the worker would recursively
-  // create another worker instead of parsing the buffer.
+  // Inside the worker, do not wrap NativeMppReader again or we recurse.
   if (inWorker) return;
 
   const debug = window.__mppDebug = window.__mppDebug || {
@@ -41,8 +41,8 @@
   installDebugHud();
   installInputDebugTap();
 
-  R.readBuffer = function workerFirstReadBuffer(buffer, name = 'project.mpp') {
-    mark('NativeMppReader.readBuffer-called', bufferInfo(buffer, name));
+  R.readBuffer = function readBufferBlockedOnMainThread(buffer, name = 'project.mpp') {
+    mark('NativeMppReader.readBuffer-called-blocked', bufferInfo(buffer, name));
     throw new Error('Synchronous MPP readBuffer is disabled on the page. Use readBufferAsync so parsing can run in a worker.');
   };
 
@@ -70,9 +70,11 @@
       mark('no-worker-support', { message });
       return Promise.reject(new Error(message));
     }
+
     const timeoutMs = LIVE_MPP_TIMEOUT_MS;
     const file = { name: name || 'project.mpp', size: buffer?.byteLength || 0, type: '' };
-    showEarlyProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
+    showProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
+
     return new Promise((resolve, reject) => {
       mark('worker-create-start');
       const worker = new Worker('mpp-import-worker.js');
@@ -89,9 +91,9 @@
         percent = Math.max(percent, Math.min(91, Math.round(12 + (1 - Math.pow(1 - ratio, 2.1)) * 79)));
         const stage = percent < 35 ? 'Opening MPP container'
           : percent < 65 ? 'Scanning Project tables'
-          : percent < 84 ? 'Building safe preview'
-          : 'Finalizing preview';
-        showEarlyProgress(file, percent, stage, elapsed > 7000 ? 'Still working locally. If this MPP cannot quick-open, the app will stop instead of hanging.' : 'Working locally in your browser.');
+          : percent < 84 ? 'Building safe schedule'
+          : 'Finalizing import';
+        showProgress(file, percent, stage, elapsed > 7000 ? 'Still working locally. If this MPP cannot quick-open, the app will stop instead of hanging.' : 'Working locally in your browser.');
         if (elapsed > 1000 && elapsed % 3000 < 350) mark('worker-still-waiting', { elapsedMs: elapsed, percent });
       }, 300);
 
@@ -101,7 +103,7 @@
         clearInterval(progressTimer);
         worker.terminate();
         mark('worker-timeout', { timeoutMs });
-        showImportStopped(file, timeoutMs);
+        showStopped(file, timeoutMs);
         reject(new Error(`This MPP did not quick-open within ${Math.round(timeoutMs / 1000)} seconds. The import was stopped so the app stays usable. This file needs deeper browser-compatibility work or Project XML export.`));
       }, timeoutMs);
 
@@ -110,18 +112,20 @@
         if (data.id !== id || settled) return;
         if (data.progress) {
           mark('worker-progress', data.progress);
-          showEarlyProgress(file, data.progress.percent || percent, data.progress.stage || 'Importing MPP', data.progress.detail || 'Working locally...');
+          showProgress(file, data.progress.percent || percent, data.progress.stage || 'Importing MPP', data.progress.detail || 'Working locally...');
           return;
         }
+
         settled = true;
         clearInterval(progressTimer);
         clearTimeout(timer);
         worker.terminate();
+
         if (data.ok) {
           mark('worker-ok', summarizeWorkerResult(data.result));
-          const safe = forceDraftPreview(data.result, file);
-          mark('draft-preview-built', summarizeDraft(safe));
-          showEarlyProgress(file, 96, 'Safe preview ready', 'Recovered task names are ready. Choose whether to load the bounded draft.');
+          const safe = forceSafeXmlHandoff(data.result, file);
+          mark('safe-xml-handoff-built', summarizeSafe(safe));
+          showProgress(file, 100, 'Safe MPP import ready', `Recovered ${safe.draftProject?.tasks?.length || 0} tasks and loaded them through bounded Project XML.`);
           resolve(safe);
         } else {
           mark('worker-returned-error', { error: data.error || 'MPP worker import failed.' });
@@ -145,32 +149,54 @@
     });
   }
 
-  function forceDraftPreview(result, file) {
+  function forceSafeXmlHandoff(result, file) {
     const safe = result && typeof result === 'object' ? { ...result } : {};
     const sourceTasks = Array.isArray(safe.project?.tasks) && safe.project.tasks.length
       ? safe.project.tasks
       : Array.isArray(safe.draftProject?.tasks) ? safe.draftProject.tasks : [];
-    const tasks = sourceTasks.slice(0, 250).map((task, index) => ({
+
+    const projectName = cleanName(result?.project?.name || result?.draftProject?.name || file?.name || 'Recovered MPP');
+    const startDate = todayIso();
+    const tasks = sourceTasks.slice(0, MAX_LIVE_TASKS).map((task, index) => ({
       id: index + 1,
       uid: index + 1,
       name: cleanName(task.name) || `Recovered task ${index + 1}`,
+      outlineLevel: clampInt(task.outlineLevel || task.outline_level || 1, 1, 20),
+      outlineNumber: cleanName(task.outlineNumber || task.outline_number || ''),
       confidence: task.confidence || 80,
     }));
-    delete safe.projectXml;
+
+    // The live site must hand app.js something it already knows how to load.
+    // Native dates are intentionally discarded here because bad guesses can hang the Gantt.
+    safe.projectXml = buildSafeProjectXml(projectName, startDate, tasks);
     safe.project = null;
-    safe.liveImportMode = 'draft-preview-only';
+    safe.liveImportMode = 'safe-xml-handoff';
     safe.fileName = safe.fileName || file?.name || 'project.mpp';
     safe.draftProject = {
-      name: cleanName(result?.project?.name || result?.draftProject?.name || file?.name || 'Recovered MPP'),
-      start: new Date().toISOString().slice(0, 10),
+      name: projectName,
+      start: startDate,
       taskCount: tasks.length,
       tasks,
       topStream: result?.draftProject?.topStream || null,
     };
     safe.warnings = Array.isArray(safe.warnings) ? safe.warnings : [];
-    safe.warnings.unshift('Live MPP import returns a draft preview only. Project XML auto-load is disabled so bad native dates cannot hang the grid/Gantt.');
-    debug.lastResult = summarizeDraft(safe);
+    safe.warnings.unshift('Live MPP import used safe mode: recovered task names/order were loaded with bounded draft dates. Native date/baseline/resource fidelity is still being improved.');
+    debug.lastResult = summarizeSafe(safe);
     return safe;
+  }
+
+  function buildSafeProjectXml(projectName, startDate, tasks) {
+    const start = `${startDate}T08:00:00`;
+    const finish = addDaysIso(startDate, Math.max(0, Math.min(tasks.length || 1, MAX_LIVE_TASKS) - 1)) + 'T17:00:00';
+    const taskXml = tasks.map((task, index) => {
+      const day = addDaysIso(startDate, index);
+      const s = `${day}T08:00:00`;
+      const f = `${day}T17:00:00`;
+      const outlineNumber = task.outlineNumber || String(index + 1);
+      return `    <Task>\n      <UID>${task.uid}</UID>\n      <ID>${task.id}</ID>\n      <Name>${xmlEsc(task.name)}</Name>\n      <Type>1</Type>\n      <IsNull>0</IsNull>\n      <CreateDate>${start}</CreateDate>\n      <WBS>${xmlEsc(outlineNumber)}</WBS>\n      <OutlineNumber>${xmlEsc(outlineNumber)}</OutlineNumber>\n      <OutlineLevel>${task.outlineLevel}</OutlineLevel>\n      <Start>${s}</Start>\n      <Finish>${f}</Finish>\n      <Duration>PT8H0M0S</Duration>\n      <DurationFormat>7</DurationFormat>\n      <Work>PT0H0M0S</Work>\n      <PercentComplete>0</PercentComplete>\n      <Summary>0</Summary>\n      <Milestone>0</Milestone>\n      <Priority>500</Priority>\n      <Active>1</Active>\n      <Manual>0</Manual>\n    </Task>`;
+    }).join('\n');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<Project xmlns="http://schemas.microsoft.com/project">\n  <Name>${xmlEsc(projectName)}</Name>\n  <Title>${xmlEsc(projectName)}</Title>\n  <ScheduleFromStart>1</ScheduleFromStart>\n  <StartDate>${start}</StartDate>\n  <FinishDate>${finish}</FinishDate>\n  <CalendarUID>1</CalendarUID>\n  <MinutesPerDay>480</MinutesPerDay>\n  <MinutesPerWeek>2400</MinutesPerWeek>\n  <DaysPerMonth>20</DaysPerMonth>\n  <DefaultStartTime>08:00:00</DefaultStartTime>\n  <DefaultFinishTime>17:00:00</DefaultFinishTime>\n  <Calendars>\n    <Calendar>\n      <UID>1</UID>\n      <Name>Standard</Name>\n      <IsBaseCalendar>1</IsBaseCalendar>\n      <WeekDays>\n        <WeekDay><DayType>1</DayType><DayWorking>0</DayWorking></WeekDay>\n        <WeekDay><DayType>2</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>3</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>4</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>5</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>6</DayType><DayWorking>1</DayWorking></WeekDay>\n        <WeekDay><DayType>7</DayType><DayWorking>0</DayWorking></WeekDay>\n      </WeekDays>\n    </Calendar>\n  </Calendars>\n  <Tasks>\n${taskXml}\n  </Tasks>\n</Project>`;
   }
 
   function normalizeArrayBuffer(value) {
@@ -183,7 +209,26 @@
     return String(value || '').replace(/\.mpp$/i, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
   }
 
-  function showEarlyProgress(file, percent, stage, detail) {
+  function clampInt(value, min, max) {
+    const n = Math.round(Number(value) || min);
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function todayIso() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function addDaysIso(iso, days) {
+    const date = new Date(`${iso}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + Number(days || 0));
+    return date.toISOString().slice(0, 10);
+  }
+
+  function xmlEsc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch]));
+  }
+
+  function showProgress(file, percent, stage, detail) {
     const panel = document.getElementById('mppPanel');
     const pct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
     mark('progress-panel', { percent: pct, stage, detail });
@@ -207,7 +252,7 @@
     installEarlyStyles();
   }
 
-  function showImportStopped(file, timeoutMs) {
+  function showStopped(file, timeoutMs) {
     const panel = document.getElementById('mppPanel');
     if (!panel) return;
     panel.hidden = false;
@@ -297,7 +342,7 @@
     };
   }
 
-  function summarizeDraft(result) {
+  function summarizeSafe(result) {
     return {
       mode: result?.liveImportMode || '',
       draftTasks: result?.draftProject?.tasks?.length || 0,
