@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '0.3.0-safe-live-mpp-import';
+  const VERSION = '0.4.0-safe-live-mpp-import-placeholders';
   const MAX_LIVE_TASKS = 250;
   const LIVE_TIMEOUT_MS = 12000;
   let installAttempts = 0;
@@ -53,14 +53,14 @@
       window.__lastSafeMppResult = result;
       const snapshot = buildSafeSnapshot(result, file);
       if (!snapshot.tasks.length) {
-        showPanel('warn', 'MPP opened, no safe tasks', `The file opened, but no safe task rows were recovered quickly. The current project was left alone. Try Project XML export for this file.`);
+        showPanel('warn', 'MPP opened, no safe tasks', 'The file opened, but no safe task rows were recovered quickly. The current project was left alone. Try Project XML export for this file.');
         return;
       }
       state = snapshot;
       if (typeof render === 'function') render();
       try { if (typeof save === 'function') save(); } catch {}
       const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-      showPanel('ok', 'MPP safe draft loaded', `Loaded ${snapshot.tasks.length} task${snapshot.tasks.length === 1 ? '' : 's'} from <code>${esc(file.name || 'project.mpp')}</code> in ${elapsed}s. Dates were bounded for safety. Review before relying on it.`);
+      showPanel('ok', 'MPP safe draft loaded', `Loaded ${snapshot.tasks.length} task${snapshot.tasks.length === 1 ? '' : 's'} from <code>${esc(file.name || 'project.mpp')}</code> in ${elapsed}s. Skipped ${snapshot.__safeLiveMppImportStats.skippedPlaceholders} placeholder/non-task row${snapshot.__safeLiveMppImportStats.skippedPlaceholders === 1 ? '' : 's'}. Dates were bounded for safety.`);
     } catch (error) {
       showPanel('warn', 'MPP quick-open stopped', `${esc(error?.message || error || 'The MPP did not quick-open.')} The current project was left alone.`);
     }
@@ -129,17 +129,19 @@
     const rawTasks = Array.isArray(result?.project?.tasks) && result.project.tasks.length
       ? result.project.tasks
       : Array.isArray(result?.draftProject?.tasks) ? result.draftProject.tasks : [];
-    const picked = rawTasks.slice(0, MAX_LIVE_TASKS);
-    const projectStart = todayIso();
+    const usableTasks = rawTasks.filter((task) => isUsableTaskName(cleanName(task?.name)));
+    const picked = usableTasks.slice(0, MAX_LIVE_TASKS);
+    const projectStart = nextWorkingIso(new Date());
     const minutesPerDay = 480;
     const tasks = picked.map((task, index) => {
       const duration = safeDuration(task);
-      const start = addDaysIso(projectStart, index);
-      const finish = addDaysIso(start, duration - 1);
+      const start = workingDateForIndex(projectStart, index);
+      const finish = addWorkingDaysIso(start, duration - 1);
+      const wbs = cleanWbs(task.wbs || task.outlineNumber || task.outline_number || '') || String(index + 1);
       return {
         uid: index + 1,
         id: index + 1,
-        name: cleanName(task.name) || `MPP task ${index + 1}`,
+        name: cleanName(task.name),
         start,
         finish,
         durationDays: duration,
@@ -147,12 +149,14 @@
         percent: safePercent(task.percent ?? task.percentComplete),
         predecessors: [],
         links: [],
-        outlineLevel: Math.max(1, Math.min(20, Number(task.outlineLevel) || 1)),
-        wbs: task.wbs || String(index + 1),
+        outlineLevel: Math.max(1, Math.min(20, Number(task.outlineLevel) || wbs.split('.').length || 1)),
+        outlineNumber: wbs,
+        wbs,
         recovered: true,
         unsafeMppDateClamped: true,
       };
     });
+    markSummaryRows(tasks);
     return {
       projectName: cleanName(result?.project?.name || result?.draftProject?.name || file?.name || 'Recovered MPP'),
       projectStart,
@@ -165,7 +169,33 @@
       tasks,
       resources: [],
       __safeLiveMppImport: true,
+      __safeLiveMppImportStats: { sourceRows: rawTasks.length, usableRows: usableTasks.length, skippedPlaceholders: rawTasks.length - usableTasks.length },
     };
+  }
+
+  function isUsableTaskName(name) {
+    const n = cleanName(name);
+    if (!n || n.length < 3) return false;
+    if (/^task\s+\d+$/i.test(n)) return false;
+    if (/^recovered\s+task\s+\d+$/i.test(n)) return false;
+    if (/^mpp\s+task\s+\d+$/i.test(n)) return false;
+    if (/^no\s+program\s+baseline\s+date$/i.test(n)) return false;
+    if (/^no\s+.*baseline.*date$/i.test(n)) return false;
+    return /[A-Za-z\p{L}]/u.test(n);
+  }
+
+  function markSummaryRows(tasks) {
+    tasks.forEach((task, index) => {
+      const current = Number(task.outlineLevel) || 1;
+      const next = Number(tasks[index + 1]?.outlineLevel) || 1;
+      task.isSummary = next > current;
+      task.summary = task.isSummary;
+    });
+  }
+
+  function cleanWbs(value) {
+    const text = String(value || '').replace(/\s+/g, '');
+    return /^\d+(?:\.\d+)*$/.test(text) ? text : '';
   }
 
   function beginBusy(file, timeoutMs) {
@@ -219,6 +249,10 @@
   function safeDuration(task) { const n = Number(task?.durationDays); return Number.isFinite(n) && n > 0 && n <= 15 ? Math.round(n) : 1; }
   function safePercent(value) { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0; }
   function todayIso() { return new Date().toISOString().slice(0, 10); }
+  function nextWorkingIso(date) { const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())); while (!isWorkingDay(d)) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); }
+  function workingDateForIndex(startIso, index) { const d = new Date(`${startIso}T00:00:00Z`); let left = Number(index || 0); while (left > 0) { d.setUTCDate(d.getUTCDate() + 1); if (isWorkingDay(d)) left -= 1; } return d.toISOString().slice(0, 10); }
+  function addWorkingDaysIso(startIso, days) { const d = new Date(`${startIso}T00:00:00Z`); let left = Number(days || 0); while (left > 0) { d.setUTCDate(d.getUTCDate() + 1); if (isWorkingDay(d)) left -= 1; } return d.toISOString().slice(0, 10); }
+  function isWorkingDay(d) { const day = d.getUTCDay(); return day >= 1 && day <= 5; }
   function addDaysIso(startIso, days) { const d = new Date(`${startIso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + Number(days || 0)); return d.toISOString().slice(0, 10); }
   function formatBytes(bytes) { const n = Number(bytes) || 0; if (n < 1024) return `${n} B`; if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`; return `${(n / 1024 / 1024).toFixed(1)} MB`; }
 
