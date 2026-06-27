@@ -5,15 +5,14 @@
   if (!R || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = '1.6.0-worker-draft-preview-debug';
+  const VERSION = '1.7.0-readbuffer-worker-bridge';
   const LIVE_MPP_TIMEOUT_MS = 12000;
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
 
   R.importPolishVersion = VERSION;
 
-  // This file loads before app.js. On the main page, it must never run the heavy
-  // native MPP parser on the UI thread. In the worker, it intentionally becomes
-  // a no-op so mpp-import-worker.js can call readBuffer/readBufferAsync directly.
+  // In the Worker this must be a no-op, otherwise the worker would recursively
+  // create another worker instead of parsing the buffer.
   if (inWorker) return;
 
   const debug = window.__mppDebug = window.__mppDebug || {
@@ -26,6 +25,13 @@
   };
   debug.version = VERSION;
 
+  const unsafeReadBuffer = R.readBuffer?.bind(R);
+  const unsafeReadBufferAsync = R.readBufferAsync?.bind(R);
+  const unsafeRead = R.read?.bind(R);
+  R.__unsafeMainThreadMppRead = unsafeRead;
+  R.__unsafeMainThreadMppReadBuffer = unsafeReadBuffer;
+  R.__unsafeMainThreadMppReadBufferAsync = unsafeReadBufferAsync;
+
   mark('early-reader-loaded', {
     version: VERSION,
     hasReader: Boolean(R),
@@ -35,36 +41,38 @@
   installDebugHud();
   installInputDebugTap();
 
-  const unsafeReadBuffer = R.readBuffer?.bind(R);
-  const unsafeReadBufferAsync = R.readBufferAsync?.bind(R);
-  const unsafeRead = R.read?.bind(R);
-  R.__unsafeMainThreadMppRead = unsafeRead;
-  R.__unsafeMainThreadMppReadBuffer = unsafeReadBuffer;
-  R.__unsafeMainThreadMppReadBufferAsync = unsafeReadBufferAsync;
-
-  R.readBuffer = function blockedMainThreadReadBuffer() {
-    mark('blocked-main-thread-readBuffer');
-    throw new Error('Blocked unsafe main-thread MPP parsing. Use the browser worker import path.');
+  R.readBuffer = function workerFirstReadBuffer(buffer, name = 'project.mpp') {
+    mark('NativeMppReader.readBuffer-called', bufferInfo(buffer, name));
+    throw new Error('Synchronous MPP readBuffer is disabled on the page. Use readBufferAsync so parsing can run in a worker.');
   };
 
-  R.readBufferAsync = async function blockedMainThreadReadBufferAsync() {
-    mark('blocked-main-thread-readBufferAsync');
-    throw new Error('Blocked unsafe main-thread MPP parsing. Use the browser worker import path.');
+  R.readBufferAsync = async function workerFirstReadBufferAsync(buffer, name = 'project.mpp') {
+    mark('NativeMppReader.readBufferAsync-called', bufferInfo(buffer, name));
+    const arrayBuffer = normalizeArrayBuffer(buffer);
+    return readBufferInWorker(arrayBuffer, name || 'project.mpp');
   };
 
-  R.read = async function workerFirstMppRead(file) {
+  R.read = async function workerFirstRead(file) {
     mark('NativeMppReader.read-called', fileInfo(file));
     if (!file) return null;
-    if (!window.Worker) {
-      const message = 'This browser does not support Web Workers, so native MPP import is disabled to avoid freezing the page. Import Project XML instead.';
-      mark('no-worker-support', { message });
-      throw new Error(message);
-    }
-    const timeoutMs = LIVE_MPP_TIMEOUT_MS;
-    showEarlyProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
     mark('arrayBuffer-start', fileInfo(file));
     const buffer = await file.arrayBuffer();
     mark('arrayBuffer-done', { bytes: buffer.byteLength });
+    return readBufferInWorker(buffer, file.name || 'project.mpp');
+  };
+
+  R.__workerImportVersion = VERSION;
+  mark('worker-first-installed', { workerImportVersion: R.__workerImportVersion });
+
+  function readBufferInWorker(buffer, name) {
+    if (!window.Worker) {
+      const message = 'This browser does not support Web Workers, so native MPP import is disabled to avoid freezing the page. Import Project XML instead.';
+      mark('no-worker-support', { message });
+      return Promise.reject(new Error(message));
+    }
+    const timeoutMs = LIVE_MPP_TIMEOUT_MS;
+    const file = { name: name || 'project.mpp', size: buffer?.byteLength || 0, type: '' };
+    showEarlyProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
     return new Promise((resolve, reject) => {
       mark('worker-create-start');
       const worker = new Worker('mpp-import-worker.js');
@@ -72,7 +80,7 @@
       let settled = false;
       let percent = 12;
       const startedAt = Date.now();
-      mark('worker-created', { id, timeoutMs });
+      mark('worker-created', { id, timeoutMs, name, bytes: buffer?.byteLength || 0 });
 
       const progressTimer = setInterval(() => {
         if (settled) return;
@@ -131,13 +139,11 @@
         reject(new Error(event.message || 'MPP worker crashed.'));
       };
 
-      mark('worker-postMessage', { id, bytes: buffer.byteLength });
-      worker.postMessage({ id, name: file.name || 'project.mpp', buffer }, [buffer]);
+      const transferable = normalizeArrayBuffer(buffer);
+      mark('worker-postMessage', { id, bytes: transferable.byteLength, name });
+      worker.postMessage({ id, name: name || 'project.mpp', buffer: transferable }, [transferable]);
     });
-  };
-
-  R.__workerImportVersion = VERSION;
-  mark('worker-first-installed', { workerImportVersion: R.__workerImportVersion });
+  }
 
   function forceDraftPreview(result, file) {
     const safe = result && typeof result === 'object' ? { ...result } : {};
@@ -165,6 +171,12 @@
     safe.warnings.unshift('Live MPP import returns a draft preview only. Project XML auto-load is disabled so bad native dates cannot hang the grid/Gantt.');
     debug.lastResult = summarizeDraft(safe);
     return safe;
+  }
+
+  function normalizeArrayBuffer(value) {
+    if (value instanceof ArrayBuffer) return value.slice(0);
+    if (ArrayBuffer.isView(value)) return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+    throw new Error('MPP reader expected an ArrayBuffer.');
   }
 
   function cleanName(value) {
@@ -219,11 +231,7 @@
   }
 
   function mark(type, data = {}) {
-    const item = {
-      t: `${Math.round(performance.now())}ms`,
-      type,
-      data,
-    };
+    const item = { t: `${Math.round(performance.now())}ms`, type, data };
     debug.events.push(item);
     debug.events = debug.events.slice(-80);
     if (type.includes('error') || type.includes('timeout')) debug.lastError = item;
@@ -252,10 +260,7 @@
   }
 
   function renderDebugHud() {
-    if (!document.body) {
-      setTimeout(renderDebugHud, 50);
-      return;
-    }
+    if (!document.body) { setTimeout(renderDebugHud, 50); return; }
     installDebugHudSafe();
     let hud = document.getElementById('mppDebugHud');
     if (!hud) {
@@ -280,10 +285,7 @@
     hud.innerHTML = `<header><strong>MPP Debug HUD · ${esc(VERSION)}</strong><span><button data-debug-action="copy" type="button">Copy</button> <button data-debug-action="hide" type="button">Hide</button></span></header><div class="mpp-debug-body">${events || '<div>No events yet.</div>'}</div>`;
   }
 
-  function installDebugHudSafe() {
-    if (document.getElementById('mppDebugHudStyles')) return;
-    installDebugHud();
-  }
+  function installDebugHudSafe() { if (!document.getElementById('mppDebugHudStyles')) installDebugHud(); }
 
   function summarizeWorkerResult(result) {
     return {
@@ -305,9 +307,8 @@
     };
   }
 
-  function fileInfo(file) {
-    return file ? { name: file.name || '', size: file.size || 0, type: file.type || '' } : null;
-  }
+  function fileInfo(file) { return file ? { name: file.name || '', size: file.size || 0, type: file.type || '' } : null; }
+  function bufferInfo(buffer, name) { return { name: name || 'project.mpp', bytes: buffer?.byteLength || buffer?.length || 0, isView: ArrayBuffer.isView(buffer), isArrayBuffer: buffer instanceof ArrayBuffer }; }
 
   function installEarlyStyles() {
     if (document.getElementById('mppEarlyWorkerProgressStyles')) return;
@@ -335,7 +336,5 @@
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function esc(value) {
-    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-  }
+  function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
 })();
