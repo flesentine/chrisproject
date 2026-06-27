@@ -5,7 +5,8 @@
   if (!R || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = '1.3.0-worker-first-safe-reader';
+  const VERSION = '1.4.0-worker-first-fast-budget';
+  const LIVE_MPP_TIMEOUT_MS = 12000;
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
 
   R.importPolishVersion = VERSION;
@@ -35,7 +36,7 @@
     if (!window.Worker) {
       throw new Error('This browser does not support Web Workers, so native MPP import is disabled to avoid freezing the page. Import Project XML instead.');
     }
-    const timeoutMs = Math.max(25000, Math.min(120000, 25000 + Math.round((Number(file.size) || 0) / 120000)));
+    const timeoutMs = LIVE_MPP_TIMEOUT_MS;
     showEarlyProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
     const buffer = await file.arrayBuffer();
     return new Promise((resolve, reject) => {
@@ -54,7 +55,7 @@
           : percent < 65 ? 'Scanning Project tables'
           : percent < 84 ? 'Checking imported schedule'
           : 'Finalizing import';
-        showEarlyProgress(file, percent, stage, elapsed > 8000 ? 'Still working locally. Nothing is uploaded.' : 'Working locally in your browser.');
+        showEarlyProgress(file, percent, stage, elapsed > 7000 ? 'Still working locally. If this MPP cannot quick-open, the app will stop instead of hanging.' : 'Working locally in your browser.');
       }, 300);
 
       const timer = setTimeout(() => {
@@ -62,7 +63,8 @@
         settled = true;
         clearInterval(progressTimer);
         worker.terminate();
-        reject(new Error(`MPP import exceeded ${Math.round(timeoutMs / 1000)} seconds and was stopped before Chrome froze.`));
+        showImportStopped(file, timeoutMs);
+        reject(new Error(`This MPP did not quick-open within ${Math.round(timeoutMs / 1000)} seconds. The import was stopped so the app stays usable. This file needs deeper browser-compatibility work or Project XML export.`));
       }, timeoutMs);
 
       worker.onmessage = (event) => {
@@ -113,10 +115,19 @@
           <div class="mpp-progress-topline"><strong>${esc(stage || 'Importing MPP')}</strong><span>${pct}%</span></div>
           <div class="mpp-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
           <p>${esc(detail || 'Working locally in this browser...')}</p>
-          <small><code>${esc(file?.name || 'project.mpp')}</code> · ${formatBytes(file?.size || 0)}</small>
+          <small><code>${esc(file?.name || 'project.mpp')}</code> · ${formatBytes(file?.size || 0)} · quick-open budget ${Math.round(LIVE_MPP_TIMEOUT_MS / 1000)}s</small>
         </div>
       </div>`;
     installEarlyStyles();
+  }
+
+  function showImportStopped(file, timeoutMs) {
+    const panel = document.getElementById('mppPanel');
+    if (!panel) return;
+    panel.hidden = false;
+    panel.classList.remove('mpp-ok', 'mpp-busy');
+    panel.classList.add('mpp-warn');
+    panel.innerHTML = `<strong>MPP quick-open stopped:</strong> <code>${esc(file?.name || 'project.mpp')}</code> did not open within ${Math.round(timeoutMs / 1000)} seconds. The app stopped the local parser so Chrome stays usable. Try importing a Project XML export for this file while we improve browser-only MPP compatibility.`;
   }
 
   function installEarlyStyles() {
