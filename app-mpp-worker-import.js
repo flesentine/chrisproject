@@ -1,33 +1,76 @@
 (() => {
   'use strict';
 
-  const VERSION = '0.2.0-worker-mpp-import-progress';
+  const VERSION = '0.3.0-safe-live-mpp-import';
+  const MAX_LIVE_TASKS = 250;
+  const LIVE_TIMEOUT_MS = 12000;
   let installAttempts = 0;
+  let captureInstalled = false;
 
   function install() {
     installStyles();
+    installSafeMppCapture();
     const R = window.NativeMppReader;
     if (!R || !R.read || R.__workerImportVersion === VERSION) return;
     const fallbackRead = R.__mainThreadReadFallback || R.read.bind(R);
     R.__mainThreadReadFallback = fallbackRead;
     R.read = async function workerBackedMppRead(file) {
       if (!file) return null;
-      if (!window.Worker) return fallbackRead(file);
-      const timeoutMs = Math.max(20000, Math.min(90000, 20000 + Math.round((Number(file.size) || 0) / 150000)));
-      beginBusy(file, timeoutMs);
+      if (!window.Worker) throw new Error('Web Workers are required for safe MPP import. Import Project XML instead.');
+      beginBusy(file, LIVE_TIMEOUT_MS);
       try {
-        const result = await readInWorker(file, timeoutMs);
-        showProgress(file, 96, 'Preparing schedule view', 'Import decoded. Building the editable schedule...');
-        return result;
+        return await readInWorker(file, LIVE_TIMEOUT_MS);
       } catch (error) {
-        error.message = `${error.message || 'MPP import failed.'} The page stayed responsive because parsing was isolated in a Web Worker.`;
-        showProgress(file, 100, 'Import stopped', error.message, true);
+        showProgress(file, 100, 'Import stopped', error.message || 'MPP import stopped.', true);
         throw error;
       } finally {
-        window.setTimeout(endBusy, 800);
+        window.setTimeout(endBusy, 500);
       }
     };
     R.__workerImportVersion = VERSION;
+  }
+
+  function installSafeMppCapture() {
+    if (captureInstalled) return;
+    captureInstalled = true;
+    document.addEventListener('change', (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.id !== 'importMppInput') return;
+      const file = input.files?.[0];
+      if (!file) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      input.value = '';
+      openMppAsSafeDraft(file);
+    }, true);
+  }
+
+  async function openMppAsSafeDraft(file) {
+    const startedAt = Date.now();
+    showProgress(file, 3, 'MPP safe quick-open', 'Reading the MPP in a worker. It will load only as a bounded draft so the app cannot hang.');
+    try {
+      const result = await readWithUiBudget(file, LIVE_TIMEOUT_MS);
+      window.__lastSafeMppResult = result;
+      const snapshot = buildSafeSnapshot(result, file);
+      if (!snapshot.tasks.length) {
+        showPanel('warn', 'MPP opened, no safe tasks', `The file opened, but no safe task rows were recovered quickly. The current project was left alone. Try Project XML export for this file.`);
+        return;
+      }
+      state = snapshot;
+      if (typeof render === 'function') render();
+      try { if (typeof save === 'function') save(); } catch {}
+      const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      showPanel('ok', 'MPP safe draft loaded', `Loaded ${snapshot.tasks.length} task${snapshot.tasks.length === 1 ? '' : 's'} from <code>${esc(file.name || 'project.mpp')}</code> in ${elapsed}s. Dates were bounded for safety. Review before relying on it.`);
+    } catch (error) {
+      showPanel('warn', 'MPP quick-open stopped', `${esc(error?.message || error || 'The MPP did not quick-open.')} The current project was left alone.`);
+    }
+  }
+
+  function readWithUiBudget(file, timeoutMs) {
+    return Promise.race([
+      window.NativeMppReader.read(file),
+      new Promise((_, reject) => window.setTimeout(() => reject(new Error(`This MPP did not quick-open within ${Math.round(timeoutMs / 1000)} seconds.`)), timeoutMs + 1000)),
+    ]);
   }
 
   async function readInWorker(file, timeoutMs) {
@@ -43,17 +86,9 @@
       const progressTimer = window.setInterval(() => {
         if (settled) return;
         const elapsed = Date.now() - startedAt;
-        const timeRatio = Math.min(1, elapsed / Math.max(1, timeoutMs));
-        const eased = 1 - Math.pow(1 - timeRatio, 2.2);
-        manualPercent = Math.max(manualPercent, Math.min(91, Math.round(18 + eased * 73)));
-        const stage = manualPercent < 35 ? 'Opening MPP container'
-          : manualPercent < 62 ? 'Scanning native task/resource tables'
-          : manualPercent < 82 ? 'Checking dates and assignments'
-          : 'Finalizing local import';
-        const detail = elapsed > 8000
-          ? 'Still working locally. Large MPP files can take a bit, but the page should stay responsive.'
-          : 'Working locally in your browser. Nothing is uploaded.';
-        showProgress(file, manualPercent, stage, detail);
+        const ratio = Math.min(1, elapsed / Math.max(1, timeoutMs));
+        manualPercent = Math.max(manualPercent, Math.min(91, Math.round(18 + (1 - Math.pow(1 - ratio, 2.2)) * 73)));
+        showProgress(file, manualPercent, manualPercent < 60 ? 'Scanning MPP quickly' : 'Preparing safe draft', elapsed > 7000 ? 'Still working locally. It will stop instead of hanging.' : 'Working locally in your browser. Nothing is uploaded.');
       }, 300);
       const timer = window.setTimeout(() => {
         if (settled) return;
@@ -74,12 +109,7 @@
         window.clearInterval(progressTimer);
         window.clearTimeout(timer);
         worker.terminate();
-        if (data.ok) {
-          showProgress(file, 94, 'Decoded MPP', 'Native parser finished. Loading result into the grid...');
-          resolve(data.result);
-        } else {
-          reject(new Error(data.error || 'MPP worker import failed.'));
-        }
+        data.ok ? resolve(data.result) : reject(new Error(data.error || 'MPP worker import failed.'));
       };
 
       worker.onerror = (event) => {
@@ -91,15 +121,57 @@
         reject(new Error(event.message || 'MPP worker crashed.'));
       };
 
-      showProgress(file, 22, 'Parsing MPP', 'Scanning OLE streams and native Project tables...');
       worker.postMessage({ id, name: file.name || 'project.mpp', buffer }, [buffer]);
     });
+  }
+
+  function buildSafeSnapshot(result, file) {
+    const rawTasks = Array.isArray(result?.project?.tasks) && result.project.tasks.length
+      ? result.project.tasks
+      : Array.isArray(result?.draftProject?.tasks) ? result.draftProject.tasks : [];
+    const picked = rawTasks.slice(0, MAX_LIVE_TASKS);
+    const projectStart = todayIso();
+    const minutesPerDay = 480;
+    const tasks = picked.map((task, index) => {
+      const duration = safeDuration(task);
+      const start = addDaysIso(projectStart, index);
+      const finish = addDaysIso(start, duration - 1);
+      return {
+        uid: index + 1,
+        id: index + 1,
+        name: cleanName(task.name) || `MPP task ${index + 1}`,
+        start,
+        finish,
+        durationDays: duration,
+        durationMinutes: duration * minutesPerDay,
+        percent: safePercent(task.percent ?? task.percentComplete),
+        predecessors: [],
+        links: [],
+        outlineLevel: Math.max(1, Math.min(20, Number(task.outlineLevel) || 1)),
+        wbs: task.wbs || String(index + 1),
+        recovered: true,
+        unsafeMppDateClamped: true,
+      };
+    });
+    return {
+      projectName: cleanName(result?.project?.name || result?.draftProject?.name || file?.name || 'Recovered MPP'),
+      projectStart,
+      nextUid: tasks.length + 1,
+      nextResourceUid: 1,
+      nextAssignmentUid: 1,
+      baselineSetAt: '',
+      activeView: 'schedule',
+      calendar: { name: 'Standard', workingDays: [1,2,3,4,5], exceptions: [], minutesPerDay, defaultStartTime: '08:00:00', defaultFinishTime: '17:00:00' },
+      tasks,
+      resources: [],
+      __safeLiveMppImport: true,
+    };
   }
 
   function beginBusy(file, timeoutMs) {
     document.body.classList.add('mpp-import-running');
     document.querySelectorAll('#importMppInput,#importXmlInput,.mpp-button input').forEach((input) => { input.disabled = true; });
-    showProgress(file, 4, 'Starting import', `Timeout safety: ${Math.round(timeoutMs / 1000)} seconds.`);
+    showProgress(file, 4, 'Starting import', `Quick-open budget: ${Math.round(timeoutMs / 1000)} seconds.`);
   }
 
   function endBusy() {
@@ -107,11 +179,21 @@
     document.querySelectorAll('#importMppInput,#importXmlInput,.mpp-button input').forEach((input) => { input.disabled = false; });
   }
 
+  function showPanel(tone, label, html) {
+    const panel = document.getElementById('mppPanel');
+    if (!panel) return;
+    panel.hidden = false;
+    panel.classList.remove('mpp-ok', 'mpp-warn', 'mpp-busy');
+    if (tone === 'ok') panel.classList.add('mpp-ok');
+    if (tone === 'warn') panel.classList.add('mpp-warn');
+    if (tone === 'busy') panel.classList.add('mpp-busy');
+    panel.innerHTML = `<strong>${esc(label)}:</strong> ${html}`;
+  }
+
   function showProgress(file, percent, stage, detail, failed = false) {
     const panel = document.getElementById('mppPanel');
     if (!panel) return;
     const pct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
-    const elapsedText = getElapsedText(file);
     panel.hidden = false;
     panel.classList.remove('mpp-ok', 'mpp-warn');
     panel.classList.add('mpp-busy', 'mpp-progress-panel');
@@ -123,23 +205,22 @@
           <div class="mpp-progress-topline"><strong>${esc(stage || 'Importing MPP')}</strong><span>${pct}%</span></div>
           <div class="mpp-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
           <p>${esc(detail || 'Working locally in this browser...')}</p>
-          <small><code>${esc(file?.name || 'project.mpp')}</code> · ${formatBytes(file?.size || 0)} · ${elapsedText}</small>
+          <small><code>${esc(file?.name || 'project.mpp')}</code> · ${formatBytes(file?.size || 0)} · ${getElapsedText(file)}</small>
         </div>
       </div>`;
   }
 
   function getElapsedText(file) {
-    if (!file.__mppProgressStartedAt) file.__mppProgressStartedAt = Date.now();
-    const seconds = Math.max(0, Math.round((Date.now() - file.__mppProgressStartedAt) / 1000));
+    const seconds = Math.max(0, Math.round((Date.now() - (file.__mppProgressStartedAt || Date.now())) / 1000));
     return seconds <= 0 ? 'just started' : `${seconds}s elapsed`;
   }
 
-  function formatBytes(bytes) {
-    const n = Number(bytes) || 0;
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  }
+  function cleanName(value) { return String(value || '').replace(/\.mpp$/i, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180); }
+  function safeDuration(task) { const n = Number(task?.durationDays); return Number.isFinite(n) && n > 0 && n <= 15 ? Math.round(n) : 1; }
+  function safePercent(value) { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0; }
+  function todayIso() { return new Date().toISOString().slice(0, 10); }
+  function addDaysIso(startIso, days) { const d = new Date(`${startIso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + Number(days || 0)); return d.toISOString().slice(0, 10); }
+  function formatBytes(bytes) { const n = Number(bytes) || 0; if (n < 1024) return `${n} B`; if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`; return `${(n / 1024 / 1024).toFixed(1)} MB`; }
 
   function installStyles() {
     if (document.getElementById('mppWorkerProgressStyles')) return;
@@ -163,9 +244,7 @@
     document.head.appendChild(style);
   }
 
-  function esc(value) {
-    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-  }
+  function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
 
   function retryInstall() {
     install();
