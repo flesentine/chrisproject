@@ -5,7 +5,7 @@
   if (!R || window.__nativeMppImportPolishLoaded) return;
   window.__nativeMppImportPolishLoaded = true;
 
-  const VERSION = '1.5.0-worker-draft-preview';
+  const VERSION = '1.6.0-worker-draft-preview-debug';
   const LIVE_MPP_TIMEOUT_MS = 12000;
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
 
@@ -16,6 +16,25 @@
   // a no-op so mpp-import-worker.js can call readBuffer/readBufferAsync directly.
   if (inWorker) return;
 
+  const debug = window.__mppDebug = window.__mppDebug || {
+    version: VERSION,
+    startedAt: Date.now(),
+    events: [],
+    lastFile: null,
+    lastResult: null,
+    lastError: null,
+  };
+  debug.version = VERSION;
+
+  mark('early-reader-loaded', {
+    version: VERSION,
+    hasReader: Boolean(R),
+    hasWorker: Boolean(window.Worker),
+    href: location.href,
+  });
+  installDebugHud();
+  installInputDebugTap();
+
   const unsafeReadBuffer = R.readBuffer?.bind(R);
   const unsafeReadBufferAsync = R.readBufferAsync?.bind(R);
   const unsafeRead = R.read?.bind(R);
@@ -24,27 +43,36 @@
   R.__unsafeMainThreadMppReadBufferAsync = unsafeReadBufferAsync;
 
   R.readBuffer = function blockedMainThreadReadBuffer() {
+    mark('blocked-main-thread-readBuffer');
     throw new Error('Blocked unsafe main-thread MPP parsing. Use the browser worker import path.');
   };
 
   R.readBufferAsync = async function blockedMainThreadReadBufferAsync() {
+    mark('blocked-main-thread-readBufferAsync');
     throw new Error('Blocked unsafe main-thread MPP parsing. Use the browser worker import path.');
   };
 
   R.read = async function workerFirstMppRead(file) {
+    mark('NativeMppReader.read-called', fileInfo(file));
     if (!file) return null;
     if (!window.Worker) {
-      throw new Error('This browser does not support Web Workers, so native MPP import is disabled to avoid freezing the page. Import Project XML instead.');
+      const message = 'This browser does not support Web Workers, so native MPP import is disabled to avoid freezing the page. Import Project XML instead.';
+      mark('no-worker-support', { message });
+      throw new Error(message);
     }
     const timeoutMs = LIVE_MPP_TIMEOUT_MS;
     showEarlyProgress(file, 5, 'Starting MPP worker', 'Opening MPP safely off the main browser thread...');
+    mark('arrayBuffer-start', fileInfo(file));
     const buffer = await file.arrayBuffer();
+    mark('arrayBuffer-done', { bytes: buffer.byteLength });
     return new Promise((resolve, reject) => {
+      mark('worker-create-start');
       const worker = new Worker('mpp-import-worker.js');
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       let settled = false;
       let percent = 12;
       const startedAt = Date.now();
+      mark('worker-created', { id, timeoutMs });
 
       const progressTimer = setInterval(() => {
         if (settled) return;
@@ -56,6 +84,7 @@
           : percent < 84 ? 'Building safe preview'
           : 'Finalizing preview';
         showEarlyProgress(file, percent, stage, elapsed > 7000 ? 'Still working locally. If this MPP cannot quick-open, the app will stop instead of hanging.' : 'Working locally in your browser.');
+        if (elapsed > 1000 && elapsed % 3000 < 350) mark('worker-still-waiting', { elapsedMs: elapsed, percent });
       }, 300);
 
       const timer = setTimeout(() => {
@@ -63,6 +92,7 @@
         settled = true;
         clearInterval(progressTimer);
         worker.terminate();
+        mark('worker-timeout', { timeoutMs });
         showImportStopped(file, timeoutMs);
         reject(new Error(`This MPP did not quick-open within ${Math.round(timeoutMs / 1000)} seconds. The import was stopped so the app stays usable. This file needs deeper browser-compatibility work or Project XML export.`));
       }, timeoutMs);
@@ -71,6 +101,7 @@
         const data = event.data || {};
         if (data.id !== id || settled) return;
         if (data.progress) {
+          mark('worker-progress', data.progress);
           showEarlyProgress(file, data.progress.percent || percent, data.progress.stage || 'Importing MPP', data.progress.detail || 'Working locally...');
           return;
         }
@@ -79,10 +110,13 @@
         clearTimeout(timer);
         worker.terminate();
         if (data.ok) {
+          mark('worker-ok', summarizeWorkerResult(data.result));
           const safe = forceDraftPreview(data.result, file);
+          mark('draft-preview-built', summarizeDraft(safe));
           showEarlyProgress(file, 96, 'Safe preview ready', 'Recovered task names are ready. Choose whether to load the bounded draft.');
           resolve(safe);
         } else {
+          mark('worker-returned-error', { error: data.error || 'MPP worker import failed.' });
           reject(new Error(data.error || 'MPP worker import failed.'));
         }
       };
@@ -93,14 +127,17 @@
         clearInterval(progressTimer);
         clearTimeout(timer);
         worker.terminate();
+        mark('worker-onerror', { message: event.message, filename: event.filename, lineno: event.lineno, colno: event.colno });
         reject(new Error(event.message || 'MPP worker crashed.'));
       };
 
+      mark('worker-postMessage', { id, bytes: buffer.byteLength });
       worker.postMessage({ id, name: file.name || 'project.mpp', buffer }, [buffer]);
     });
   };
 
   R.__workerImportVersion = VERSION;
+  mark('worker-first-installed', { workerImportVersion: R.__workerImportVersion });
 
   function forceDraftPreview(result, file) {
     const safe = result && typeof result === 'object' ? { ...result } : {};
@@ -126,6 +163,7 @@
     };
     safe.warnings = Array.isArray(safe.warnings) ? safe.warnings : [];
     safe.warnings.unshift('Live MPP import returns a draft preview only. Project XML auto-load is disabled so bad native dates cannot hang the grid/Gantt.');
+    debug.lastResult = summarizeDraft(safe);
     return safe;
   }
 
@@ -135,8 +173,12 @@
 
   function showEarlyProgress(file, percent, stage, detail) {
     const panel = document.getElementById('mppPanel');
-    if (!panel) return;
     const pct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    mark('progress-panel', { percent: pct, stage, detail });
+    if (!panel) {
+      mark('mppPanel-missing', { percent: pct, stage });
+      return;
+    }
     panel.hidden = false;
     panel.classList.remove('mpp-ok', 'mpp-warn');
     panel.classList.add('mpp-busy');
@@ -160,6 +202,111 @@
     panel.classList.remove('mpp-ok', 'mpp-busy');
     panel.classList.add('mpp-warn');
     panel.innerHTML = `<strong>MPP quick-open stopped:</strong> <code>${esc(file?.name || 'project.mpp')}</code> did not open within ${Math.round(timeoutMs / 1000)} seconds. The app stopped the local parser so Chrome stays usable. Try importing a Project XML export for this file while we improve browser-only MPP compatibility.`;
+  }
+
+  function installInputDebugTap() {
+    document.addEventListener('change', (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.id !== 'importMppInput') return;
+      const file = input.files?.[0];
+      debug.lastFile = fileInfo(file);
+      mark('file-input-change-seen-capture', {
+        file: fileInfo(file),
+        readerInstalled: Boolean(window.NativeMppReader?.__workerImportVersion),
+        defaultPreventedBeforeDebug: event.defaultPrevented,
+      });
+    }, true);
+  }
+
+  function mark(type, data = {}) {
+    const item = {
+      t: `${Math.round(performance.now())}ms`,
+      type,
+      data,
+    };
+    debug.events.push(item);
+    debug.events = debug.events.slice(-80);
+    if (type.includes('error') || type.includes('timeout')) debug.lastError = item;
+    try { console.log('[MPP]', type, data); } catch {}
+    renderDebugHud();
+  }
+
+  function installDebugHud() {
+    if (document.getElementById('mppDebugHudStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'mppDebugHudStyles';
+    style.textContent = `
+      #mppDebugHud { position: fixed; right: 12px; bottom: 12px; z-index: 2147483647; width: min(460px, calc(100vw - 24px)); max-height: 46vh; overflow: auto; border: 1px solid rgba(15,23,42,.22); border-radius: 14px; background: rgba(15,23,42,.94); color: #e5e7eb; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; box-shadow: 0 24px 80px rgba(0,0,0,.35); }
+      #mppDebugHud[hidden] { display: none !important; }
+      #mppDebugHud header { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:8px 10px; border-bottom:1px solid rgba(148,163,184,.28); position: sticky; top:0; background: rgba(15,23,42,.98); }
+      #mppDebugHud strong { color:#93c5fd; }
+      #mppDebugHud button { border:1px solid rgba(147,197,253,.32); background:#1e3a8a; color:#dbeafe; border-radius:8px; padding:3px 7px; font: inherit; cursor:pointer; }
+      #mppDebugHud .mpp-debug-body { padding:8px 10px 10px; display:grid; gap:6px; }
+      #mppDebugHud .mpp-debug-event { border-left:3px solid #38bdf8; padding-left:7px; white-space:pre-wrap; word-break:break-word; }
+      #mppDebugHud .mpp-debug-event.warn { border-left-color:#f59e0b; }
+      #mppDebugHud .mpp-debug-event.bad { border-left-color:#ef4444; }
+      #mppDebugHud code { color:#bbf7d0; }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+    renderDebugHud();
+  }
+
+  function renderDebugHud() {
+    if (!document.body) {
+      setTimeout(renderDebugHud, 50);
+      return;
+    }
+    installDebugHudSafe();
+    let hud = document.getElementById('mppDebugHud');
+    if (!hud) {
+      hud = document.createElement('section');
+      hud.id = 'mppDebugHud';
+      hud.setAttribute('aria-live', 'polite');
+      document.body.appendChild(hud);
+      hud.addEventListener('click', async (event) => {
+        const action = event.target?.dataset?.debugAction;
+        if (action === 'hide') hud.hidden = true;
+        if (action === 'copy') {
+          const text = JSON.stringify(debug, null, 2);
+          try { await navigator.clipboard.writeText(text); mark('debug-copied'); } catch { prompt('Copy MPP debug JSON:', text); }
+        }
+      });
+    }
+    const events = debug.events.slice(-12).map((event) => {
+      const bad = /error|timeout|missing|blocked|stopped/i.test(event.type);
+      const warn = /waiting|progress|change|called/i.test(event.type);
+      return `<div class="mpp-debug-event ${bad ? 'bad' : warn ? 'warn' : ''}"><code>${esc(event.t)}</code> <strong>${esc(event.type)}</strong> ${esc(JSON.stringify(event.data || {}))}</div>`;
+    }).join('');
+    hud.innerHTML = `<header><strong>MPP Debug HUD · ${esc(VERSION)}</strong><span><button data-debug-action="copy" type="button">Copy</button> <button data-debug-action="hide" type="button">Hide</button></span></header><div class="mpp-debug-body">${events || '<div>No events yet.</div>'}</div>`;
+  }
+
+  function installDebugHudSafe() {
+    if (document.getElementById('mppDebugHudStyles')) return;
+    installDebugHud();
+  }
+
+  function summarizeWorkerResult(result) {
+    return {
+      hasProjectXml: Boolean(result?.projectXml),
+      projectTasks: result?.project?.tasks?.length || 0,
+      draftTasks: result?.draftProject?.tasks?.length || 0,
+      warnings: result?.warnings?.length || 0,
+      liveImportMode: result?.liveImportMode || '',
+    };
+  }
+
+  function summarizeDraft(result) {
+    return {
+      mode: result?.liveImportMode || '',
+      draftTasks: result?.draftProject?.tasks?.length || 0,
+      hasProjectXml: Boolean(result?.projectXml),
+      hasProject: Boolean(result?.project),
+      firstTask: result?.draftProject?.tasks?.[0]?.name || '',
+    };
+  }
+
+  function fileInfo(file) {
+    return file ? { name: file.name || '', size: file.size || 0, type: file.type || '' } : null;
   }
 
   function installEarlyStyles() {
