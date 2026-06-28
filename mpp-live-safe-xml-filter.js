@@ -5,7 +5,7 @@
   if (!R || window.__liveMppSafeXmlFilterLoaded) return;
   window.__liveMppSafeXmlFilterLoaded = true;
 
-  const VERSION = '0.4.0-live-mpp-safe-xml-filter-placeholders';
+  const VERSION = '0.5.0-live-mpp-safe-xml-filter-normalized-outline';
   const MAX_TASKS = 250;
 
   const previousReadBufferAsync = R.readBufferAsync?.bind(R);
@@ -58,6 +58,10 @@
       if (kept.length >= MAX_TASKS) break;
     }
 
+    const beforeOutlineLevels = histogram(kept.map((task) => task.outlineLevel || 1));
+    normalizeFlatOutline(kept);
+    const afterOutlineLevels = histogram(kept.map((task) => task.outlineLevel || 1));
+
     const projectName = cleanName(result.draftProject?.name || result.fileName || fileName || 'Recovered MPP');
     const startDate = nextWorkingIso(new Date());
     result.projectXml = buildSafeProjectXml(projectName, startDate, kept);
@@ -77,6 +81,8 @@
       liveMppDroppedRows: droppedNames.length,
       liveMppLoadedRows: kept.length,
       liveMppDroppedNames: droppedNames.slice(0, 40),
+      liveMppOutlineBefore: beforeOutlineLevels,
+      liveMppOutlineAfter: afterOutlineLevels,
     };
 
     mark('live-safe-xml-filter-applied', {
@@ -87,11 +93,22 @@
       droppedNames: droppedNames.slice(0, 20),
       firstTask: kept[0]?.name || '',
       lastTask: kept[kept.length - 1]?.name || '',
-      outlineLevels: histogram(kept.map((task) => task.outlineLevel || 1)),
+      outlineLevelsBefore: beforeOutlineLevels,
+      outlineLevels: afterOutlineLevels,
+      generatedXmlTaskCount: (result.projectXml.match(/<Task>/g) || []).length,
       startDate,
     });
 
     return result;
+  }
+
+  function normalizeFlatOutline(tasks) {
+    if (!tasks.length) return;
+    const levels = tasks.map((task) => clampInt(task.outlineLevel || 1, 1, 20));
+    const min = Math.min(...levels);
+    const max = Math.max(...levels);
+    if (min > 1) tasks.forEach((task) => { task.outlineLevel = clampInt((task.outlineLevel || 1) - min + 1, 1, 20); });
+    if (min === max && min > 1) tasks.forEach((task) => { task.outlineLevel = 1; });
   }
 
   function isRealTaskName(name) {
@@ -124,7 +141,7 @@
       const day = workingDateForIndex(startDate, index);
       const uid = index + 1;
       const outlineNumber = cleanName(task.outlineNumber).replace(/\s+/g, '') || String(uid);
-      const outlineLevel = inferOutlineLevel(task, outlineNumber);
+      const outlineLevel = clampInt(task.outlineLevel || inferOutlineLevel(task, outlineNumber), 1, 20);
       return `    <Task>\n      <UID>${uid}</UID>\n      <ID>${uid}</ID>\n      <Name>${xmlEsc(task.name)}</Name>\n      <Type>1</Type>\n      <IsNull>0</IsNull>\n      <CreateDate>${projectStart}</CreateDate>\n      <WBS>${xmlEsc(outlineNumber)}</WBS>\n      <OutlineNumber>${xmlEsc(outlineNumber)}</OutlineNumber>\n      <OutlineLevel>${outlineLevel}</OutlineLevel>\n      <Start>${day}T08:00:00</Start>\n      <Finish>${day}T17:00:00</Finish>\n      <Duration>PT8H0M0S</Duration>\n      <DurationFormat>7</DurationFormat>\n      <Work>PT0H0M0S</Work>\n      <PercentComplete>0</PercentComplete>\n      <Summary>0</Summary>\n      <Milestone>0</Milestone>\n      <Priority>500</Priority>\n      <Active>1</Active>\n      <Manual>0</Manual>\n    </Task>`;
     }).join('\n');
 
