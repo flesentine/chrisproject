@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.58.0';
-  const CURRENT_NAME = 'Surgical MPP cleanup';
+  const CURRENT_VERSION = 'v0.59.0';
+  const CURRENT_NAME = 'MPP count diagnostics';
   const CURRENT_BUILD = '2026-06-27';
   const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
   const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP XML path + surgical cleanup`;
+  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP XML path + count diagnostics`;
 
   if (window.__currentVersionLabelLoaded) return;
   window.__currentVersionLabelLoaded = true;
@@ -17,7 +17,7 @@
     const ribbon = document.getElementById('ribbonVersionText');
     if (badge) {
       badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: single MPP pipeline, surgical junk-row cleanup, Project-style Entry/Gantt split`;
+      badge.title = `Build ${CURRENT_BUILD}: MPP count diagnostics, surgical cleanup, Entry/Gantt split`;
     }
     if (footer) footer.textContent = FOOTER_TEXT;
     if (ribbon) ribbon.textContent = RIBBON_TEXT;
@@ -59,7 +59,7 @@
         scroll.scrollTop = 0;
         scroll.scrollLeft = 0;
       }
-      mark('mpp-project-style-entry-split', { fieldPaneWidth: wanted, entryWidth, taskCount: window.state?.tasks?.length || state?.tasks?.length || 0 });
+      mark('mpp-project-style-entry-split', { fieldPaneWidth: wanted, entryWidth, taskCount: getStateTasks().length });
     } catch {}
   }
 
@@ -77,6 +77,29 @@
         if (rowTop > 4) scroll.scrollTop = Math.max(0, rowTop - 2);
       }
       mark('planner-scroll-reset-after-mpp', { scrollTop: scroll?.scrollTop || 0, scrollLeft: scroll?.scrollLeft || 0, hasFirstRow: Boolean(firstRow) });
+    } catch {}
+  }
+
+  function getStateTasks() {
+    try { return Array.isArray(state?.tasks) ? state.tasks : []; } catch { return []; }
+  }
+
+  function postRenderMppCountDiagnostic() {
+    try {
+      if (!hasRecentMppImport()) return;
+      const tasks = getStateTasks();
+      const names = tasks.map((task) => String(task?.name || '').trim());
+      const junkRows = names.filter((name) => /^no\s+program\s+baseline\s+date$/i.test(name) || /^task\s+\d+$/i.test(name) || /^recovered\s+task\s+\d+$/i.test(name));
+      const visibleRows = document.querySelectorAll('.planner-row[data-row-index]').length;
+      const maxVisibleIndex = Math.max(-1, ...[...document.querySelectorAll('.planner-row[data-row-index]')].map((row) => Number(row.dataset.rowIndex)).filter(Number.isFinite));
+      mark('mpp-post-render-state-count', {
+        stateTaskCount: tasks.length,
+        visiblePlannerRows: visibleRows,
+        maxVisibleRowIndex: maxVisibleIndex,
+        firstNames: names.slice(0, 10),
+        lastNames: names.slice(-25),
+        junkRowsStillPresent: junkRows.slice(0, 25),
+      });
     } catch {}
   }
 
@@ -110,6 +133,7 @@
   function afterRenderMppLayout() {
     projectStyleEntrySplit();
     resetPlannerScrollAfterMpp();
+    postRenderMppCountDiagnostic();
   }
 
   function patchRender() {
@@ -123,6 +147,7 @@
       setTimeout(afterRenderMppLayout, 0);
       setTimeout(afterRenderMppLayout, 120);
       setTimeout(afterRenderMppLayout, 450);
+      setTimeout(afterRenderMppLayout, 1200);
       return result;
     };
     window.render = render;
