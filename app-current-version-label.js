@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.56.0';
-  const CURRENT_NAME = 'MPP scroll reset';
+  const CURRENT_VERSION = 'v0.57.0';
+  const CURRENT_NAME = 'One MPP import pipeline';
   const CURRENT_BUILD = '2026-06-27';
   const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
   const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP import + scroll reset`;
+  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP XML path + Entry/Gantt split`;
 
   if (window.__currentVersionLabelLoaded) return;
   window.__currentVersionLabelLoaded = true;
@@ -17,7 +17,7 @@
     const ribbon = document.getElementById('ribbonVersionText');
     if (badge) {
       badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: worker import, safe XML path, normalized outline, and scroll reset`;
+      badge.title = `Build ${CURRENT_BUILD}: single MPP pipeline, no post-import row deletion, Project-style Entry/Gantt split`;
     }
     if (footer) footer.textContent = FOOTER_TEXT;
     if (ribbon) ribbon.textContent = RIBBON_TEXT;
@@ -39,6 +39,30 @@
     return Boolean(dbg?.events?.some((event) => event?.type === 'live-safe-xml-filter-applied' || event?.type === 'mpp-worker-import-pass-through'));
   }
 
+  function projectStyleEntrySplit() {
+    try {
+      if (!hasRecentMppImport()) return;
+      if (typeof uiPrefs === 'undefined' || !Array.isArray(window.FIELD_COLUMNS || FIELD_COLUMNS)) return;
+      const columns = window.FIELD_COLUMNS || FIELD_COLUMNS;
+      const map = new Map(columns.map((column) => [column.key, column]));
+      const widths = uiPrefs.fieldColumns || {};
+      const widthOf = (key) => Number(widths[key]) || Number(map.get(key)?.defaultWidth) || 0;
+      const entryKeys = ['id', 'indicators', 'wbs', 'name', 'duration', 'start', 'finish'];
+      const entryWidth = entryKeys.reduce((sum, key) => sum + widthOf(key), 0);
+      const viewport = Math.max(860, Math.round(window.innerWidth * 0.56));
+      const wanted = Math.max(760, Math.min(entryWidth, viewport));
+      uiPrefs.fieldPaneWidth = wanted;
+      if (typeof saveUiPrefs === 'function') saveUiPrefs();
+      if (typeof applyUiPrefs === 'function') applyUiPrefs();
+      const scroll = document.querySelector('.planner-scroll');
+      if (scroll) {
+        scroll.scrollTop = 0;
+        scroll.scrollLeft = 0;
+      }
+      mark('mpp-project-style-entry-split', { fieldPaneWidth: wanted, entryWidth, taskCount: window.state?.tasks?.length || state?.tasks?.length || 0 });
+    } catch {}
+  }
+
   function resetPlannerScrollAfterMpp() {
     try {
       if (!hasRecentMppImport()) return;
@@ -52,14 +76,19 @@
         const rowTop = firstRow.offsetTop;
         if (rowTop > 4) scroll.scrollTop = Math.max(0, rowTop - 2);
       }
-      if (window.__mppDebug?.events) {
-        window.__mppDebug.events.push({
-          t: `${Math.round(performance.now())}ms`,
-          type: 'planner-scroll-reset-after-mpp',
-          data: { scrollTop: scroll?.scrollTop || 0, hasFirstRow: Boolean(firstRow) },
-        });
-        window.__mppDebug.events = window.__mppDebug.events.slice(-80);
+      mark('planner-scroll-reset-after-mpp', { scrollTop: scroll?.scrollTop || 0, scrollLeft: scroll?.scrollLeft || 0, hasFirstRow: Boolean(firstRow) });
+    } catch {}
+  }
+
+  function mark(type, data) {
+    try {
+      const dbg = window.__mppDebug;
+      if (dbg?.events) {
+        dbg.events.push({ t: `${Math.round(performance.now())}ms`, type, data: data || {} });
+        dbg.events = dbg.events.slice(-80);
+        dbg.lastResult = data || dbg.lastResult;
       }
+      console.log('[MPP]', type, data || {});
     } catch {}
   }
 
@@ -75,7 +104,12 @@
 
   function loadLiveMppCleanup() {
     loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
-    loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'safeLiveMppStateCleanup');
+    window.__safeLiveMppStateCleanupScriptLoaded = true;
+  }
+
+  function afterRenderMppLayout() {
+    projectStyleEntrySplit();
+    resetPlannerScrollAfterMpp();
   }
 
   function patchRender() {
@@ -86,9 +120,9 @@
       const result = base.apply(this, args);
       setTimeout(applyVersionLabel, 0);
       setTimeout(fixMppPicker, 0);
-      setTimeout(resetPlannerScrollAfterMpp, 0);
-      setTimeout(resetPlannerScrollAfterMpp, 120);
-      setTimeout(resetPlannerScrollAfterMpp, 450);
+      setTimeout(afterRenderMppLayout, 0);
+      setTimeout(afterRenderMppLayout, 120);
+      setTimeout(afterRenderMppLayout, 450);
       return result;
     };
     window.render = render;
@@ -102,7 +136,7 @@
     setTimeout(loadLiveMppCleanup, 250);
     setTimeout(loadLiveMppCleanup, 1000);
     [100, 250, 750, 1500, 3000].forEach((delay) => setTimeout(fixMppPicker, delay));
-    [500, 1200, 2500, 4500].forEach((delay) => setTimeout(resetPlannerScrollAfterMpp, delay));
+    [500, 1200, 2500, 4500].forEach((delay) => setTimeout(afterRenderMppLayout, delay));
     setTimeout(applyVersionLabel, 250);
     setTimeout(applyVersionLabel, 1000);
     setTimeout(applyVersionLabel, 2500);
