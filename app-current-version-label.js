@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.57.0';
-  const CURRENT_NAME = 'One MPP import pipeline';
+  const CURRENT_VERSION = 'v0.58.0';
+  const CURRENT_NAME = 'Surgical MPP cleanup';
   const CURRENT_BUILD = '2026-06-27';
   const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
   const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP XML path + Entry/Gantt split`;
+  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP XML path + surgical cleanup`;
 
   if (window.__currentVersionLabelLoaded) return;
   window.__currentVersionLabelLoaded = true;
@@ -17,7 +17,7 @@
     const ribbon = document.getElementById('ribbonVersionText');
     if (badge) {
       badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: single MPP pipeline, no post-import row deletion, Project-style Entry/Gantt split`;
+      badge.title = `Build ${CURRENT_BUILD}: single MPP pipeline, surgical junk-row cleanup, Project-style Entry/Gantt split`;
     }
     if (footer) footer.textContent = FOOTER_TEXT;
     if (ribbon) ribbon.textContent = RIBBON_TEXT;
@@ -104,7 +104,7 @@
 
   function loadLiveMppCleanup() {
     loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
-    window.__safeLiveMppStateCleanupScriptLoaded = true;
+    loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'surgicalMppCleanup');
   }
 
   function afterRenderMppLayout() {
