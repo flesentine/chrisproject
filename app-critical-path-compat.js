@@ -35,6 +35,7 @@
     loadScriptOnce('ms-project-layout-sweep.js?v0.43.2', 'msProjectLayoutSweepDirectBoot');
     loadScriptOnce('ms-project-pane-controls.js?v0.44.2', 'msProjectPaneControlsDirectBoot');
     loadScriptOnce('ms-project-ribbon-menu-fix.js?v0.45.0', 'msProjectRibbonMenuFixDirectBoot');
+    loadScriptOnce('ms-project-zoom-fit.js?v0.46.0', 'msProjectZoomFitDirectBoot');
   }
 
   function loadScriptOnce(src, flag) {
