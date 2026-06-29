@@ -39,6 +39,7 @@
     loadScriptOnce('mpp-import-unstick-guard.js?v0.47.0', 'mppImportUnstickGuardDirectBoot');
     loadScriptOnce('mpp-import-performance-guard.js?v0.48.1', 'mppImportPerformanceGuardDirectBoot');
     loadScriptOnce('ms-project-status-strip.js?v0.49.0', 'msProjectStatusStripDirectBoot');
+    loadScriptOnce('app-mpp-bridge-client.js?v0.50.0', 'mppBridgeClientDirectBoot');
   }
 
   function loadScriptOnce(src, flag) {
