@@ -31,8 +31,9 @@
 
   function loadMppWorkerImportNow() {
     loadScriptOnce('app-mpp-worker-import.js', 'mppWorkerImportDirectBoot');
-    loadScriptOnce('app-current-version-label.js', 'currentVersionDirectBoot');
+    loadScriptOnce('app-current-version-label.js?v0.64.0', 'currentVersionDirectBoot');
     loadScriptOnce('ms-project-layout-sweep.js?v0.43.2', 'msProjectLayoutSweepDirectBoot');
+    loadScriptOnce('ms-project-pane-controls.js?v0.44.0', 'msProjectPaneControlsDirectBoot');
   }
 
   function loadScriptOnce(src, flag) {
