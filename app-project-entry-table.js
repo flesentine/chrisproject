@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '0.2.0-project-table-switcher';
+  const VERSION = '0.2.1-project-table-switcher';
   const ENTRY_KEYS = ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
   const BASELINE_KEYS = ['baselineStart', 'baselineFinish', 'baselineDuration', 'startVariance', 'finishVariance', 'durationVariance'];
   const TABLE_LABELS = { entry: 'Entry', tracking: 'Tracking', baseline: 'Baseline', all: 'All Fields' };
@@ -94,7 +94,7 @@
   }
 
   function applyEntryTableDefaults() {
-    if (!uiPrefs.fieldTable || uiPrefs.fieldTable === 'all' || isOldFullWidthPrefs()) {
+    if (!uiPrefs.fieldTable || isOldFullWidthPrefs()) {
       uiPrefs.fieldTable = 'entry';
       uiPrefs.visibleFieldKeys = [...ENTRY_KEYS];
     }
@@ -108,10 +108,12 @@
   }
 
   function isOldFullWidthPrefs() {
+    const table = String(uiPrefs.fieldTable || '').toLowerCase();
+    if (table === 'all') return false;
     const keys = Array.isArray(uiPrefs.visibleFieldKeys) ? uiPrefs.visibleFieldKeys : [];
     if (!keys.length) return true;
     const baselineVisible = keys.some((key) => BASELINE_KEYS.includes(key));
-    return baselineVisible && String(uiPrefs.fieldTable || '').toLowerCase() !== 'baseline';
+    return baselineVisible && table !== 'baseline';
   }
 
   function getVisibleKeys(prefs = uiPrefs) {
