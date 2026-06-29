@@ -17,6 +17,7 @@ const MODULES = [
   'mpp-native-reader-import-polish.js',
   'mpp-native-task-skeleton-polish.js',
   'mpp-native-task-skeleton-v2-polish.js',
+  'mpp-native-task-varmeta-names-polish.js',
   'mpp-native-date-sanity-polish.js',
 ];
 
@@ -30,7 +31,7 @@ self.onmessage = async (event) => {
   const { id, name, buffer } = event.data || {};
   const progress = (percent, stage, detail) => self.postMessage({ id, progress: { percent, stage, detail } });
   try {
-    progress(24, 'Fast worker ready', 'Loaded the fast browser-only MPP importer.');
+    progress(24, 'Fast worker ready', 'Loaded the fast browser-only MPP importer with VarMeta task-name recovery.');
     if (self.__mppWorkerBootError) throw self.__mppWorkerBootError;
     if (!self.NativeMppReader?.readBufferAsync && !self.NativeMppReader?.readBuffer) {
       throw new Error('Native MPP reader did not load inside the worker.');
@@ -43,7 +44,7 @@ self.onmessage = async (event) => {
     const cleaned = sanitizeResult(result);
     cleaned.liveImportMode = 'fast-worker';
     cleaned.warnings = Array.isArray(cleaned.warnings) ? cleaned.warnings : [];
-    cleaned.warnings.unshift('Fast MPP import mode: loaded the first usable schedule quickly. Deep native resources, assignments, and date scans are skipped on live upload for speed.');
+    cleaned.warnings.unshift('Fast MPP import mode: loaded the first usable schedule quickly with native VarMeta task-name recovery. Deep native resources, assignments, and date scans are skipped on live upload for speed.');
     self.postMessage({ id, ok: true, result: cleaned });
   } catch (error) {
     self.postMessage({ id, ok: false, error: error?.message || String(error || 'MPP worker failed') });
