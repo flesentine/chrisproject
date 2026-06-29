@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.60.0';
-  const CURRENT_NAME = 'MPP viewport fix';
+  const CURRENT_VERSION = 'v0.61.0';
+  const CURRENT_NAME = 'Project Entry table default';
   const CURRENT_BUILD = '2026-06-27';
   const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
   const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · MPP import + stable viewport`;
+  const RIBBON_TEXT = `${CURRENT_VERSION} · Gantt Chart / Entry table`;
 
   if (window.__currentVersionLabelLoaded) return;
   window.__currentVersionLabelLoaded = true;
@@ -21,7 +21,7 @@
     const ribbon = document.getElementById('ribbonVersionText');
     if (badge) {
       badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: MPP count diagnostics, surgical cleanup, one-time viewport reset`;
+      badge.title = `Build ${CURRENT_BUILD}: Project-style Entry table by default; extra fields stay hidden until a table/view asks for them.`;
     }
     if (footer) footer.textContent = FOOTER_TEXT;
     if (ribbon) ribbon.textContent = RIBBON_TEXT;
@@ -92,15 +92,17 @@
     try {
       const signature = getImportSignature();
       if (!signature || lastLayoutSignature === signature) return;
-      if (typeof uiPrefs === 'undefined' || !Array.isArray(window.FIELD_COLUMNS || FIELD_COLUMNS)) return;
-      const columns = window.FIELD_COLUMNS || FIELD_COLUMNS;
+      const columns = typeof FIELD_COLUMNS !== 'undefined' ? FIELD_COLUMNS : window.FIELD_COLUMNS;
+      if (typeof uiPrefs === 'undefined' || !Array.isArray(columns)) return;
       const map = new Map(columns.map((column) => [column.key, column]));
       const widths = uiPrefs.fieldColumns || {};
       const widthOf = (key) => Number(widths[key]) || Number(map.get(key)?.defaultWidth) || 0;
-      const entryKeys = ['id', 'indicators', 'wbs', 'name', 'duration', 'start', 'finish'];
+      const entryKeys = typeof window.getVisibleFieldKeys === 'function'
+        ? window.getVisibleFieldKeys()
+        : ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
       const entryWidth = entryKeys.reduce((sum, key) => sum + widthOf(key), 0);
-      const viewport = Math.max(860, Math.round(window.innerWidth * 0.56));
-      const wanted = Math.max(760, Math.min(entryWidth, viewport));
+      const viewport = Math.max(720, Math.round(window.innerWidth * 0.52));
+      const wanted = Math.max(640, Math.min(entryWidth, viewport));
       uiPrefs.fieldPaneWidth = wanted;
       if (typeof saveUiPrefs === 'function') saveUiPrefs();
       if (typeof applyUiPrefs === 'function') applyUiPrefs();
@@ -110,7 +112,7 @@
         scroll.scrollLeft = 0;
       }
       lastLayoutSignature = signature;
-      mark('mpp-project-style-entry-split', { fieldPaneWidth: wanted, entryWidth, taskCount: getStateTasks().length, oncePerImport: true });
+      mark('mpp-project-style-entry-split', { fieldPaneWidth: wanted, entryWidth, visibleFieldKeys: entryKeys, taskCount: getStateTasks().length, oncePerImport: true });
     } catch {}
   }
 
@@ -134,6 +136,7 @@
         scrollTop: scroll?.scrollTop || 0,
         scrollHeight: scroll?.scrollHeight || 0,
         clientHeight: scroll?.clientHeight || 0,
+        visibleFieldKeys: typeof window.getVisibleFieldKeys === 'function' ? window.getVisibleFieldKeys() : [],
         firstNames: names.slice(0, 10),
         lastNames: names.slice(-25),
         junkRowsStillPresent: junkRows.slice(0, 25),
@@ -143,6 +146,7 @@
         minVisibleRowIndex: data.minVisibleRowIndex,
         maxVisibleRowIndex: data.maxVisibleRowIndex,
         scrollTop: data.scrollTop,
+        fields: data.visibleFieldKeys.join(','),
         junk: data.junkRowsStillPresent.length,
         last: data.lastNames.slice(-3),
       });
@@ -174,7 +178,12 @@
     (document.body || document.head || document.documentElement).appendChild(script);
   }
 
+  function loadProjectEntryTable() {
+    loadScriptOnce('app-project-entry-table.js', '__projectEntryTableScriptLoaded', 'projectEntryTable');
+  }
+
   function loadLiveMppCleanup() {
+    loadProjectEntryTable();
     loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
     loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'surgicalMppCleanup');
   }
@@ -201,11 +210,13 @@
   }
 
   function boot() {
+    loadProjectEntryTable();
     loadLiveMppCleanup();
     installNonMppGuard();
     fixMppPicker();
     applyVersionLabel();
     patchRender();
+    setTimeout(loadProjectEntryTable, 150);
     setTimeout(loadLiveMppCleanup, 250);
     setTimeout(loadLiveMppCleanup, 1000);
     [100, 250, 750, 1500, 3000].forEach((delay) => setTimeout(fixMppPicker, delay));
