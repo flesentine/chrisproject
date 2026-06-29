@@ -1,10 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = 'v0.48.0';
+  const VERSION = 'v0.48.1';
   const MAX_SPAN_DAYS = 1460; // 4 years. Anything bigger is usually bad native MPP date decoding.
   const HUGE_DURATION_DAYS = 730;
   const COMPACT_TASK_DAY_STEP = 1;
+  const SUSPICIOUS_EARLY_YEAR = 1985;
+  const SUSPICIOUS_FUTURE_YEAR = 2045;
   let tries = 0;
   let isCompacting = false;
 
@@ -54,7 +56,24 @@
     if (isCompacting || !ready()) return false;
     const tasks = state.tasks || [];
     if (!tasks.length) return false;
-    if (state.__mppPerformanceGuardCompacted) return false;
+
+    if (state.__mppPerformanceGuardCompacted) {
+      if (!shouldReanchorCompactedSchedule(tasks)) return false;
+      isCompacting = true;
+      try {
+        const base = chooseCleanBaseDate({ spanDays: 0, suspiciousEpochRows: 1, farFutureRows: 0 });
+        reanchorCompactedSchedule(tasks, base);
+        state.projectStart = iso(base);
+        state.__mppPerformanceGuardCompacted.reanchoredAt = new Date().toISOString();
+        state.__mppPerformanceGuardCompacted.reanchoredFromSuspiciousStart = true;
+        try { if (typeof saveState === 'function') saveState(); } catch {}
+        showCompactedNotice({ spanDays: state.__mppPerformanceGuardCompacted.originalSpanDays || 0, reanchored: true });
+        mark('mpp-performance-guard-reanchored', state.__mppPerformanceGuardCompacted);
+        return true;
+      } finally {
+        isCompacting = false;
+      }
+    }
 
     const analysis = analyzeSchedule(tasks);
     if (!analysis.shouldCompact) return false;
@@ -67,7 +86,10 @@
         source,
         originalSpanDays: analysis.spanDays,
         hugeDurationRows: analysis.hugeDurationRows,
+        suspiciousEpochRows: analysis.suspiciousEpochRows,
+        farFutureRows: analysis.farFutureRows,
         compactedAt: new Date().toISOString(),
+        reanchoredFromSuspiciousStart: true,
       };
       try { if (typeof saveState === 'function') saveState(); } catch {}
       showCompactedNotice(analysis);
@@ -92,8 +114,8 @@
       if (finish) finishes.push(finish);
       const durationDays = Number(task.durationDays) || (start && finish ? daysBetween(start, finish) : 0);
       if (durationDays >= HUGE_DURATION_DAYS) hugeDurationRows += 1;
-      if (start && start.getFullYear() <= 1985) suspiciousEpochRows += 1;
-      if (finish && finish.getFullYear() >= 2045) farFutureRows += 1;
+      if (start && start.getFullYear() <= SUSPICIOUS_EARLY_YEAR) suspiciousEpochRows += 1;
+      if (finish && finish.getFullYear() >= SUSPICIOUS_FUTURE_YEAR) farFutureRows += 1;
     });
 
     if (!starts.length || !finishes.length) return { shouldCompact: false, spanDays: 0, hugeDurationRows, suspiciousEpochRows, farFutureRows };
@@ -113,7 +135,8 @@
   }
 
   function compactImportedSchedule(tasks, analysis) {
-    const base = chooseBaseDate();
+    const base = chooseCleanBaseDate(analysis);
+    state.projectStart = iso(base);
     const previous = tasks.map((task) => ({
       id: task.id,
       uid: task.uid,
@@ -165,10 +188,11 @@
   function showCompactedNotice(analysis) {
     const panel = document.getElementById('mppPanel');
     if (!panel) return;
+    const years = analysis.spanDays ? `${Math.round(analysis.spanDays / 365)}-year timeline (${analysis.spanDays} days)` : 'suspicious 1984-based timeline';
     panel.hidden = false;
     panel.classList.remove('mpp-busy');
     panel.classList.add('mpp-ok', 'mpp-performance-compacted');
-    panel.innerHTML = `<strong>Imported MPP compacted for speed:</strong> The native MPP dates produced a ${Math.round(analysis.spanDays / 365)}-year timeline (${analysis.spanDays} days), so the app switched to a fast bounded view. Task names/order were preserved; suspicious native dates were stored internally but not rendered. <button type="button" data-mpp-performance-clear>Dismiss</button>`;
+    panel.innerHTML = `<strong>Imported MPP compacted for speed:</strong> The native MPP dates produced a ${years}, so the app switched to a fast bounded view starting from a current working date instead of trusting the 1984 decode. Task names/order were preserved; suspicious native dates were stored internally but not rendered. <button type="button" data-mpp-performance-clear>Dismiss</button>`;
   }
 
   function installCompactButtonHandler() {
@@ -190,8 +214,38 @@
     }, true);
   }
 
-  function chooseBaseDate() {
-    const start = parseDate(state.projectStart) || new Date();
+  function shouldReanchorCompactedSchedule(tasks) {
+    const starts = tasks.map((task) => parseDate(task.start)).filter(Boolean);
+    if (!starts.length) return false;
+    const earliest = new Date(Math.min(...starts.map(Number)));
+    const projectStart = parseDate(state.projectStart);
+    return earliest.getFullYear() <= SUSPICIOUS_EARLY_YEAR || Boolean(projectStart && projectStart.getFullYear() <= SUSPICIOUS_EARLY_YEAR);
+  }
+
+  function reanchorCompactedSchedule(tasks, base) {
+    const starts = tasks.map((task) => parseDate(task.start)).filter(Boolean);
+    if (!starts.length) return;
+    const oldBase = new Date(Math.min(...starts.map(Number)));
+    const offset = daysBetween(oldBase, base) - 1;
+    tasks.forEach((task) => {
+      const start = parseDate(task.start);
+      const finish = parseDate(task.finish);
+      if (start) task.start = iso(addDays(start, offset));
+      if (finish) task.finish = iso(addDays(finish, offset));
+      task.__mppCompactedForPerformance = true;
+      task.__mppCompactedReason = 'Suspicious 1984 native MPP decode reanchored to current working date.';
+    });
+  }
+
+  function chooseCleanBaseDate(analysis) {
+    const importedStart = parseDate(state.projectStart);
+    const suspicious = !importedStart ||
+      importedStart.getFullYear() <= SUSPICIOUS_EARLY_YEAR ||
+      importedStart.getFullYear() >= SUSPICIOUS_FUTURE_YEAR ||
+      analysis.suspiciousEpochRows > 0 ||
+      analysis.farFutureRows > 0;
+
+    const start = suspicious ? new Date() : importedStart;
     return nextWorkingDay(start);
   }
 
@@ -211,6 +265,12 @@
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+  }
+
+  function addDays(value, amount) {
+    const date = parseDate(value) || new Date();
+    date.setDate(date.getDate() + Number(amount || 0));
+    return date;
   }
 
   function addWorkingDays(date, amount) {
