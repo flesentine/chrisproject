@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const VERSION = '0.1.1-project-entry-table-default';
+  const VERSION = '0.2.0-project-table-switcher';
   const ENTRY_KEYS = ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
   const BASELINE_KEYS = ['baselineStart', 'baselineFinish', 'baselineDuration', 'startVariance', 'finishVariance', 'durationVariance'];
+  const TABLE_LABELS = { entry: 'Entry', tracking: 'Tracking', baseline: 'Baseline', all: 'All Fields' };
   let tries = 0;
 
   function ready() {
@@ -20,12 +21,29 @@
       return;
     }
     window.__projectEntryTableLoaded = VERSION;
+    installStyles();
     installTableModel();
+    installTableSwitcher();
     patchColumnFunctions();
     patchRenderers();
     applyEntryTableDefaults();
     applyVisibleColumnDom();
-    mark('project-entry-table-installed', { version: VERSION, visibleFieldKeys: getVisibleKeys(), fieldPaneWidth: getTotalFieldColumnWidth() });
+    updateTableSwitcher();
+    mark('project-entry-table-installed', { version: VERSION, activeTable: uiPrefs.fieldTable || 'entry', visibleFieldKeys: getVisibleKeys(), fieldPaneWidth: getTotalFieldColumnWidth() });
+  }
+
+  function installStyles() {
+    if (document.getElementById('projectTableSwitcherStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'projectTableSwitcherStyles';
+    style.textContent = `
+      .project-table-switcher { display:flex; align-items:center; gap:6px; margin:8px 12px; padding:7px 9px; border:1px solid rgba(148,163,184,.45); border-radius:12px; background:rgba(255,255,255,.86); box-shadow:0 4px 14px rgba(15,23,42,.08); width:max-content; max-width:calc(100% - 24px); }
+      .project-table-switcher strong { font-size:11px; color:#475467; margin-right:4px; text-transform:uppercase; letter-spacing:.06em; }
+      .project-table-switcher button { border:1px solid rgba(148,163,184,.6); background:#fff; color:#334155; border-radius:9px; padding:5px 9px; font-size:12px; font-weight:750; cursor:pointer; }
+      .project-table-switcher button.is-active { color:#fff; background:#1f4ed8; border-color:#1f4ed8; }
+      .project-table-switcher button:hover { border-color:#1f4ed8; }
+    `;
+    document.head.appendChild(style);
   }
 
   function installTableModel() {
@@ -42,8 +60,37 @@
       uiPrefs.visibleFieldKeys = Array.isArray(keys) ? [...keys] : FIELD_COLUMNS.map((column) => column.key);
       uiPrefs.fieldPaneWidth = getTotalFieldColumnWidth();
       try { if (typeof saveUiPrefs === 'function') saveUiPrefs(); } catch {}
+      updateTableSwitcher();
       try { render(); } catch { applyVisibleColumnDom(); }
     };
+  }
+
+  function installTableSwitcher() {
+    if (document.getElementById('projectTableSwitcher')) return;
+    const switcher = document.createElement('div');
+    switcher.id = 'projectTableSwitcher';
+    switcher.className = 'project-table-switcher';
+    switcher.setAttribute('role', 'toolbar');
+    switcher.setAttribute('aria-label', 'Project table selector');
+    switcher.innerHTML = `<strong>Table</strong>${Object.entries(TABLE_LABELS).map(([key, label]) => `<button type="button" data-project-field-table="${esc(key)}">${esc(label)}</button>`).join('')}`;
+    const anchor = document.getElementById('workspace') || document.querySelector('.planner-shell') || document.querySelector('main') || document.body.firstElementChild;
+    if (anchor?.parentElement) anchor.parentElement.insertBefore(switcher, anchor);
+    else document.body.prepend(switcher);
+    switcher.addEventListener('click', (event) => {
+      const button = event.target?.closest?.('[data-project-field-table]');
+      if (!button) return;
+      event.preventDefault();
+      window.setProjectFieldTable(button.dataset.projectFieldTable || 'entry');
+    });
+  }
+
+  function updateTableSwitcher() {
+    const active = String(uiPrefs.fieldTable || 'entry').toLowerCase();
+    document.querySelectorAll('[data-project-field-table]').forEach((button) => {
+      const isActive = button.dataset.projectFieldTable === active;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
   }
 
   function applyEntryTableDefaults() {
@@ -136,6 +183,7 @@
     renderGantt = function entryTableRenderGantt(...args) {
       const result = baseRenderGantt.apply(this, args);
       applyVisibleColumnDom();
+      updateTableSwitcher();
       return result;
     };
     window.renderGantt = renderGantt;
@@ -144,7 +192,7 @@
     render = function entryTableRender(...args) {
       applyEntryTableDefaults();
       const result = baseRender.apply(this, args);
-      setTimeout(applyVisibleColumnDom, 0);
+      setTimeout(() => { applyVisibleColumnDom(); updateTableSwitcher(); }, 0);
       return result;
     };
     window.render = render;
