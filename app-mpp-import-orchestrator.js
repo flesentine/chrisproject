@@ -4,9 +4,10 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.10-mpp-import-orchestrator';
+  const VERSION = '0.1.11-mpp-import-orchestrator-varmeta';
   const MODULES = [
     'mpp-native-task-skeleton-v2-polish.js',
+    'mpp-native-task-varmeta-names-polish.js',
     'mpp-native-task-dates-polish.js',
     'mpp-native-task-fixed-dates-polish.js',
     'mpp-native-resource-table-v2-polish.js',
@@ -140,7 +141,7 @@
     if (audit.nativeResources) rows.push(['Native resources', `${audit.nativeResources.rows || 0} rows, ${audit.nativeResources.namedRows || 0} named`]);
     if (audit.nativeAssignments) rows.push(['Native assignments', `${audit.nativeAssignments.appliedAssignments || 0} applied, ${audit.nativeAssignments.confidence || 0}% confidence`]);
     if (audit.progress) rows.push(['Progress', `${audit.progress.tasksApplied || 0} tasks`]);
-    if (audit.baselines) rows.push(['Baselines', `${audit.baselines.baselineFieldsApplied || 0} primary`]);
+    if (audit.baselines) rows.push(['Baselines', `${audit.baselineFieldsApplied || audit.baselines.baselineFieldsApplied || 0} primary`]);
     if (audit.multipleBaselines) rows.push(['Multi-baselines', `${audit.multipleBaselines.alternate || 0} alternate records`]);
     if (audit.resources) rows.push(['Resources', `${audit.resources.resourcesApplied || 0} metadata`]);
     if (audit.resourceLeveling) rows.push(['Resource leveling', `${audit.resourceLeveling.taskMoves || 0} task-day moves`]);
