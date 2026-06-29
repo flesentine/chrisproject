@@ -1,175 +1,83 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.62.0';
-  const CURRENT_NAME = 'Tracking table + MPP percent';
-  const CURRENT_BUILD = '2026-06-27';
-  const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
-  const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · Entry / Tracking tables`;
+  const VERSION = 'v0.63.0';
+  const NAME = 'No stale first-load version';
+  const BUILD = '2026-06-27';
+  const BADGE = `${VERSION} · ${NAME}`;
+  const FOOTER = `${VERSION} · ${NAME} · Build ${BUILD}`;
+  const RIBBON = `${VERSION} · Entry / Tracking tables`;
 
-  if (window.__currentVersionLabelLoaded) return;
-  window.__currentVersionLabelLoaded = true;
+  if (window.__currentVersionLabelLoaded === VERSION) return;
+  window.__currentVersionLabelLoaded = VERSION;
 
-  let lastLayoutSignature = '';
-  let lastDiagnosticSignature = '';
   let nonMppGuardInstalled = false;
+  let renderPatched = false;
+  let lastDiagnostic = '';
+  let lastLayoutSignature = '';
+
+  applyVersionLabel();
+  hideOldVersionText();
+  boot();
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', boot, { once: true })
+    : setTimeout(boot, 0);
+
+  function boot() {
+    applyVersionLabel();
+    hideOldVersionText();
+    installVersionLock();
+    fixMppPicker();
+    installNonMppGuard();
+    loadMppHelpers();
+    patchRender();
+    [50, 150, 400, 900, 1800, 3500].forEach((delay) => setTimeout(() => {
+      applyVersionLabel();
+      hideOldVersionText();
+      fixMppPicker();
+      afterRenderMppLayout();
+    }, delay));
+  }
 
   function applyVersionLabel() {
-    const badge = document.getElementById('appVersionBadge');
-    const footer = document.getElementById('appVersionFooter');
-    const ribbon = document.getElementById('ribbonVersionText');
-    if (badge) {
-      badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: Project-style table switching and native MPP % Complete recovery.`;
-    }
-    if (footer) footer.textContent = FOOTER_TEXT;
-    if (ribbon) ribbon.textContent = RIBBON_TEXT;
+    setText('appVersionBadge', BADGE, `Build ${BUILD}: current build label locked at first load.`);
+    setText('appVersionFooter', FOOTER);
+    setText('ribbonVersionText', RIBBON);
   }
 
-  function fixMppPicker() {
-    const input = document.getElementById('importMppInput');
-    if (!input) return;
-    input.removeAttribute('accept');
-    input.accept = '';
-    input.disabled = false;
-    input.title = 'Choose a local .mpp file. The app checks the extension after selection.';
-    const label = input.closest('.file-button');
-    if (label) label.title = input.title;
+  function setText(id, text, title = '') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.textContent !== text) el.textContent = text;
+    if (title) el.title = title;
+    el.dataset.versionLocked = VERSION;
+    el.style.visibility = 'visible';
   }
 
-  function installNonMppGuard() {
-    if (nonMppGuardInstalled) return;
-    nonMppGuardInstalled = true;
-    document.addEventListener('change', (event) => {
-      const input = event.target;
-      if (!(input instanceof HTMLInputElement) || input.id !== 'importMppInput') return;
-      const file = input.files && input.files[0];
-      if (!file) return;
-      if (/\.mpp$/i.test(file.name || '')) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      input.value = '';
-      showMppWarning(`That is not an MPP file: ${file.name || 'selected file'}. Choose a .mpp file, or use Project XML import for .xml files.`);
-      mark('mpp-non-mpp-file-ignored', { name: file.name || '', size: file.size || 0, type: file.type || '' });
-    }, true);
-  }
-
-  function showMppWarning(message) {
-    const panel = document.getElementById('mppPanel');
-    if (!panel) return;
-    panel.hidden = false;
-    panel.classList.remove('mpp-ok', 'mpp-busy');
-    panel.classList.add('mpp-warn');
-    panel.textContent = message;
-  }
-
-  function getMppEvents() {
-    const events = window.__mppDebug?.events;
-    return Array.isArray(events) ? events : [];
-  }
-
-  function getLastRealMppImportEvent() {
-    const events = getMppEvents();
-    for (let i = events.length - 1; i >= 0; i -= 1) {
-      if (events[i]?.type === 'live-safe-xml-filter-applied') return events[i];
-    }
-    return null;
-  }
-
-  function getImportSignature() {
-    const event = getLastRealMppImportEvent();
-    if (!event) return '';
-    const data = event.data || {};
-    return `${event.t || ''}:${data.generatedXmlTaskCount || data.kept || ''}:${data.firstTask || ''}:${data.lastTask || ''}`;
-  }
-
-  function getStateTasks() {
-    try { return Array.isArray(state?.tasks) ? state.tasks : []; } catch { return []; }
-  }
-
-  function projectStyleEntrySplitOnce() {
-    try {
-      const signature = getImportSignature();
-      if (!signature || lastLayoutSignature === signature) return;
-      const columns = typeof FIELD_COLUMNS !== 'undefined' ? FIELD_COLUMNS : window.FIELD_COLUMNS;
-      if (typeof uiPrefs === 'undefined' || !Array.isArray(columns)) return;
-      const map = new Map(columns.map((column) => [column.key, column]));
-      const widths = uiPrefs.fieldColumns || {};
-      const widthOf = (key) => Number(widths[key]) || Number(map.get(key)?.defaultWidth) || 0;
-      const entryKeys = typeof window.getVisibleFieldKeys === 'function'
-        ? window.getVisibleFieldKeys()
-        : ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
-      const entryWidth = entryKeys.reduce((sum, key) => sum + widthOf(key), 0);
-      const viewport = Math.max(720, Math.round(window.innerWidth * 0.52));
-      const wanted = Math.max(640, Math.min(entryWidth, viewport));
-      uiPrefs.fieldPaneWidth = wanted;
-      if (typeof saveUiPrefs === 'function') saveUiPrefs();
-      if (typeof applyUiPrefs === 'function') applyUiPrefs();
-      const scroll = document.querySelector('.planner-scroll');
-      if (scroll) {
-        scroll.scrollTop = 0;
-        scroll.scrollLeft = 0;
+  function hideOldVersionText() {
+    document.querySelectorAll('#appVersionBadge, #appVersionFooter, #ribbonVersionText').forEach((el) => {
+      if (/v0\.(22|39)\.0|split \+ recurring|Baselines \+ ghost bars/i.test(el.textContent || '')) {
+        el.textContent = el.id === 'appVersionFooter' ? FOOTER : el.id === 'ribbonVersionText' ? RIBBON : BADGE;
       }
-      lastLayoutSignature = signature;
-      mark('mpp-project-style-entry-split', { fieldPaneWidth: wanted, entryWidth, visibleFieldKeys: entryKeys, taskCount: getStateTasks().length, oncePerImport: true });
-    } catch {}
+      el.style.visibility = 'visible';
+    });
   }
 
-  function postRenderMppCountDiagnostic() {
-    try {
-      if (!getLastRealMppImportEvent()) return;
-      const tasks = getStateTasks();
-      const names = tasks.map((task) => String(task?.name || '').trim());
-      const junkRows = names.filter((name) => /^no\s+program\s+baseline\s+date$/i.test(name) || /^task\s+\d+$/i.test(name) || /^recovered\s+task\s+\d+$/i.test(name));
-      const rows = [...document.querySelectorAll('.planner-row[data-row-index]')];
-      const visibleRows = rows.length;
-      const indexes = rows.map((row) => Number(row.dataset.rowIndex)).filter(Number.isFinite);
-      const minVisibleIndex = indexes.length ? Math.min(...indexes) : -1;
-      const maxVisibleIndex = indexes.length ? Math.max(...indexes) : -1;
-      const scroll = document.querySelector('.planner-scroll');
-      const percents = tasks.map((task) => Number(task?.percent) || 0);
-      const data = {
-        stateTaskCount: tasks.length,
-        visiblePlannerRows: visibleRows,
-        minVisibleRowIndex: minVisibleIndex,
-        maxVisibleRowIndex: maxVisibleIndex,
-        scrollTop: scroll?.scrollTop || 0,
-        scrollHeight: scroll?.scrollHeight || 0,
-        clientHeight: scroll?.clientHeight || 0,
-        visibleFieldKeys: typeof window.getVisibleFieldKeys === 'function' ? window.getVisibleFieldKeys() : [],
-        percentRows: percents.filter((value) => value > 0).length,
-        firstPercents: percents.slice(0, 12),
-        firstNames: names.slice(0, 10),
-        lastNames: names.slice(-25),
-        junkRowsStillPresent: junkRows.slice(0, 25),
-      };
-      const signature = JSON.stringify({
-        stateTaskCount: data.stateTaskCount,
-        minVisibleRowIndex: data.minVisibleRowIndex,
-        maxVisibleRowIndex: data.maxVisibleRowIndex,
-        scrollTop: data.scrollTop,
-        fields: data.visibleFieldKeys.join(','),
-        percentRows: data.percentRows,
-        junk: data.junkRowsStillPresent.length,
-        last: data.lastNames.slice(-3),
-      });
-      if (signature === lastDiagnosticSignature) return;
-      lastDiagnosticSignature = signature;
-      mark('mpp-post-render-state-count', data);
-    } catch {}
+  function installVersionLock() {
+    if (window.__currentVersionMutationLockInstalled) return;
+    window.__currentVersionMutationLockInstalled = true;
+    const observer = new MutationObserver(() => applyVersionLabel());
+    ['appVersionBadge', 'appVersionFooter', 'ribbonVersionText'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el, { childList: true, characterData: true, subtree: true });
+    });
   }
 
-  function mark(type, data) {
-    try {
-      const dbg = window.__mppDebug;
-      if (dbg?.events) {
-        dbg.events.push({ t: `${Math.round(performance.now())}ms`, type, data: data || {} });
-        dbg.events = dbg.events.slice(-80);
-        dbg.lastResult = data || dbg.lastResult;
-      }
-      console.log('[MPP]', type, data || {});
-    } catch {}
+  function loadMppHelpers() {
+    loadScriptOnce('app-project-entry-table.js', '__projectEntryTableScriptLoaded', 'projectEntryTable');
+    loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
+    loadScriptOnce('mpp-live-safe-percent-bridge.js', '__liveSafeMppPercentBridgeScriptLoaded', 'liveSafePercentBridge');
+    loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'surgicalMppCleanup');
   }
 
   function loadScriptOnce(src, flag, attrName) {
@@ -182,56 +90,131 @@
     (document.body || document.head || document.documentElement).appendChild(script);
   }
 
-  function loadProjectEntryTable() {
-    loadScriptOnce('app-project-entry-table.js', '__projectEntryTableScriptLoaded', 'projectEntryTable');
+  function fixMppPicker() {
+    const input = document.getElementById('importMppInput');
+    if (!input) return;
+    input.removeAttribute('accept');
+    input.accept = '';
+    input.disabled = false;
+    input.title = 'Choose a local .mpp file. The app checks the extension after selection.';
   }
 
-  function loadLiveMppCleanup() {
-    loadProjectEntryTable();
-    loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
-    loadScriptOnce('mpp-live-safe-percent-bridge.js', '__liveSafeMppPercentBridgeLoaded', 'liveSafePercentBridge');
-    loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'surgicalMppCleanup');
-  }
-
-  function afterRenderMppLayout() {
-    projectStyleEntrySplitOnce();
-    postRenderMppCountDiagnostic();
+  function installNonMppGuard() {
+    if (nonMppGuardInstalled) return;
+    nonMppGuardInstalled = true;
+    document.addEventListener('change', (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.id !== 'importMppInput') return;
+      const file = input.files && input.files[0];
+      if (!file || /\.mpp$/i.test(file.name || '')) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      input.value = '';
+      const panel = document.getElementById('mppPanel');
+      if (panel) {
+        panel.hidden = false;
+        panel.classList.remove('mpp-ok', 'mpp-busy');
+        panel.classList.add('mpp-warn');
+        panel.textContent = `That is not an MPP file: ${file.name || 'selected file'}. Choose a .mpp file, or use Project XML import for .xml files.`;
+      }
+      mark('mpp-non-mpp-file-ignored', { name: file.name || '', size: file.size || 0, type: file.type || '' });
+    }, true);
   }
 
   function patchRender() {
-    if (window.__currentVersionRenderPatched || typeof render !== 'function') return;
-    window.__currentVersionRenderPatched = true;
+    if (renderPatched || typeof render !== 'function') return;
+    renderPatched = true;
     const base = render;
-    render = function currentVersionRender(...args) {
+    render = function currentVersionLockedRender(...args) {
       const result = base.apply(this, args);
-      setTimeout(applyVersionLabel, 0);
-      setTimeout(fixMppPicker, 0);
-      setTimeout(afterRenderMppLayout, 0);
-      setTimeout(afterRenderMppLayout, 150);
-      setTimeout(afterRenderMppLayout, 500);
+      applyVersionLabel();
+      setTimeout(() => { applyVersionLabel(); afterRenderMppLayout(); }, 0);
+      setTimeout(() => { applyVersionLabel(); afterRenderMppLayout(); }, 180);
       return result;
     };
     window.render = render;
   }
 
-  function boot() {
-    loadProjectEntryTable();
-    loadLiveMppCleanup();
-    installNonMppGuard();
-    fixMppPicker();
-    applyVersionLabel();
-    patchRender();
-    setTimeout(loadProjectEntryTable, 150);
-    setTimeout(loadLiveMppCleanup, 250);
-    setTimeout(loadLiveMppCleanup, 1000);
-    [100, 250, 750, 1500, 3000].forEach((delay) => setTimeout(fixMppPicker, delay));
-    [700, 1500, 3000, 5000].forEach((delay) => setTimeout(afterRenderMppLayout, delay));
-    setTimeout(applyVersionLabel, 250);
-    setTimeout(applyVersionLabel, 1000);
-    setTimeout(applyVersionLabel, 2500);
+  function getMppEvents() {
+    const events = window.__mppDebug && window.__mppDebug.events;
+    return Array.isArray(events) ? events : [];
   }
 
-  document.readyState === 'loading'
-    ? document.addEventListener('DOMContentLoaded', boot, { once: true })
-    : boot();
+  function getLastImportEvent() {
+    const events = getMppEvents();
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      if (events[i] && events[i].type === 'live-safe-xml-filter-applied') return events[i];
+    }
+    return null;
+  }
+
+  function afterRenderMppLayout() {
+    const event = getLastImportEvent();
+    if (!event) return;
+    projectStyleEntrySplitOnce(event);
+    postImportDiagnostic();
+  }
+
+  function projectStyleEntrySplitOnce(event) {
+    try {
+      const data = event.data || {};
+      const signature = `${event.t || ''}:${data.generatedXmlTaskCount || data.kept || ''}:${data.firstTask || ''}:${data.lastTask || ''}`;
+      if (!signature || signature === lastLayoutSignature) return;
+      if (typeof uiPrefs === 'undefined') return;
+      const keys = typeof window.getVisibleFieldKeys === 'function' ? window.getVisibleFieldKeys() : ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
+      uiPrefs.fieldPaneWidth = Math.max(640, Math.min(900, Math.round(window.innerWidth * 0.52)));
+      if (typeof saveUiPrefs === 'function') saveUiPrefs();
+      if (typeof applyUiPrefs === 'function') applyUiPrefs();
+      const scroll = document.querySelector('.planner-scroll');
+      if (scroll) { scroll.scrollTop = 0; scroll.scrollLeft = 0; }
+      lastLayoutSignature = signature;
+      mark('mpp-project-style-entry-split', { fieldPaneWidth: uiPrefs.fieldPaneWidth, visibleFieldKeys: keys, taskCount: getStateTasks().length, oncePerImport: true });
+    } catch {}
+  }
+
+  function postImportDiagnostic() {
+    try {
+      const tasks = getStateTasks();
+      const names = tasks.map((task) => String(task && task.name || '').trim());
+      const percents = tasks.map((task) => Number(task && task.percent) || 0);
+      const rows = Array.from(document.querySelectorAll('.planner-row[data-row-index]'));
+      const indexes = rows.map((row) => Number(row.dataset.rowIndex)).filter(Number.isFinite);
+      const scroll = document.querySelector('.planner-scroll');
+      const diagnostic = {
+        stateTaskCount: tasks.length,
+        visiblePlannerRows: rows.length,
+        minVisibleRowIndex: indexes.length ? Math.min(...indexes) : -1,
+        maxVisibleRowIndex: indexes.length ? Math.max(...indexes) : -1,
+        scrollTop: scroll ? scroll.scrollTop : 0,
+        scrollHeight: scroll ? scroll.scrollHeight : 0,
+        clientHeight: scroll ? scroll.clientHeight : 0,
+        visibleFieldKeys: typeof window.getVisibleFieldKeys === 'function' ? window.getVisibleFieldKeys() : [],
+        percentRows: percents.filter((value) => value > 0).length,
+        firstPercents: percents.slice(0, 12),
+        firstNames: names.slice(0, 10),
+        lastNames: names.slice(-25),
+        junkRowsStillPresent: names.filter((name) => /^no\s+program\s+baseline\s+date$/i.test(name) || /^task\s+\d+$/i.test(name)).slice(0, 25),
+      };
+      const signature = JSON.stringify({ count: diagnostic.stateTaskCount, fields: diagnostic.visibleFieldKeys.join(','), percentRows: diagnostic.percentRows, last: diagnostic.lastNames.slice(-3) });
+      if (signature === lastDiagnostic) return;
+      lastDiagnostic = signature;
+      mark('mpp-post-render-state-count', diagnostic);
+    } catch {}
+  }
+
+  function getStateTasks() {
+    try { return Array.isArray(state && state.tasks) ? state.tasks : []; } catch { return []; }
+  }
+
+  function mark(type, data) {
+    try {
+      const dbg = window.__mppDebug;
+      if (dbg && Array.isArray(dbg.events)) {
+        dbg.events.push({ t: `${Math.round(performance.now())}ms`, type, data: data || {} });
+        dbg.events = dbg.events.slice(-80);
+        dbg.lastResult = data || dbg.lastResult;
+      }
+      console.log('[MPP]', type, data || {});
+    } catch {}
+  }
 })();
