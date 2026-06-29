@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '0.1.0-project-entry-table-default';
+  const VERSION = '0.1.1-project-entry-table-default';
   const ENTRY_KEYS = ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
   const BASELINE_KEYS = ['baselineStart', 'baselineFinish', 'baselineDuration', 'startVariance', 'finishVariance', 'durationVariance'];
   let tries = 0;
@@ -25,7 +25,7 @@
     patchRenderers();
     applyEntryTableDefaults();
     applyVisibleColumnDom();
-    mark('project-entry-table-installed', { version: VERSION, visibleFieldKeys: getVisibleKeys() });
+    mark('project-entry-table-installed', { version: VERSION, visibleFieldKeys: getVisibleKeys(), fieldPaneWidth: getTotalFieldColumnWidth() });
   }
 
   function installTableModel() {
@@ -104,16 +104,11 @@
     };
 
     getFieldPaneWidth = function patchedFieldPaneWidth(prefs = uiPrefs) {
-      const total = getTotalFieldColumnWidth(prefs);
-      const min = Math.min(typeof MIN_FIELD_PANE_WIDTH === 'number' ? MIN_FIELD_PANE_WIDTH : 260, total);
-      const width = Number(prefs.fieldPaneWidth);
-      return Math.max(min, Math.min(total, Number.isFinite(width) ? width : total));
+      return getTotalFieldColumnWidth(prefs);
     };
 
-    setFieldPaneWidth = function patchedSetFieldPaneWidth(width) {
-      const total = getTotalFieldColumnWidth();
-      const min = Math.min(typeof MIN_FIELD_PANE_WIDTH === 'number' ? MIN_FIELD_PANE_WIDTH : 260, total);
-      uiPrefs.fieldPaneWidth = Math.max(min, Math.min(total, Number(width) || total));
+    setFieldPaneWidth = function patchedSetFieldPaneWidth() {
+      uiPrefs.fieldPaneWidth = getTotalFieldColumnWidth();
     };
 
     isFieldPaneClipped = function patchedIsFieldPaneClipped() { return false; };
