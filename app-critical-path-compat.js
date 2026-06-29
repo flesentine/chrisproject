@@ -32,7 +32,7 @@
   function loadMppWorkerImportNow() {
     loadScriptOnce('app-mpp-worker-import.js', 'mppWorkerImportDirectBoot');
     loadScriptOnce('app-current-version-label.js', 'currentVersionDirectBoot');
-    loadScriptOnce('ms-project-layout-sweep.js?v0.43.1', 'msProjectLayoutSweepDirectBoot');
+    loadScriptOnce('ms-project-layout-sweep.js?v0.43.2', 'msProjectLayoutSweepDirectBoot');
   }
 
   function loadScriptOnce(src, flag) {
@@ -180,6 +180,6 @@
   }
 
   function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+    return String(value ?? '').replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char]));
   }
 })();
