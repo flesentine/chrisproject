@@ -1,4 +1,4 @@
-/* v0.27.2 collapsible MS Project ribbon. */
+/* v0.27.3 collapsible MS Project ribbon. */
 .ms-ribbon-collapse-toggle {
   margin-left: auto;
   align-self: stretch;
@@ -45,9 +45,10 @@
   padding-bottom: 3px;
 }
 
-/* Keep File/Import/Export dropdowns visible even when the compact ribbon sweep
-   keeps the ribbon short. These selectors intentionally outrank the later
-   layout-sweep overflow rules. */
+/* Keep File/Import/Export dropdowns visible while making the ribbon occupy the
+   real height of its visible controls. The compact layout sweep set a fixed
+   58px ribbon height; when the Task ribbon content is taller, the validation
+   strip started too early and appeared to float on top of the ribbon. */
 html body.projecthub-stitch-theme .app-shell .project-ribbon-shell,
 html body.projecthub-stitch-theme .app-shell .project-ribbon-shell .ribbon-tabs,
 html body.projecthub-stitch-theme .app-shell .project-ribbon-shell .office-ribbon,
@@ -61,7 +62,21 @@ html body.projecthub-stitch-theme .app-shell .project-ribbon-shell .ribbon-menu 
 
 html body.projecthub-stitch-theme .app-shell .project-ribbon-shell {
   position: sticky !important;
+  top: 0 !important;
   z-index: 9000 !important;
+}
+
+html body.projecthub-stitch-theme:not(.ms-ribbon-collapsed) .app-shell .project-ribbon-shell .office-ribbon,
+html body.projecthub-stitch-theme:not(.ms-ribbon-collapsed) .app-shell .project-ribbon-shell .compact-ribbon {
+  height: auto !important;
+  min-height: 74px !important;
+  align-items: stretch !important;
+  padding-bottom: 6px !important;
+  margin-bottom: 0 !important;
+}
+
+html body.projecthub-stitch-theme .app-shell .project-ribbon-shell .ribbon-panel.is-active {
+  min-height: 58px !important;
 }
 
 html body.projecthub-stitch-theme .app-shell .project-ribbon-shell .office-ribbon,
@@ -88,8 +103,19 @@ html body.projecthub-stitch-theme .app-shell .project-ribbon-shell .ribbon-menu-
   box-shadow: 0 16px 38px rgba(15, 23, 42, 0.24) !important;
 }
 
-html body.projecthub-stitch-theme .app-shell main,
-html body.projecthub-stitch-theme .app-shell .validation-panel,
+html body.projecthub-stitch-theme .app-shell main {
+  position: relative !important;
+  z-index: 1 !important;
+  padding-top: 6px !important;
+}
+
+html body.projecthub-stitch-theme .app-shell .validation-panel {
+  position: relative !important;
+  z-index: 1 !important;
+  clear: both !important;
+  margin-top: 0 !important;
+}
+
 html body.projecthub-stitch-theme .app-shell .workspace,
 html body.projecthub-stitch-theme .app-shell .unified-card {
   position: relative !important;
