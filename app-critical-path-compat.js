@@ -36,6 +36,7 @@
     loadScriptOnce('ms-project-pane-controls.js?v0.44.2', 'msProjectPaneControlsDirectBoot');
     loadScriptOnce('ms-project-ribbon-menu-fix.js?v0.45.0', 'msProjectRibbonMenuFixDirectBoot');
     loadScriptOnce('ms-project-zoom-fit.js?v0.46.0', 'msProjectZoomFitDirectBoot');
+    loadScriptOnce('mpp-import-unstick-guard.js?v0.47.0', 'mppImportUnstickGuardDirectBoot');
   }
 
   function loadScriptOnce(src, flag) {
