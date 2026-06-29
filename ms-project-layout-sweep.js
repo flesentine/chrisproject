@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = 'v0.42.0';
+  const VERSION = 'v0.43.0';
   if (window.__msProjectLayoutSweepLoaded === VERSION) return;
   window.__msProjectLayoutSweepLoaded = VERSION;
 
@@ -23,7 +23,21 @@
     /^\d+(?:\.\d+)?\s*d$/i,
   ];
 
-  const KEEP_ICON_TITLES = /note|notes|hyperlink|link|deadline|constraint|warning|baseline|actual|progress|complete|calendar|milestone|attachment|error|info/i;
+  const GRID_JUNK_SELECTOR = [
+    '.planner-row .critical-slack-badge',
+    '.planner-row .task-type-badge',
+    '.planner-row .resource-conflict-badge',
+    '.planner-row .gantt-leveling-label',
+    '.planner-row .gantt-slack-bar',
+    '.planner-row .leveling-delay-grid-cell',
+    '.planner-row .summary-rollup-badge',
+    '.planner-row .critical-path-chip',
+    '.planner-row .task-type-chip',
+    '.planner-row .leveling-delay-chip',
+    '.planner-row .resource-chip',
+    '.planner-row .assignment-test-chip',
+    '.planner-row .custom-type-chip',
+  ].join(',');
 
   boot();
   document.readyState === 'loading'
@@ -32,11 +46,13 @@
 
   function boot() {
     ensureCssLoaded();
+    injectHardCleanCss();
     setCompactDefaults();
+    forceEntryTable();
     cleanNow();
     patchRender();
     installObserver();
-    [50, 150, 350, 800, 1600].forEach((delay) => setTimeout(cleanNow, delay));
+    [50, 150, 350, 800, 1600, 3200].forEach((delay) => setTimeout(cleanNow, delay));
   }
 
   function ensureCssLoaded() {
@@ -48,10 +64,45 @@
     document.head.appendChild(link);
   }
 
+  function injectHardCleanCss() {
+    let style = document.getElementById('msProjectHardGridCleanStyles');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'msProjectHardGridCleanStyles';
+      document.head.appendChild(style);
+    }
+    style.textContent = `
+      body.ms-project-layout-sweep-active .project-table-switcher { display:none !important; }
+      body.ms-project-layout-sweep-active .planner-row .critical-slack-badge,
+      body.ms-project-layout-sweep-active .planner-row .task-type-badge,
+      body.ms-project-layout-sweep-active .planner-row .resource-conflict-badge,
+      body.ms-project-layout-sweep-active .planner-row .gantt-leveling-label,
+      body.ms-project-layout-sweep-active .planner-row .gantt-slack-bar,
+      body.ms-project-layout-sweep-active .planner-row .leveling-delay-grid-cell,
+      body.ms-project-layout-sweep-active .planner-row .summary-rollup-badge,
+      body.ms-project-layout-sweep-active .planner-row .critical-path-chip,
+      body.ms-project-layout-sweep-active .planner-row .task-type-chip,
+      body.ms-project-layout-sweep-active .planner-row .leveling-delay-chip,
+      body.ms-project-layout-sweep-active .planner-row .resource-chip,
+      body.ms-project-layout-sweep-active .planner-row .assignment-test-chip,
+      body.ms-project-layout-sweep-active .planner-row .custom-type-chip { display:none !important; }
+      body.ms-project-layout-sweep-active .planner-row .task-name-cell > span:not(.summary-toggle-spacer):not(.constraint-warning-badge),
+      body.ms-project-layout-sweep-active .planner-row .task-name-cell > small,
+      body.ms-project-layout-sweep-active .planner-row .task-name-cell > em { display:none !important; }
+      body.ms-project-layout-sweep-active .planner-row .task-name-cell { gap:2px !important; min-width:0 !important; }
+      body.ms-project-layout-sweep-active .planner-row .name-input { min-width:0 !important; width:100% !important; }
+      body.ms-project-layout-sweep-active .planner-row .indicator-dot.is-critical,
+      body.ms-project-layout-sweep-active .planner-row .indicator-dot.is-slack,
+      body.ms-project-layout-sweep-active .planner-row .indicator-dot.is-task-type,
+      body.ms-project-layout-sweep-active .planner-row .indicator-dot.is-resource-leveling,
+      body.ms-project-layout-sweep-active .planner-row .indicator-dot.is-leveling { display:none !important; }
+      body.ms-project-layout-sweep-active .planner-row .planner-cell { overflow:hidden !important; }
+    `;
+  }
+
   function setCompactDefaults() {
-    const root = document.documentElement;
-    root.style.setProperty('--msp-row-height', '30px');
-    root.style.setProperty('--msp-header-height', '25px');
+    document.documentElement.style.setProperty('--msp-row-height', '30px');
+    document.documentElement.style.setProperty('--msp-header-height', '25px');
 
     const dayWidth = document.getElementById('dayWidthControl');
     if (dayWidth && !dayWidth.dataset.msProjectSweepDefaulted) {
@@ -75,6 +126,19 @@
     }
   }
 
+  function forceEntryTable() {
+    if (!window.FIELD_COLUMNS || !window.uiPrefs) return;
+    const entryKeys = ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
+    const existing = new Set(FIELD_COLUMNS.map((column) => column.key));
+    const visible = entryKeys.filter((key) => existing.has(key));
+    if (visible.length) {
+      uiPrefs.fieldTable = 'entry';
+      uiPrefs.visibleFieldKeys = visible;
+      try { if (typeof saveUiPrefs === 'function') saveUiPrefs(); } catch {}
+      try { if (typeof applyUiPrefs === 'function') applyUiPrefs(); } catch {}
+    }
+  }
+
   function patchRender() {
     if (window.__msProjectLayoutSweepRenderPatched || typeof render !== 'function') return;
     window.__msProjectLayoutSweepRenderPatched = true;
@@ -82,7 +146,8 @@
     render = function msProjectLayoutSweepRender(...args) {
       const result = baseRender.apply(this, args);
       requestAnimationFrame(cleanNow);
-      setTimeout(cleanNow, 80);
+      setTimeout(cleanNow, 60);
+      setTimeout(cleanNow, 180);
       return result;
     };
     window.render = render;
@@ -107,9 +172,33 @@
 
   function cleanNow() {
     document.body.classList.add('projecthub-stitch-theme', 'ms-project-classic-theme', 'ms-project-layout-sweep-active');
+    forceEntryTable();
+    removeGridJunk();
     cleanIndicatorsColumn();
     compactHeaders();
     compactRows();
+  }
+
+  function removeGridJunk() {
+    document.querySelectorAll(GRID_JUNK_SELECTOR).forEach((node) => node.remove());
+
+    document.querySelectorAll('.planner-row .task-name-cell').forEach((cell) => {
+      [...cell.children].forEach((node) => {
+        if (node.matches('input,button.summary-toggle,.summary-toggle-spacer,.constraint-warning-badge')) return;
+        const text = normalizedText(node);
+        const cls = String(node.className || '');
+        if (/badge|chip|pill|slack|critical|task-type|resource|leveling/i.test(cls) || TEXT_BADGE_PATTERNS.some((pattern) => pattern.test(text))) node.remove();
+      });
+    });
+
+    document.querySelectorAll('.planner-row .planner-cell').forEach((cell) => {
+      [...cell.children].forEach((node) => {
+        if (node.matches('input,select,button,.percent-cell,.task-name-cell,.id-pill,.indicator-button')) return;
+        const text = normalizedText(node);
+        const cls = String(node.className || '');
+        if (/badge|chip|pill|leveling-delay|critical-slack|task-type/i.test(cls) || TEXT_BADGE_PATTERNS.some((pattern) => pattern.test(text))) node.remove();
+      });
+    });
   }
 
   function compactHeaders() {
@@ -132,76 +221,30 @@
 
   function cleanIndicatorsColumn() {
     const candidates = new Set();
-
     document.querySelectorAll('[data-field="indicators"], [data-column-key="indicators"], .indicator-cell, .task-indicators, .row-indicators').forEach((el) => candidates.add(el));
-
     document.querySelectorAll('.planner-row, .task-row').forEach((row) => {
-      const cells = [...row.children];
-      const byData = cells.find((cell) => String(cell.dataset?.field || cell.dataset?.columnKey || '').toLowerCase() === 'indicators');
-      if (byData) candidates.add(byData);
-      else if (cells.length > 1) candidates.add(cells[1]);
+      const fieldCells = row.querySelectorAll('.planner-fields > .planner-cell');
+      if (fieldCells[1]) candidates.add(fieldCells[1]);
     });
-
     candidates.forEach(cleanIndicatorCell);
   }
 
   function cleanIndicatorCell(cell) {
-    if (!cell || cell.dataset.msProjectIndicatorsCleaned === VERSION) return;
-    cell.dataset.msProjectIndicatorsCleaned = VERSION;
+    if (!cell) return;
     cell.classList.add('ms-project-indicators-cell');
-
     [...cell.querySelectorAll('*')].forEach((node) => {
       const text = normalizedText(node);
       const title = `${node.getAttribute('title') || ''} ${node.getAttribute('aria-label') || ''}`.trim();
       const className = String(node.className || '');
-
-      if (shouldRemoveIndicatorNode(text, title, className)) {
-        node.remove();
-        return;
-      }
-
-      if (text && text.length > 2 && !KEEP_ICON_TITLES.test(title) && !/^[!⚠⚑◆◇•●○✓✕📎🔗📝]$/.test(text)) {
-        const icon = iconFor(title || text, className);
-        if (icon) {
-          node.textContent = icon;
-          node.title = title || text;
-          node.setAttribute('aria-label', title || text);
-        }
-      }
+      if (shouldRemoveIndicatorNode(text, title, className)) node.remove();
     });
-
-    [...cell.childNodes].forEach((node) => {
-      if (node.nodeType !== Node.TEXT_NODE) return;
-      const text = normalizedText(node);
-      if (!text) return;
-      if (TEXT_BADGE_PATTERNS.some((pattern) => pattern.test(text))) node.remove();
-    });
-
-    const visibleText = normalizedText(cell);
-    if (visibleText && TEXT_BADGE_PATTERNS.some((pattern) => pattern.test(visibleText))) {
-      cell.textContent = '';
-    }
   }
 
   function shouldRemoveIndicatorNode(text, title, className) {
-    const combined = `${text} ${title} ${className}`.trim();
-    if (!combined) return false;
     if (/critical|task-type|fixed-units|fixed-duration|fixed-work|leveling|delay|slack|resource-chip|assignment-chip/i.test(className)) return true;
     if (TEXT_BADGE_PATTERNS.some((pattern) => pattern.test(text))) return true;
-    if (/^delay\b/i.test(text) || /^slack\b/i.test(text)) return true;
     if (/critical path|fixed units|fixed duration|fixed work|leveling delay|total slack|free slack/i.test(title)) return true;
     return false;
-  }
-
-  function iconFor(text, className) {
-    const combined = `${text} ${className}`;
-    if (/warning|constraint|deadline|late|miss/i.test(combined)) return '!';
-    if (/note/i.test(combined)) return '📝';
-    if (/hyperlink|link/i.test(combined)) return '🔗';
-    if (/baseline/i.test(combined)) return '◇';
-    if (/progress|actual|complete/i.test(combined)) return '✓';
-    if (/milestone/i.test(combined)) return '◆';
-    return '';
   }
 
   function normalizedText(node) {
