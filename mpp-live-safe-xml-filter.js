@@ -5,8 +5,8 @@
   if (!R || window.__liveMppSafeXmlFilterLoaded) return;
   window.__liveMppSafeXmlFilterLoaded = true;
 
-  const VERSION = '0.5.0-live-mpp-safe-xml-filter-normalized-outline';
-  const MAX_TASKS = 250;
+  const VERSION = '0.6.0-live-mpp-safe-xml-filter-short-codes';
+  const MAX_TASKS = 300;
 
   const previousReadBufferAsync = R.readBufferAsync?.bind(R);
   const previousRead = R.read?.bind(R);
@@ -73,6 +73,21 @@
       taskCount: kept.length,
       tasks: kept,
     };
+    result.project = {
+      ...(result.project || {}),
+      name: projectName,
+      start: startDate,
+      taskCount: kept.length,
+      tasks: kept.map((task, index) => ({
+        id: index + 1,
+        uid: index + 1,
+        name: task.name,
+        outlineLevel: task.outlineLevel || 1,
+        outlineNumber: task.outlineNumber || String(index + 1),
+        wbs: task.outlineNumber || String(index + 1),
+        recovered: true,
+      })),
+    };
     result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
     result.warnings.unshift(`Live MPP cleanup ${VERSION}: dropped ${droppedNames.length} non-task/generated row${droppedNames.length === 1 ? '' : 's'} and rebuilt safe working-day dates.`);
     result.importPolish = {
@@ -113,7 +128,7 @@
 
   function isRealTaskName(name) {
     const n = cleanName(name);
-    if (!n || n.length < 3) return false;
+    if (!n || n.length < 2) return false;
     if (/^task\s+\d+$/i.test(n)) return false;
     if (/^recovered\s+task\s+\d+$/i.test(n)) return false;
     if (/^mpp\s+task\s+\d+$/i.test(n)) return false;
@@ -124,6 +139,7 @@
     if (/^(task name|resource name|start|finish|duration|work|cost|calendar|notes|predecessors|successors)$/i.test(n)) return false;
     if (/^(yes|no|none|null|true|false)$/i.test(n)) return false;
     if (/^\d+(?:\.\d+)?$/.test(n)) return false;
+    if (/^\d+\s*(FS|SS|FF|SF)(?:\s*[+-]\s*\d+\s*[dhwm]?)?(?:\s*,\s*\d+\s*(FS|SS|FF|SF)(?:\s*[+-]\s*\d+\s*[dhwm]?)?)*$/i.test(n)) return false;
     return /[A-Za-z\p{L}]/u.test(n);
   }
 
