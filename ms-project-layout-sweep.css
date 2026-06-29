@@ -1,0 +1,398 @@
+/* v0.42.0: MS Project layout sweep.
+   Tightens the main workspace toward the classic Microsoft Project table/Gantt layout.
+   This file intentionally overrides the older SaaS-style badge/chip visuals without
+   deleting the underlying data or modules. */
+
+:root {
+  --msp-row-height: 30px;
+  --msp-header-height: 25px;
+  --msp-ribbon-height: 92px;
+  --msp-grid-border: #c8ccd2;
+  --msp-grid-header: #6f7378;
+  --msp-grid-header-dark: #3f4348;
+  --msp-cell-bg: #fff;
+  --msp-cell-selected: #dbeafe;
+}
+
+body.projecthub-stitch-theme {
+  overflow: hidden;
+  background: #eef2f6;
+}
+
+.projecthub-stitch-theme main {
+  padding: 4px 4px 0 !important;
+}
+
+.projecthub-stitch-theme .project-ribbon-shell {
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18) !important;
+}
+
+.projecthub-stitch-theme .project-titlebar {
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+}
+
+.projecthub-stitch-theme .quick-access {
+  gap: 4px !important;
+}
+
+.projecthub-stitch-theme .project-app-icon {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+}
+
+.projecthub-stitch-theme .quick-command {
+  min-width: 21px !important;
+  width: 21px !important;
+  height: 21px !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+}
+
+.projecthub-stitch-theme .title-product-name::before {
+  content: "MS Project App" !important;
+  font-size: 14px !important;
+  font-weight: 750 !important;
+}
+
+.projecthub-stitch-theme .version-badge {
+  padding: 1px 6px !important;
+  font-size: 10px !important;
+  border-radius: 2px !important;
+}
+
+.projecthub-stitch-theme .title-project-name-label {
+  grid-template-columns: auto minmax(180px, 280px) !important;
+  align-items: center !important;
+  gap: 7px !important;
+}
+
+.projecthub-stitch-theme .title-project-name {
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 2px 7px !important;
+  border-radius: 2px !important;
+}
+
+.projecthub-stitch-theme .ribbon-tabs {
+  min-height: 26px !important;
+  height: 26px !important;
+  padding: 0 6px !important;
+}
+
+.projecthub-stitch-theme .ribbon-tab {
+  min-height: 26px !important;
+  height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.projecthub-stitch-theme .office-ribbon {
+  min-height: 58px !important;
+  height: 58px !important;
+  padding: 3px 5px 4px !important;
+  overflow: hidden !important;
+}
+
+.projecthub-stitch-theme .command-group,
+.projecthub-stitch-theme .compact-group,
+.projecthub-stitch-theme .ms-task-ribbon .command-group,
+.projecthub-stitch-theme .ms-project-ribbon .command-group {
+  min-width: 62px !important;
+  padding: 2px 6px 1px !important;
+  gap: 1px !important;
+}
+
+.projecthub-stitch-theme .group-label,
+.projecthub-stitch-theme .ms-task-ribbon .group-label,
+.projecthub-stitch-theme .ms-project-ribbon .group-label {
+  font-size: 9px !important;
+  line-height: 1 !important;
+}
+
+.projecthub-stitch-theme .large-ribbon-button,
+.projecthub-stitch-theme .ms-task-ribbon .ms-large-button,
+.projecthub-stitch-theme .ms-project-ribbon .ms-large-button {
+  min-height: 42px !important;
+  min-width: 46px !important;
+  padding: 3px 5px !important;
+  border-radius: 2px !important;
+  font-size: 10px !important;
+}
+
+.projecthub-stitch-theme .large-ribbon-button small,
+.projecthub-stitch-theme .ribbon-note-group,
+.projecthub-stitch-theme .ribbon-note,
+.projecthub-stitch-theme .ms-task-ribbon .ms-large-button i,
+.projecthub-stitch-theme .ms-project-ribbon .ms-large-button i {
+  display: none !important;
+}
+
+.projecthub-stitch-theme .command-group button,
+.projecthub-stitch-theme .command-group summary,
+.projecthub-stitch-theme .ms-task-ribbon button,
+.projecthub-stitch-theme .ms-project-ribbon button,
+.projecthub-stitch-theme .ms-task-ribbon .ms-ribbon-menu > summary,
+.projecthub-stitch-theme .ms-project-ribbon .ms-ribbon-menu > summary {
+  min-height: 21px !important;
+  padding: 2px 5px !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  font-size: 10px !important;
+}
+
+.projecthub-stitch-theme .workspace,
+.projecthub-stitch-theme .work-card,
+.projecthub-stitch-theme .unified-card {
+  margin: 0 !important;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header,
+.projecthub-stitch-theme .resource-card > .card-header {
+  min-height: 25px !important;
+  height: 25px !important;
+  padding: 2px 6px !important;
+  border-bottom: 1px solid var(--msp-grid-border) !important;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header h2,
+.projecthub-stitch-theme .resource-card > .card-header h2 {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header h2::after {
+  content: "" !important;
+}
+
+.projecthub-stitch-theme .unified-card > .card-header p,
+.projecthub-stitch-theme .resource-card > .card-header p,
+.projecthub-stitch-theme .card-badge {
+  display: none !important;
+}
+
+.projecthub-stitch-theme .planner-scroll {
+  max-height: calc(100vh - 122px) !important;
+  min-height: calc(100vh - 122px) !important;
+  overflow: auto !important;
+}
+
+.projecthub-stitch-theme .planner-timeline {
+  min-height: var(--msp-header-height) !important;
+  height: var(--msp-header-height) !important;
+}
+
+.projecthub-stitch-theme .planner-fields-heading,
+.projecthub-stitch-theme .planner-dates-heading {
+  min-height: var(--msp-header-height) !important;
+  height: var(--msp-header-height) !important;
+}
+
+.projecthub-stitch-theme .field-heading-cell,
+.projecthub-stitch-theme .planner-fields-heading span,
+.projecthub-stitch-theme .planner-date-cell {
+  min-height: var(--msp-header-height) !important;
+  height: var(--msp-header-height) !important;
+  padding: 0 5px !important;
+  font-size: 10px !important;
+  line-height: var(--msp-header-height) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  border-radius: 0 !important;
+}
+
+.projecthub-stitch-theme .field-heading-cell[data-column-key="indicators"],
+.projecthub-stitch-theme .planner-cell[data-field="indicators"],
+.projecthub-stitch-theme .planner-cell.is-indicators,
+.projecthub-stitch-theme .indicator-cell,
+.projecthub-stitch-theme .task-indicators,
+.projecthub-stitch-theme .row-indicators {
+  justify-content: center !important;
+  text-align: center !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+
+.projecthub-stitch-theme .planner-row,
+.projecthub-stitch-theme .task-row,
+.projecthub-stitch-theme .planner-fields,
+.projecthub-stitch-theme .planner-cells,
+.projecthub-stitch-theme .planner-cell,
+.projecthub-stitch-theme .planner-date-row,
+.projecthub-stitch-theme .gantt-row,
+.projecthub-stitch-theme .row-grid {
+  min-height: var(--msp-row-height) !important;
+  height: var(--msp-row-height) !important;
+}
+
+.projecthub-stitch-theme .planner-row {
+  border-bottom: 1px solid #e2e5e9 !important;
+}
+
+.projecthub-stitch-theme .planner-cell,
+.projecthub-stitch-theme .planner-fields input,
+.projecthub-stitch-theme .planner-fields select,
+.projecthub-stitch-theme .planner-fields button,
+.projecthub-stitch-theme .task-row input,
+.projecthub-stitch-theme .task-row select,
+.projecthub-stitch-theme .task-row button {
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 1px 4px !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+}
+
+.projecthub-stitch-theme .planner-fields input,
+.projecthub-stitch-theme .task-row input,
+.projecthub-stitch-theme .planner-fields select,
+.projecthub-stitch-theme .task-row select {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.projecthub-stitch-theme .planner-fields input:focus,
+.projecthub-stitch-theme .task-row input:focus,
+.projecthub-stitch-theme .planner-fields select:focus,
+.projecthub-stitch-theme .task-row select:focus {
+  border-color: #2563eb !important;
+  background: #fff !important;
+  outline: 1px solid #2563eb !important;
+}
+
+.projecthub-stitch-theme .planner-row.is-selected,
+.projecthub-stitch-theme .planner-row.selected,
+.projecthub-stitch-theme .task-row.is-selected,
+.projecthub-stitch-theme .task-row.selected {
+  background: var(--msp-cell-selected) !important;
+}
+
+/* MS Project's Indicators column is icon-only. Hide the modern web-app pills/chips
+   that had drifted into the grid: Critical, resource tags, Fixed Units, Delay, etc. */
+.projecthub-stitch-theme .planner-cell[data-field="indicators"] .badge,
+.projecthub-stitch-theme .planner-cell[data-field="indicators"] .chip,
+.projecthub-stitch-theme .planner-cell[data-field="indicators"] .pill,
+.projecthub-stitch-theme .planner-cell[data-field="indicators"] .status-chip,
+.projecthub-stitch-theme .planner-cell[data-field="indicators"] .indicator-chip,
+.projecthub-stitch-theme .indicator-cell .badge,
+.projecthub-stitch-theme .indicator-cell .chip,
+.projecthub-stitch-theme .indicator-cell .pill,
+.projecthub-stitch-theme .indicator-cell .status-chip,
+.projecthub-stitch-theme .indicator-cell .indicator-chip,
+.projecthub-stitch-theme .task-indicators .badge,
+.projecthub-stitch-theme .task-indicators .chip,
+.projecthub-stitch-theme .task-indicators .pill,
+.projecthub-stitch-theme .task-indicators .status-chip,
+.projecthub-stitch-theme .task-indicators .indicator-chip,
+.projecthub-stitch-theme .row-indicators .badge,
+.projecthub-stitch-theme .row-indicators .chip,
+.projecthub-stitch-theme .row-indicators .pill,
+.projecthub-stitch-theme .row-indicators .status-chip,
+.projecthub-stitch-theme .row-indicators .indicator-chip,
+.projecthub-stitch-theme .indicator-dot.is-critical,
+.projecthub-stitch-theme .indicator-dot.is-task-type,
+.projecthub-stitch-theme .indicator-dot.is-resource-leveling,
+.projecthub-stitch-theme .indicator-dot.is-resource,
+.projecthub-stitch-theme .indicator-dot.is-slack,
+.projecthub-stitch-theme .indicator-dot.is-leveling,
+.projecthub-stitch-theme .critical-path-chip,
+.projecthub-stitch-theme .task-type-chip,
+.projecthub-stitch-theme .leveling-delay-chip,
+.projecthub-stitch-theme .resource-chip {
+  display: none !important;
+}
+
+.projecthub-stitch-theme .indicator-dot,
+.projecthub-stitch-theme .constraint-warning-badge,
+.projecthub-stitch-theme .note-indicator,
+.projecthub-stitch-theme .hyperlink-indicator,
+.projecthub-stitch-theme .deadline-indicator,
+.projecthub-stitch-theme .baseline-indicator,
+.projecthub-stitch-theme .progress-indicator {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 15px !important;
+  min-width: 15px !important;
+  height: 15px !important;
+  min-height: 15px !important;
+  margin: 0 1px !important;
+  padding: 0 !important;
+  border-radius: 2px !important;
+  font-size: 10px !important;
+  line-height: 15px !important;
+  font-weight: 700 !important;
+  overflow: hidden !important;
+}
+
+.projecthub-stitch-theme .gantt-bar,
+.projecthub-stitch-theme .task-bar,
+.projecthub-stitch-theme .baseline-bar,
+.projecthub-stitch-theme .split-segment {
+  height: 15px !important;
+  min-height: 15px !important;
+  border-radius: 2px !important;
+}
+
+.projecthub-stitch-theme .gantt-bar-label,
+.projecthub-stitch-theme .bar-label,
+.projecthub-stitch-theme .task-bar-label {
+  font-size: 10px !important;
+  line-height: 15px !important;
+}
+
+.projecthub-stitch-theme .dependency-line,
+.projecthub-stitch-theme .link-drag-layer path {
+  stroke-width: 1.25px !important;
+}
+
+.projecthub-stitch-theme .app-footer,
+.projecthub-stitch-theme footer.app-footer {
+  display: none !important;
+}
+
+.projecthub-stitch-theme .validation-panel:not(:empty),
+.projecthub-stitch-theme .mpp-panel:not([hidden]) {
+  display: block !important;
+  margin: 3px 4px !important;
+  padding: 5px 7px !important;
+  border-radius: 0 !important;
+  font-size: 11px !important;
+}
+
+.projecthub-stitch-theme .resource-sheet-shell {
+  max-height: calc(100vh - 122px) !important;
+  overflow: auto !important;
+}
+
+.projecthub-stitch-theme .resource-grid,
+.projecthub-stitch-theme .resource-grid-heading {
+  min-height: var(--msp-row-height) !important;
+  font-size: 11px !important;
+}
+
+.projecthub-stitch-theme .resource-grid input,
+.projecthub-stitch-theme .resource-grid select,
+.projecthub-stitch-theme .resource-grid button {
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 1px 4px !important;
+  border-radius: 0 !important;
+  font-size: 11px !important;
+}
+
+@media (max-width: 900px) {
+  .projecthub-stitch-theme .office-ribbon {
+    overflow-x: auto !important;
+  }
+
+  .projecthub-stitch-theme .title-project-name-label {
+    display: none !important;
+  }
+}
