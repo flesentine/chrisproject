@@ -1,12 +1,13 @@
 (() => {
   'use strict';
 
-  const VERSION = 'v0.44.1';
+  const VERSION = 'v0.44.2';
   if (window.__msProjectPaneControlsLoaded === VERSION) return;
   window.__msProjectPaneControlsLoaded = VERSION;
 
   const ENTRY_KEYS = ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
   let tries = 0;
+  let activePaneDrag = null;
 
   boot();
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', boot, { once: true }) : setTimeout(boot, 0);
@@ -19,12 +20,13 @@
 
   function boot() {
     if (!ready()) {
-      if (++tries < 240) setTimeout(boot, 60);
+      if (++tries < 260) setTimeout(boot, 60);
       return;
     }
     patchFieldPaneMath();
     patchRenderers();
     installStyles();
+    installDirectSplitterDrag();
     installSplitterDoubleClick();
     applyProjectPaneDom();
     [40, 100, 220, 500, 1000, 1800, 3200].forEach((delay) => setTimeout(() => {
@@ -71,8 +73,6 @@
   }
 
   function patchFieldPaneMath() {
-    getVisibleFieldKeys = visibleKeys;
-    getVisibleFieldColumns = visibleColumns;
     window.getVisibleFieldKeys = visibleKeys;
     window.getVisibleFieldColumns = visibleColumns;
 
@@ -150,10 +150,66 @@
     style.textContent = `
       .planner-fields-heading.is-clipped,
       .planner-fields.is-clipped { overflow:hidden !important; }
-      .pane-splitter { cursor: col-resize !important; touch-action:none !important; width:14px !important; right:-7px !important; z-index:99 !important; opacity:1 !important; }
-      .pane-splitter::after { content:""; position:absolute; top:0; bottom:0; left:6px; border-left:2px solid #6b7280; }
+      .pane-splitter { cursor: col-resize !important; touch-action:none !important; width:20px !important; right:-10px !important; z-index:999 !important; opacity:1 !important; pointer-events:auto !important; }
+      .pane-splitter::after { content:""; position:absolute; top:0; bottom:0; left:9px; border-left:2px solid #2563eb; }
+      .pane-splitter:hover::after { border-left-color:#1d4ed8; }
       body.is-column-resizing, body.is-column-resizing * { cursor: col-resize !important; user-select:none !important; }
     `;
+  }
+
+  function installDirectSplitterDrag() {
+    if (window.__msProjectPaneDirectDrag === VERSION) return;
+    window.__msProjectPaneDirectDrag = VERSION;
+
+    document.addEventListener('pointerdown', (event) => {
+      const target = event.target && event.target.closest && event.target.closest('[data-pane-splitter]');
+      if (!target || !ready()) return;
+      if (event.button !== undefined && event.button !== 0) return;
+      patchFieldPaneMath();
+      activePaneDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startWidth: getFieldPaneWidth(),
+      };
+      document.body.classList.add('is-column-resizing');
+      target.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }, true);
+
+    window.addEventListener('pointermove', (event) => {
+      if (!activePaneDrag) return;
+      const delta = event.clientX - activePaneDrag.startX;
+      setPaneWidthImmediate(activePaneDrag.startWidth + delta);
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }, true);
+
+    window.addEventListener('pointerup', endDirectSplitterDrag, true);
+    window.addEventListener('pointercancel', endDirectSplitterDrag, true);
+  }
+
+  function endDirectSplitterDrag(event) {
+    if (!activePaneDrag) return;
+    activePaneDrag = null;
+    document.body.classList.remove('is-column-resizing');
+    try { if (typeof saveUiPrefs === 'function') saveUiPrefs(); } catch {}
+    try { if (typeof applyUiPrefs === 'function') applyUiPrefs(); } catch {}
+    applyProjectPaneDom();
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function setPaneWidthImmediate(width) {
+    patchFieldPaneMath();
+    uiPrefs.fieldPaneWidth = clampPaneWidth(width, uiPrefs);
+    document.documentElement.style.setProperty('--planner-fields-width', `${uiPrefs.fieldPaneWidth}px`);
+    applyProjectPaneDom();
   }
 
   function installSplitterDoubleClick() {
@@ -163,6 +219,7 @@
       const splitter = event.target && event.target.closest && event.target.closest('[data-pane-splitter]');
       if (!splitter || typeof uiPrefs === 'undefined') return;
       event.preventDefault();
+      event.stopPropagation();
       uiPrefs.fieldPaneWidth = getTotalFieldColumnWidth();
       try { if (typeof saveUiPrefs === 'function') saveUiPrefs(); } catch {}
       try { if (typeof applyUiPrefs === 'function') applyUiPrefs(); } catch {}
