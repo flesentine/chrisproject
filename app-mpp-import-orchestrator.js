@@ -4,10 +4,11 @@
   if (window.__mppImportOrchestratorLoaded) return;
   window.__mppImportOrchestratorLoaded = true;
 
-  const VERSION = '0.1.11-mpp-import-orchestrator-varmeta';
+  const VERSION = '0.1.12-mpp-import-orchestrator-percent';
   const MODULES = [
     'mpp-native-task-skeleton-v2-polish.js',
     'mpp-native-task-varmeta-names-polish.js',
+    'mpp-native-task-percent-polish.js',
     'mpp-native-task-dates-polish.js',
     'mpp-native-task-fixed-dates-polish.js',
     'mpp-native-resource-table-v2-polish.js',
@@ -91,6 +92,7 @@
       nativeImportPolish: importResult.importPolish || null,
       nativeTaskSkeleton: importResult.nativeTaskSkeleton || null,
       nativeTaskSkeletonDiagnostics: importResult.nativeTaskSkeletonDiagnostics || null,
+      nativeTaskPercentComplete: importResult.nativeTaskPercentComplete || null,
       nativeTaskDates: importResult.nativeTaskDates || null,
       nativeTaskFixedDates: importResult.nativeTaskFixedDates || null,
       nativeDateSanity: importResult.nativeDateSanity || null,
@@ -135,6 +137,7 @@
   function summarize(audit) {
     const rows = [];
     if (audit.nativeTaskSkeleton) rows.push(['Task skeleton', `${audit.nativeTaskSkeleton.taskRows || 0} rows, ${audit.nativeTaskSkeleton.namedRows || 0} named`]);
+    if (audit.nativeTaskPercentComplete) rows.push(['% Complete', `${audit.nativeTaskPercentComplete.appliedRows || 0} applied, ${audit.nativeTaskPercentComplete.percentRows || 0} non-zero`]);
     if (audit.nativeTaskDates) rows.push(['Task dates', `${audit.nativeTaskDates.appliedRows || 0} applied, ${audit.nativeTaskDates.confidence || 'none'}`]);
     if (audit.nativeTaskFixedDates) rows.push(['Fixed dates', `${audit.nativeTaskFixedDates.appliedRows || 0} applied, ${audit.nativeTaskFixedDates.confidence || 'none'}`]);
     if (audit.nativeDateSanity?.rejected) rows.push(['Date safety', `rejected unsafe ${audit.nativeDateSanity.spanDays || 0}d range`]);
