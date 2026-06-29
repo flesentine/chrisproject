@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = 'v0.63.0';
-  const NAME = 'No stale first-load version';
-  const BUILD = '2026-06-27';
+  const VERSION = 'v0.64.0';
+  const NAME = 'MS Project pane controls';
+  const BUILD = '2026-06-29';
   const BADGE = `${VERSION} · ${NAME}`;
   const FOOTER = `${VERSION} · ${NAME} · Build ${BUILD}`;
-  const RIBBON = `${VERSION} · Entry / Tracking tables`;
+  const RIBBON = `${VERSION} · Split-pane table controls`;
 
   if (window.__currentVersionLabelLoaded === VERSION) return;
   window.__currentVersionLabelLoaded = VERSION;
@@ -40,7 +40,7 @@
   }
 
   function applyVersionLabel() {
-    setText('appVersionBadge', BADGE, `Build ${BUILD}: current build label locked at first load.`);
+    setText('appVersionBadge', BADGE, `Build ${BUILD}: Project-style split pane and table controls.`);
     setText('appVersionFooter', FOOTER);
     setText('ribbonVersionText', RIBBON);
   }
@@ -56,7 +56,7 @@
 
   function hideOldVersionText() {
     document.querySelectorAll('#appVersionBadge, #appVersionFooter, #ribbonVersionText').forEach((el) => {
-      if (/v0\.(22|39)\.0|split \+ recurring|Baselines \+ ghost bars/i.test(el.textContent || '')) {
+      if (/v0\.(22|39|63)\.0|split \+ recurring|Baselines \+ ghost bars|Entry \/ Tracking tables/i.test(el.textContent || '')) {
         el.textContent = el.id === 'appVersionFooter' ? FOOTER : el.id === 'ribbonVersionText' ? RIBBON : BADGE;
       }
       el.style.visibility = 'visible';
@@ -74,14 +74,15 @@
   }
 
   function loadMppHelpers() {
-    loadScriptOnce('app-project-entry-table.js', '__projectEntryTableScriptLoaded', 'projectEntryTable');
+    loadScriptOnce('app-project-entry-table.js?v0.44.0', '__projectEntryTableScriptLoaded', 'projectEntryTable');
+    loadScriptOnce('ms-project-pane-controls.js?v0.44.0', '__msProjectPaneControlsScriptLoaded', 'msProjectPaneControls');
     loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
     loadScriptOnce('mpp-live-safe-percent-bridge.js', '__liveSafeMppPercentBridgeScriptLoaded', 'liveSafePercentBridge');
     loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'surgicalMppCleanup');
   }
 
   function loadScriptOnce(src, flag, attrName) {
-    if (window[flag] || document.querySelector(`script[src="${src}"]`)) return;
+    if (window[flag] || [...document.scripts].some((script) => script.src.includes(src))) return;
     window[flag] = true;
     const script = document.createElement('script');
     script.src = src;
@@ -162,7 +163,7 @@
       if (!signature || signature === lastLayoutSignature) return;
       if (typeof uiPrefs === 'undefined') return;
       const keys = typeof window.getVisibleFieldKeys === 'function' ? window.getVisibleFieldKeys() : ['id', 'indicators', 'name', 'duration', 'start', 'finish', 'predecessors', 'actions'];
-      uiPrefs.fieldPaneWidth = Math.max(640, Math.min(900, Math.round(window.innerWidth * 0.52)));
+      uiPrefs.fieldPaneWidth = Math.max(360, Math.min(760, Math.round(window.innerWidth * 0.42)));
       if (typeof saveUiPrefs === 'function') saveUiPrefs();
       if (typeof applyUiPrefs === 'function') applyUiPrefs();
       const scroll = document.querySelector('.planner-scroll');
