@@ -32,11 +32,11 @@
   function loadMppWorkerImportNow() {
     loadScriptOnce('app-mpp-worker-import.js', 'mppWorkerImportDirectBoot');
     loadScriptOnce('app-current-version-label.js', 'currentVersionDirectBoot');
-    loadScriptOnce('ms-project-layout-sweep.js', 'msProjectLayoutSweepDirectBoot');
+    loadScriptOnce('ms-project-layout-sweep.js?v0.43.1', 'msProjectLayoutSweepDirectBoot');
   }
 
   function loadScriptOnce(src, flag) {
-    if (window[flag] || document.querySelector(`script[src="${src}"]`)) return;
+    if (window[flag] || [...document.scripts].some((script) => script.src.includes(src))) return;
     window[flag] = true;
     const script = document.createElement('script');
     script.src = src;
