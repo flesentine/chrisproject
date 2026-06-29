@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = 'v0.44.0';
+  const VERSION = 'v0.44.1';
   if (window.__msProjectPaneControlsLoaded === VERSION) return;
   window.__msProjectPaneControlsLoaded = VERSION;
 
@@ -12,12 +12,14 @@
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', boot, { once: true }) : setTimeout(boot, 0);
 
   function ready() {
-    return Array.isArray(window.FIELD_COLUMNS) && window.uiPrefs && typeof window.renderGantt === 'function';
+    return typeof FIELD_COLUMNS !== 'undefined' && Array.isArray(FIELD_COLUMNS) &&
+      typeof uiPrefs !== 'undefined' && typeof renderGantt === 'function' &&
+      typeof getFieldPaneWidth === 'function' && typeof setFieldPaneWidth === 'function';
   }
 
   function boot() {
     if (!ready()) {
-      if (++tries < 220) setTimeout(boot, 60);
+      if (++tries < 240) setTimeout(boot, 60);
       return;
     }
     patchFieldPaneMath();
@@ -25,7 +27,10 @@
     installStyles();
     installSplitterDoubleClick();
     applyProjectPaneDom();
-    [60, 180, 420, 900, 1800].forEach((delay) => setTimeout(applyProjectPaneDom, delay));
+    [40, 100, 220, 500, 1000, 1800, 3200].forEach((delay) => setTimeout(() => {
+      patchFieldPaneMath();
+      applyProjectPaneDom();
+    }, delay));
   }
 
   function visibleKeys(prefs = uiPrefs) {
@@ -66,33 +71,37 @@
   }
 
   function patchFieldPaneMath() {
-    if (window.__msProjectPaneMathPatched === VERSION) return;
-    window.__msProjectPaneMathPatched = VERSION;
-
+    getVisibleFieldKeys = visibleKeys;
+    getVisibleFieldColumns = visibleColumns;
     window.getVisibleFieldKeys = visibleKeys;
     window.getVisibleFieldColumns = visibleColumns;
 
-    window.getTotalFieldColumnWidth = function getTotalFieldColumnWidthProjectPane(prefs = uiPrefs) {
+    getTotalFieldColumnWidth = function getTotalFieldColumnWidthProjectPane(prefs = uiPrefs) {
       return Math.max(1, visibleWidth(prefs));
     };
+    window.getTotalFieldColumnWidth = getTotalFieldColumnWidth;
 
-    window.getFieldGridTemplate = function getFieldGridTemplateProjectPane() {
+    getFieldGridTemplate = function getFieldGridTemplateProjectPane() {
       return visibleTemplate(uiPrefs);
     };
+    window.getFieldGridTemplate = getFieldGridTemplate;
 
-    window.getFieldPaneWidth = function getFieldPaneWidthProjectPane(prefs = uiPrefs) {
+    getFieldPaneWidth = function getFieldPaneWidthProjectPane(prefs = uiPrefs) {
       return clampPaneWidth(prefs.fieldPaneWidth, prefs);
     };
+    window.getFieldPaneWidth = getFieldPaneWidth;
 
-    window.setFieldPaneWidth = function setFieldPaneWidthProjectPane(width) {
+    setFieldPaneWidth = function setFieldPaneWidthProjectPane(width) {
       uiPrefs.fieldPaneWidth = clampPaneWidth(width, uiPrefs);
     };
+    window.setFieldPaneWidth = setFieldPaneWidth;
 
-    window.isFieldPaneClipped = function isFieldPaneClippedProjectPane() {
+    isFieldPaneClipped = function isFieldPaneClippedProjectPane() {
       return getFieldPaneWidth() < getTotalFieldColumnWidth() - 1;
     };
+    window.isFieldPaneClipped = isFieldPaneClipped;
 
-    window.renderFieldHeadingCells = function renderFieldHeadingCellsProjectPane() {
+    renderFieldHeadingCells = function renderFieldHeadingCellsProjectPane() {
       return visibleColumns().map((column) => {
         const width = columnWidth(column);
         const classes = ['field-heading-cell'];
@@ -101,6 +110,7 @@
         return `<div class="${classes.join(' ')}" data-column-key="${escapeHtml(column.key)}" title="Drag edge to resize ${escapeHtml(column.label || 'column')}"><span>${escapeHtml(column.label)}</span><i class="column-resize-handle" data-column-resize="${escapeHtml(column.key)}" aria-hidden="true"></i></div>`;
       }).join('');
     };
+    window.renderFieldHeadingCells = renderFieldHeadingCells;
   }
 
   function patchRenderers() {
@@ -108,21 +118,25 @@
     window.__msProjectPaneRenderPatched = VERSION;
 
     const baseRenderGantt = renderGantt;
-    window.renderGantt = renderGantt = function projectPaneRenderGantt(...args) {
+    renderGantt = function projectPaneRenderGantt(...args) {
+      patchFieldPaneMath();
       const result = baseRenderGantt.apply(this, args);
       requestAnimationFrame(applyProjectPaneDom);
       setTimeout(applyProjectPaneDom, 80);
       return result;
     };
+    window.renderGantt = renderGantt;
 
     if (typeof render === 'function') {
       const baseRender = render;
-      window.render = render = function projectPaneRender(...args) {
+      render = function projectPaneRender(...args) {
+        patchFieldPaneMath();
         const result = baseRender.apply(this, args);
         requestAnimationFrame(applyProjectPaneDom);
         setTimeout(applyProjectPaneDom, 80);
         return result;
       };
+      window.render = render;
     }
   }
 
@@ -136,8 +150,8 @@
     style.textContent = `
       .planner-fields-heading.is-clipped,
       .planner-fields.is-clipped { overflow:hidden !important; }
-      .pane-splitter { cursor: col-resize !important; touch-action:none !important; width:8px !important; right:-4px !important; z-index:9 !important; }
-      .pane-splitter::after { content:""; position:absolute; top:0; bottom:0; left:3px; border-left:1px solid #7f8792; }
+      .pane-splitter { cursor: col-resize !important; touch-action:none !important; width:14px !important; right:-7px !important; z-index:99 !important; opacity:1 !important; }
+      .pane-splitter::after { content:""; position:absolute; top:0; bottom:0; left:6px; border-left:2px solid #6b7280; }
       body.is-column-resizing, body.is-column-resizing * { cursor: col-resize !important; user-select:none !important; }
     `;
   }
@@ -147,7 +161,7 @@
     window.__msProjectPaneSplitterDblClick = true;
     document.addEventListener('dblclick', (event) => {
       const splitter = event.target && event.target.closest && event.target.closest('[data-pane-splitter]');
-      if (!splitter || !window.uiPrefs) return;
+      if (!splitter || typeof uiPrefs === 'undefined') return;
       event.preventDefault();
       uiPrefs.fieldPaneWidth = getTotalFieldColumnWidth();
       try { if (typeof saveUiPrefs === 'function') saveUiPrefs(); } catch {}
