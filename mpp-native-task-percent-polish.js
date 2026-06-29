@@ -5,7 +5,7 @@
   if (!R || window.__nativeMppTaskPercentLoaded) return;
   window.__nativeMppTaskPercentLoaded = true;
 
-  const VERSION = '0.1.0-task-percent-complete';
+  const VERSION = '0.1.1-task-percent-complete';
   const PERCENT_OFFSET = 92;
 
   const baseReadBuffer = R.readBuffer?.bind(R);
@@ -34,19 +34,24 @@
       const percentByRowId = recoverPercentByRowId(cfb);
       if (!percentByRowId.size) return result;
       const applied = applyPercent(result, percentByRowId);
+      const tasks = Array.isArray(result.project?.tasks) ? result.project.tasks : [];
+      const percentSequence = tasks.map((task) => clampPercent(task.percent ?? task.percentComplete ?? 0));
       result.nativeTaskPercentComplete = {
         version: VERSION,
         source: 'TBkndTask/FixedData byte 92',
         offset: PERCENT_OFFSET,
         recoveredRows: percentByRowId.size,
         appliedRows: applied,
-        sample: Array.from(percentByRowId.entries()).slice(0, 20).map(([rowId, percent]) => ({ rowId, percent })),
+        percentRows: percentSequence.filter((value) => value > 0).length,
+        percentSequence,
+        sample: Array.from(percentByRowId.entries()).slice(0, 40).map(([rowId, percent]) => ({ rowId, percent })),
       };
       result.nativeTable = result.nativeTable || {};
       result.nativeTable.fieldCoverage = {
         ...(result.nativeTable.fieldCoverage || {}),
         taskPercentCompleteRows: percentByRowId.size,
         taskPercentCompleteApplied: applied,
+        taskPercentCompleteNonZero: result.nativeTaskPercentComplete.percentRows,
       };
       result.nativeTaskSkeletonDiagnostics = {
         ...(result.nativeTaskSkeletonDiagnostics || {}),
