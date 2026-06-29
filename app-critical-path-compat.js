@@ -37,7 +37,7 @@
     loadScriptOnce('ms-project-ribbon-menu-fix.js?v0.45.0', 'msProjectRibbonMenuFixDirectBoot');
     loadScriptOnce('ms-project-zoom-fit.js?v0.46.0', 'msProjectZoomFitDirectBoot');
     loadScriptOnce('mpp-import-unstick-guard.js?v0.47.0', 'mppImportUnstickGuardDirectBoot');
-    loadScriptOnce('mpp-import-performance-guard.js?v0.48.0', 'mppImportPerformanceGuardDirectBoot');
+    loadScriptOnce('mpp-import-performance-guard.js?v0.48.1', 'mppImportPerformanceGuardDirectBoot');
     loadScriptOnce('ms-project-status-strip.js?v0.49.0', 'msProjectStatusStripDirectBoot');
   }
 
