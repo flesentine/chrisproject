@@ -1,12 +1,12 @@
 (() => {
   'use strict';
 
-  const CURRENT_VERSION = 'v0.61.0';
-  const CURRENT_NAME = 'Project Entry table default';
+  const CURRENT_VERSION = 'v0.62.0';
+  const CURRENT_NAME = 'Tracking table + MPP percent';
   const CURRENT_BUILD = '2026-06-27';
   const FOOTER_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME} · Build ${CURRENT_BUILD}`;
   const BADGE_TEXT = `${CURRENT_VERSION} · ${CURRENT_NAME}`;
-  const RIBBON_TEXT = `${CURRENT_VERSION} · Gantt Chart / Entry table`;
+  const RIBBON_TEXT = `${CURRENT_VERSION} · Entry / Tracking tables`;
 
   if (window.__currentVersionLabelLoaded) return;
   window.__currentVersionLabelLoaded = true;
@@ -21,7 +21,7 @@
     const ribbon = document.getElementById('ribbonVersionText');
     if (badge) {
       badge.textContent = BADGE_TEXT;
-      badge.title = `Build ${CURRENT_BUILD}: Project-style Entry table by default; extra fields stay hidden until a table/view asks for them.`;
+      badge.title = `Build ${CURRENT_BUILD}: Project-style table switching and native MPP % Complete recovery.`;
     }
     if (footer) footer.textContent = FOOTER_TEXT;
     if (ribbon) ribbon.textContent = RIBBON_TEXT;
@@ -128,6 +128,7 @@
       const minVisibleIndex = indexes.length ? Math.min(...indexes) : -1;
       const maxVisibleIndex = indexes.length ? Math.max(...indexes) : -1;
       const scroll = document.querySelector('.planner-scroll');
+      const percents = tasks.map((task) => Number(task?.percent) || 0);
       const data = {
         stateTaskCount: tasks.length,
         visiblePlannerRows: visibleRows,
@@ -137,6 +138,8 @@
         scrollHeight: scroll?.scrollHeight || 0,
         clientHeight: scroll?.clientHeight || 0,
         visibleFieldKeys: typeof window.getVisibleFieldKeys === 'function' ? window.getVisibleFieldKeys() : [],
+        percentRows: percents.filter((value) => value > 0).length,
+        firstPercents: percents.slice(0, 12),
         firstNames: names.slice(0, 10),
         lastNames: names.slice(-25),
         junkRowsStillPresent: junkRows.slice(0, 25),
@@ -147,6 +150,7 @@
         maxVisibleRowIndex: data.maxVisibleRowIndex,
         scrollTop: data.scrollTop,
         fields: data.visibleFieldKeys.join(','),
+        percentRows: data.percentRows,
         junk: data.junkRowsStillPresent.length,
         last: data.lastNames.slice(-3),
       });
@@ -185,6 +189,7 @@
   function loadLiveMppCleanup() {
     loadProjectEntryTable();
     loadScriptOnce('mpp-live-safe-xml-filter.js', '__liveMppSafeXmlFilterScriptLoaded', 'liveMppCleanup');
+    loadScriptOnce('mpp-live-safe-percent-bridge.js', '__liveSafeMppPercentBridgeLoaded', 'liveSafePercentBridge');
     loadScriptOnce('app-safe-live-mpp-state-cleanup.js', '__safeLiveMppStateCleanupScriptLoaded', 'surgicalMppCleanup');
   }
 
